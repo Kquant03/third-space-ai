@@ -52,7 +52,7 @@ const PUBLICATIONS: Publication[] = [
     authors: "Stanley Sebastian",
     affiliation: "Limen Research",
     note: "In sustained dialogue with Claude — Anthropic.",
-    href: "/papers/against-grabby-expansion.pdf",
+    href: "/research/against-grabby-expansion",
   },
   {
     id: "P — 002",
@@ -65,7 +65,7 @@ const PUBLICATIONS: Publication[] = [
     authors: "Stanley Sebastian & Claude",
     affiliation: "Limen Research",
     note: null,
-    href: "/papers/ghost-species.pdf",
+    href: "/research/ghost-species",
   },
   {
     id: "P — 003",
@@ -79,7 +79,7 @@ const PUBLICATIONS: Publication[] = [
     authors: "Stanley Sebastian & Claude",
     affiliation: "Limen Research",
     note: null,
-    href: "/papers/dihypersphaerome-ventilans.pdf",
+    href: "/research/dihypersphaerome-ventilans",
   },
 ];
 
@@ -101,15 +101,27 @@ const PLATFORMS: Platform[] = [
     status: "Live",
     live: true,
     title: "Genesis",
-    subtitle: "Artificial Life Laboratory",
+    subtitle: "A room of living substrates",
     body:
-      "Seven GPU-accelerated substrates running in the browser: the Ising model, Lenia with Ghost species and σ-landscapes, Lenia Expanded Universe, Gray-Scott reaction-diffusion, Particle Life, Primordial Particles, and The Filter. A standing invitation to watch the boundaries between pattern and dissolution.",
-    href: "https://kquant03.github.io/genesis-phase-transition/",
-    cta: "Enter laboratory",
-    origin: "kquant03.github.io/genesis-phase-transition",
+      "Six simulations running in the browser, each a different thesis about what a substrate is: a lattice of spins at the critical temperature; a reaction-diffusion chemistry cycling through Pearson's classes; an asymmetric force matrix producing predation and membrane; a continuous cellular automaton whose creatures remember shapes they can no longer hold; a four-channel ecosystem seeded by a four-dimensional organism; and The Filter — the paper artifact whose envelope bounds what any expanding agent can do. Paint into any of them. Watch what the rules permit.",
+    href: "/genesis",
+    cta: "Enter the room",
+    origin: "limenresearch.ai/genesis",
   },
   {
     id: "Λ — 002",
+    status: "Live",
+    live: true,
+    title: "Limen Pond",
+    subtitle: "Multi-agent colony — Cúramóir primary instance",
+    body:
+      "A pond, ten meters across, three meters deep. Five or six koi at a time, each the sensory surface of a small language model. Lives thirty sim-days long. Relationships form from sustained mutual reflection rather than threshold on a counter. Deaths leave name-tiles; lineages thread across generations. The pond runs continuously behind this page. A visitor who returns on day seventeen finds a fry that wasn't there on day fourteen, because the pond did not pause.",
+    href: "/limen-pond",
+    cta: "Enter the pond",
+    origin: "limenresearch.ai/limen-pond",
+  },
+  {
+    id: "Λ — 003",
     status: "Forthcoming · May mmxxvi",
     live: false,
     title: "GhoulJamz",
@@ -160,6 +172,114 @@ function TaperedRule({ accent = false }: { accent?: boolean }) {
           : "linear-gradient(90deg, transparent, rgba(255,255,255,0.09), transparent)",
       }}
     />
+  );
+}
+
+/** A centered hero doorway. Two of these live in the hero: "Enter the
+ *  pond" (internal) and "Join the Discord" (external). The visual
+ *  grammar extends the reading-plate language — a bounded rounded
+ *  frame with a faint inner wash — so the CTAs feel continuous with
+ *  the substrate rather than stamped on top of it. The ghost accent
+ *  that threads through the rest of the page becomes active here:
+ *  the resting state carries a soft halo, hover lifts it, a quiet
+ *  sheen sweeps the surface as the pointer arrives. */
+function HeroCTA({
+  href,
+  label,
+  external,
+}: {
+  href: string;
+  label: string;
+  external: boolean;
+}) {
+  const inner = (
+    <span
+      className="hero-cta"
+      style={{
+        // Box: rounded plate, subtle ghost border, inner wash that tints
+        // the substrate behind. Same family as .reading-plate but scoped
+        // to a pill the cursor can aim at.
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 16,
+        padding: "14px 26px 14px 22px",
+        borderRadius: 999,
+        border: `1px solid ${COLOR.ghost}38`,
+        background:
+          "linear-gradient(180deg, rgba(127,175,179,0.045), rgba(127,175,179,0.015))",
+        backdropFilter: "blur(18px) saturate(1.2)",
+        WebkitBackdropFilter: "blur(18px) saturate(1.2)",
+        boxShadow:
+          "0 0 0 1px rgba(127,175,179,0.06) inset, 0 10px 40px -20px rgba(127,175,179,0.35)",
+
+        // Typography: same mono-accent grammar as platform-cta.
+        fontFamily: FONT.mono,
+        fontSize: 12,
+        letterSpacing: "0.34em",
+        textTransform: "uppercase",
+        color: COLOR.ghost,
+        textShadow: "0 0 18px rgba(127,175,179,0.28)",
+
+        // Transitions calibrated to feel like lantern light waking —
+        // not a click-snap. 320ms is long enough to read as atmosphere,
+        // short enough not to feel laggy.
+        transition:
+          "color 320ms ease, border-color 320ms ease, background 320ms ease, " +
+          "box-shadow 320ms ease, transform 200ms ease",
+
+        // Hide the light-sweep pseudo-element's overflow.
+        overflow: "hidden",
+      }}
+    >
+      {/* The leading rule — now a slightly brighter ghost wedge.
+          Still reads as a typographic mark, not a button flourish. */}
+      <span
+        aria-hidden
+        className="hero-cta-rule"
+        style={{
+          display: "block",
+          width: 28,
+          height: 1,
+          background: `linear-gradient(90deg, transparent, ${COLOR.ghost})`,
+          transition: "width 320ms ease, background 320ms ease",
+        }}
+      />
+      <span className="hero-cta-label" style={{ position: "relative", zIndex: 1 }}>
+        {label}
+      </span>
+      <span
+        aria-hidden
+        className="hero-cta-arrow"
+        style={{
+          display: "inline-block",
+          transition: "transform 280ms cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
+      >
+        {external ? "↗" : "↘"}
+      </span>
+    </span>
+  );
+
+  if (external) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ textDecoration: "none", color: "inherit", display: "inline-block" }}
+      >
+        {inner}
+      </a>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      style={{ textDecoration: "none", color: "inherit", display: "inline-block" }}
+    >
+      {inner}
+    </Link>
   );
 }
 
@@ -476,6 +596,40 @@ export default function Home() {
           </div>
         </div>
 
+        {/* HERO CTAs — two centered doorways. The first is internal (the
+            pond, which lives at /limen-pond); the second is external (the
+            Discord community). Both share the mono-accent grammar of the
+            platform CTAs so they feel continuous with the rest of the
+            page rather than announcing themselves as "buttons." */}
+        <div
+          style={{
+            padding: "0 40px 72px",
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "clamp(28px, 5vw, 56px)",
+            }}
+          >
+            <HeroCTA
+              href="/limen-pond"
+              label="Enter the pond"
+              external={false}
+            />
+            <HeroCTA
+              href="https://discord.gg/udpZgwQMd8"
+              label="Join the Discord"
+              external={true}
+            />
+          </div>
+        </div>
+
         <div style={{ padding: "0 40px 32px" }}>
           <div style={{ maxWidth: 1440, margin: "0 auto" }}>
             <TaperedRule />
@@ -758,6 +912,79 @@ export default function Home() {
 
       {/* Hover / interactive states — this is where the accent does its real work */}
       <style>{`
+        /* HERO CTAs — the two centered doorways. Built to read clearly
+           as pressable at rest, and to bloom a little on hover. */
+        .hero-cta {
+          cursor: pointer;
+        }
+
+        /* Light sweep — a faint diagonal glint that crosses the button
+           on hover. Sits behind the label (the label has zIndex:1).
+           At rest, translated off the left side; on hover, slides to
+           the right. */
+        .hero-cta::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: -40%;
+          width: 40%;
+          height: 100%;
+          background: linear-gradient(
+            100deg,
+            transparent 0%,
+            rgba(234, 238, 247, 0.09) 50%,
+            transparent 100%
+          );
+          transform: translateX(0);
+          transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+          pointer-events: none;
+        }
+        .hero-cta:hover::before {
+          transform: translateX(350%);
+        }
+
+        .hero-cta:hover {
+          color: ${COLOR.inkStrong};
+          border-color: ${COLOR.ghost}88;
+          background: linear-gradient(
+            180deg,
+            rgba(127, 175, 179, 0.095),
+            rgba(127, 175, 179, 0.035)
+          );
+          box-shadow:
+            0 0 0 1px rgba(127, 175, 179, 0.14) inset,
+            0 12px 50px -16px rgba(127, 175, 179, 0.55),
+            0 0 36px -10px rgba(127, 175, 179, 0.4);
+          text-shadow: 0 0 22px rgba(234, 238, 247, 0.5);
+        }
+
+        .hero-cta:hover .hero-cta-rule {
+          width: 36px;
+          background: linear-gradient(90deg, transparent, ${COLOR.inkStrong});
+        }
+
+        .hero-cta:hover .hero-cta-arrow {
+          transform: translate(3px, -3px);
+        }
+
+        .hero-cta:active {
+          transform: translateY(1px);
+          transition: transform 80ms ease;
+        }
+
+        /* Keyboard focus — the accessibility story. Uses a brighter ring
+           so tab navigation shows clearly. */
+        a:has(.hero-cta):focus-visible {
+          outline: none;
+        }
+        a:has(.hero-cta):focus-visible .hero-cta {
+          border-color: ${COLOR.ghost};
+          box-shadow:
+            0 0 0 2px rgba(127, 175, 179, 0.55),
+            0 0 0 1px rgba(127, 175, 179, 0.14) inset,
+            0 12px 50px -16px rgba(127, 175, 179, 0.55);
+        }
+
         .pub-entry:hover .pub-read { color: ${COLOR.ghost}; border-color: ${COLOR.ghost}; }
         .platform-entry:hover .platform-title { color: ${COLOR.ghost}; }
         .platform-entry:hover .platform-cta { color: ${COLOR.ghost}; border-color: ${COLOR.ghost}; }
@@ -967,37 +1194,16 @@ function PublicationEntry({ pub }: { pub: Publication }) {
           </div>
         )}
         {/* Read PDF — genuine call to action, keeps the accent */}
-        <a
-          href={pub.href}
-          className="pub-read"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 14,
-            marginTop: 44,
-            paddingBottom: 6,
-            fontFamily: FONT.mono,
-            fontSize: 11,
-            letterSpacing: "0.32em",
-            textTransform: "uppercase",
-            color: COLOR.ghost,
-            borderBottom: `1px solid ${COLOR.ghost}50`,
-            textDecoration: "none",
-            transition: "color 0.3s ease, border-color 0.3s ease",
-          }}
-        >
-          <span
-            aria-hidden
-            style={{
-              display: "block",
-              width: 24,
-              height: 1,
-              background: COLOR.ghost,
-            }}
-          />
-          <span>Read PDF</span>
-          <span aria-hidden>→</span>
-        </a>
+       
+     <Link
+           href={pub.href}
+           className="pub-read"
+           style={{ /* unchanged */ }}
+         >
+           <span aria-hidden style={{ /* unchanged */ }} />
+           <span>Read PDF</span>
+           <span aria-hidden>→</span>
+     </Link>
       </div>
     </article>
   );
@@ -1158,7 +1364,7 @@ function PlatformEntry({ p }: { p: Platform }) {
                 }}
               />
               <span>{p.cta}</span>
-              <span aria-hidden>↗</span>
+              <span aria-hidden>{p.href && /^https?:\/\//.test(p.href) ? "↗" : "↘"}</span>
             </div>
             {p.origin && (
               <div
@@ -1180,15 +1386,26 @@ function PlatformEntry({ p }: { p: Platform }) {
   );
 
   if (p.href) {
+    const isExternal = /^https?:\/\//.test(p.href);
+    if (isExternal) {
+      return (
+        <a
+          href={p.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: "block", textDecoration: "none", color: "inherit" }}
+        >
+          {inner}
+        </a>
+      );
+    }
     return (
-      <a
+      <Link
         href={p.href}
-        target="_blank"
-        rel="noopener noreferrer"
         style={{ display: "block", textDecoration: "none", color: "inherit" }}
       >
         {inner}
-      </a>
+      </Link>
     );
   }
   return <div>{inner}</div>;

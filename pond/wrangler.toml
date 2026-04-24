@@ -1,0 +1,87 @@
+#:schema node_modules/wrangler/config-schema.json
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Limen Pond — Cloudflare Workers configuration
+#
+#  The pond lives in a single Durable Object, "Pond", keyed by name so that
+#  every visitor who opens limenresearch.ai is looking through a different
+#  window at the same body of water. SQLite-backed storage for the koi,
+#  memory stream, events, and relationships. Workers Analytics Engine for
+#  Tier-1 (hot) observability. R2 for Tier-3 (cold) prompt-and-completion
+#  blobs. Secrets — the OpenRouter API key, the classifier key — are
+#  uploaded via `wrangler secret put` and never committed here.
+#
+#  The DO uses the new-SQLite migration (use_sqlite: true). This means the
+#  DO's storage is actual SQLite, and we can run prepared statements, create
+#  indices, and maintain the bitemporal schema described in § VI of the
+#  manifesto. Park-style memory retrieval is a 3000-row cosine scan — at
+#  this scale, in-DO SQLite is faster than Vectorize and costs nothing.
+# ══════════════════════════════════════════════════════════════════════════════
+
+name = "limen-pond"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+# The pond is one DO. Multiple ponds would dilute the thesis (see § XXII).
+[[durable_objects.bindings]]
+name = "POND"
+class_name = "Pond"
+
+# CognitionLog DO — stores every cognition call + curator ratings.
+# One instance, keyed "primary". Accessed via /cog/* endpoints.
+[[durable_objects.bindings]]
+name = "COGNITION_LOG"
+class_name = "CognitionLog"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Pond"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["CognitionLog"]
+
+# Workers AI — used for the BGE-small embeddings on every memory write.
+# 10k calls/day are free; at steady-state ~1500/day across five adults,
+# we stay well below the ceiling.
+[ai]
+binding = "AI"
+
+# R2 — Tier-3 archival of full prompt-and-completion blobs, keyed by
+# payload_hash. Lifecycle policy: tier to IA after 90 days, delete after
+# 2 years. Configured in the dashboard, not here.
+[[r2_buckets]]
+binding = "ARCHIVE"
+bucket_name = "limen-pond-archive"
+
+# Workers Analytics Engine — Tier-1 (hot) event sink. Non-blocking writes
+# from the DO. Read via Cloudflare's GraphQL into Grafana. Free up to
+# 25M data points per month.
+[[analytics_engine_datasets]]
+binding = "AE_EVENTS"
+dataset = "limen_pond_events"
+
+# Variables — non-secret. Secrets go in `wrangler secret put`.
+[vars]
+POND_ID = "primary"
+POND_VERSION = "0.1.0"
+TICK_HZ = "2"
+# Cognition is off by default. Flip to "true" once OPENROUTER_API_KEY is set
+# and you're ready to spend real money. Until then, the pond runs in
+# Meditation mode — kinematics at full fidelity, no LLM calls.
+COGNITION_ENABLED = "false"
+# Soft budget ceiling; when exceeded, the pond drops a tier (see § XVII).
+MONTHLY_BUDGET_USD = "100"
+
+# ── Env overrides for local dev ───────────────────────────────────────────
+[env.dev]
+name = "limen-pond-dev"
+vars = { POND_ID = "dev", COGNITION_ENABLED = "false" }
+
+# ── Production ─────────────────────────────────────────────────────────────
+[env.production]
+name = "limen-pond"
+# Routes are set in the dashboard; we expose via a subdomain and the
+# Next.js app proxies WebSocket upgrades. No custom domain here — the
+# canonical surface is limenresearch.ai.

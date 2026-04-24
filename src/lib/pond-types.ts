@@ -1,7 +1,11 @@
 // Limen Pond — shared types
 // Used across the Durable Object, Worker router, and Next.js client.
-// Keep this file free of runtime dependencies so it can be shared via
-// a published package or git submodule to the web app.
+// Keep this file free of runtime dependencies AND free of platform-specific
+// types (Workers globals, Node globals, browser globals) so it can be shared
+// via a published package or git submodule to the web app.
+//
+// Platform-specific bindings (Env, etc.) live with their platform:
+//   - Worker bindings → pond/src/env.ts
 
 // ───────────────────────────────────────────────────────────────────
 //  Spatial
@@ -299,22 +303,3 @@ export type LoveMechanism =
   | "seasonal_rite"
   | "birth_witnessing"
   | "elder_naming";
-
-// ───────────────────────────────────────────────────────────────────
-//  Env bindings (mirrors wrangler.toml)
-// ───────────────────────────────────────────────────────────────────
-
-export interface Env {
-  POND: DurableObjectNamespace;
-  ARCHIVE: R2Bucket;
-  AI: Ai;
-  EVENTS_AE: AnalyticsEngineDataset;
-  OPENROUTER_API_KEY: string;
-  AUTH_HMAC_SECRET: string;
-  POND_VERSION: string;
-  POND_NAME: string;
-  TICK_INTERVAL_MS: string;
-  INITIAL_KOI_COUNT: string;
-  MAX_CONCURRENT_COGNITIONS: string;
-  DEFAULT_COGNITION_INTERVAL_MS: string;
-}

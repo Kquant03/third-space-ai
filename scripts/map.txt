@@ -1,0 +1,328 @@
+REPOSITORY: /home/kquant/Documents/code/limenresearch
+========================================================================
+Token counts: (exact, tiktoken)   |   Max file size: 256 KB
+Context window reference: 150,000 usable tokens
+
+DIRECTORY TREE
+  Columns: loc | ~tokens | language
+
+📁 pond/
+  📁 src/
+    📁 app/
+      📁 curate/
+        📁 api/
+          📁 cog/
+            📁 [...path]/
+              📄 route.ts     80 loc  ~  692 tok  [TypeScript]
+          📁 curate-login/
+            📄 route.ts     22 loc  ~  191 tok  [TypeScript]
+          📁 sweep-launch/
+            📄 route.ts    115 loc  ~ 1.3k tok  [TypeScript]
+        📁 batch/
+          📄 page.tsx    290 loc  ~ 2.3k tok  [TypeScript/React]
+        📁 login/
+          📄 page.tsx     80 loc  ~  529 tok  [TypeScript/React]
+        📁 sweep/
+          📄 page.tsx    407 loc  ~ 3.9k tok  [TypeScript/React]
+        📄 page.tsx    411 loc  ~ 3.3k tok  [TypeScript/React]
+    📁 mechanisms/
+      📄 gift.ts    284 loc  ~ 2.8k tok  [TypeScript]
+      📄 index.ts     69 loc  ~  672 tok  [TypeScript]
+      📄 play.ts    817 loc  ~ 8.3k tok  [TypeScript]
+      📄 repair.ts    309 loc  ~ 2.8k tok  [TypeScript]
+      📄 types.ts    208 loc  ~ 1.8k tok  [TypeScript]
+      📄 witnessing.ts    366 loc  ~ 3.4k tok  [TypeScript]
+    📄 affect.ts    259 loc  ~ 3.0k tok  [TypeScript]
+    📄 artifacts.ts    589 loc  ~ 5.6k tok  [TypeScript]
+    📄 cognition-log.ts    670 loc  ~ 6.2k tok  [TypeScript]
+    📄 cognition.ts   1090 loc  ~ 9.9k tok  [TypeScript]
+    📄 constants.ts    667 loc  ~ 7.6k tok  [TypeScript]
+    📄 curl-noise.ts    156 loc  ~ 2.1k tok  [TypeScript]
+    📄 embeddings.ts    121 loc  ~ 1.2k tok  [TypeScript]
+    📄 events.ts    213 loc  ~ 1.7k tok  [TypeScript]
+    📄 genealogy.ts    338 loc  ~ 3.3k tok  [TypeScript]
+    📄 genetics.ts    311 loc  ~ 3.4k tok  [TypeScript]
+    📄 index.ts    150 loc  ~ 1.4k tok  [TypeScript]
+    📄 kinematics.ts    604 loc  ~ 6.3k tok  [TypeScript]
+    📄 koi.ts    371 loc  ~ 3.8k tok  [TypeScript]
+    📄 meditation.ts    268 loc  ~ 2.6k tok  [TypeScript]
+    📄 memory.ts    384 loc  ~ 3.6k tok  [TypeScript]
+    📄 naming.ts    169 loc  ~ 2.0k tok  [TypeScript]
+    📄 nutrition.ts    307 loc  ~ 3.2k tok  [TypeScript]
+    📄 pond-do.ts   2290 loc  ~  22k tok  [TypeScript]
+    📄 protocol.ts    334 loc  ~ 3.3k tok  [TypeScript]
+    📄 reproduction.ts    415 loc  ~ 4.1k tok  [TypeScript]
+    📄 rng.ts     77 loc  ~  767 tok  [TypeScript]
+    📄 safety.ts    178 loc  ~ 1.8k tok  [TypeScript]
+    📄 schema.sql    329 loc  ~ 3.1k tok  [SQL]
+    📄 schema.ts    343 loc  ~ 3.1k tok  [TypeScript]
+    📄 sweep-contexts-synthetic.ts    458 loc  ~ 5.0k tok  [TypeScript]
+    📄 sweep-contexts.ts    372 loc  ~ 4.5k tok  [TypeScript]
+    📄 sweep-models.ts    109 loc  ~ 1.2k tok  [TypeScript]
+    📄 sweep.ts    393 loc  ~ 3.5k tok  [TypeScript]
+    📄 types.ts    425 loc  ~ 4.4k tok  [TypeScript]
+    📄 world.ts    255 loc  ~ 2.7k tok  [TypeScript]
+  📁 test/
+    📄 affect.test.ts     67 loc  ~  870 tok  [TypeScript]
+    📄 artifacts.test.ts    206 loc  ~ 2.2k tok  [TypeScript]
+    📄 genealogy.test.ts    303 loc  ~ 3.5k tok  [TypeScript]
+    📄 genetics.test.ts    258 loc  ~ 2.8k tok  [TypeScript]
+    📄 kinematics.test.ts     68 loc  ~  722 tok  [TypeScript]
+    📄 mechanisms-gift.test.ts    101 loc  ~  977 tok  [TypeScript]
+    📄 mechanisms-repair.test.ts    224 loc  ~ 2.2k tok  [TypeScript]
+    📄 mechanisms-witnessing.test.ts    280 loc  ~ 3.6k tok  [TypeScript]
+    📄 memory.test.ts    162 loc  ~ 1.7k tok  [TypeScript]
+    📄 protocol.test.ts    166 loc  ~ 1.3k tok  [TypeScript]
+    📄 reproduction.test.ts    203 loc  ~ 2.7k tok  [TypeScript]
+    📄 world.test.ts     78 loc  ~  791 tok  [TypeScript]
+  📄 hey-dumbass.md    251 loc  ~ 2.6k tok  [Markdown]
+  📄 package.json     30 loc  ~  319 tok  [JSON]
+  📄 README.md    256 loc  ~ 3.1k tok  [Markdown]
+  📄 tsconfig.json     29 loc  ~  222 tok  [JSON]
+  📄 vitest.config.ts     13 loc  ~   79 tok  [TypeScript]
+  📄 wrangler.toml     87 loc  ~  949 tok  [TOML]
+📁 public/
+  📄 LIMEN_POND_MANIFESTO.md    527 loc  ~  17k tok  [Markdown]
+📁 scripts/
+  📄 hey-dumbass.txt     29 loc  ~  189 tok
+  📄 repo_map.py    508 loc  ~ 4.7k tok  [Python]
+📁 src/
+  📁 app/
+    📁 about/
+      📄 page.tsx   1040 loc  ~ 7.6k tok  [TypeScript/React]
+    📁 genesis/
+      📁 filter/
+        📄 page.tsx     23 loc  ~  276 tok  [TypeScript/React]
+      📁 gray-scott/
+        📄 GrayScottExperience.tsx    389 loc  ~ 3.1k tok  [TypeScript/React]
+        📄 page.tsx     16 loc  ~  188 tok  [TypeScript/React]
+        📄 simulation.ts    263 loc  ~ 3.0k tok  [TypeScript]
+      📁 ising/
+        📄 page.tsx     16 loc  ~  182 tok  [TypeScript/React]
+      📁 lenia/
+        📄 page.tsx     22 loc  ~  317 tok  [TypeScript/React]
+      📁 particle-life/
+        📄 page.tsx      - loc        - tok  [TypeScript/React]
+    📁 limen-pond/
+      📄 page.tsx    986 loc  ~ 8.7k tok  [TypeScript/React]
+    📁 research/
+      📁 [slug]/
+        📄 page.tsx    107 loc  ~  861 tok  [TypeScript/React]
+      📄 page.tsx    419 loc  ~ 2.8k tok  [TypeScript/React]
+    📄 globals.css    216 loc  ~ 2.2k tok  [CSS]
+    📄 layout.tsx    112 loc  ~  893 tok  [TypeScript/React]
+    📄 page.tsx   1494 loc  ~  11k tok  [TypeScript/React]
+  📁 components/
+    📁 genesis/
+      📁 filter/
+        📄 DerivationDrawer.tsx    360 loc  ~ 3.2k tok  [TypeScript/React]
+        📄 FilterExperience.tsx   1174 loc  ~ 9.0k tok  [TypeScript/React]
+        📄 LoopholesPanel.tsx    120 loc  ~ 1.0k tok  [TypeScript/React]
+        📄 PhasePlot.tsx    648 loc  ~ 5.0k tok  [TypeScript/React]
+        📄 physics.ts    315 loc  ~ 3.5k tok  [TypeScript]
+        📄 PredictionCurve.tsx    213 loc  ~ 1.9k tok  [TypeScript/React]
+        📄 RefutationStep.tsx     95 loc  ~  658 tok  [TypeScript/React]
+        📄 scenarios.ts    126 loc  ~ 1.4k tok  [TypeScript]
+        📄 TrajectoryRender.tsx    344 loc  ~ 2.7k tok  [TypeScript/React]
+      📁 ising/
+        📄 IsingExperience.tsx   1010 loc  ~ 7.7k tok  [TypeScript/React]
+        📄 PhaseIndicator.tsx    105 loc  ~  823 tok  [TypeScript/React]
+        📄 renderer.ts    322 loc  ~ 3.3k tok  [TypeScript]
+        📄 simulation.ts    443 loc  ~ 4.2k tok  [TypeScript]
+        📄 Sparkline.tsx    192 loc  ~ 1.2k tok  [TypeScript/React]
+      📁 lenia/
+        📄 kernel.ts    273 loc  ~ 5.4k tok  [TypeScript]
+        📄 LeniaExperience.tsx    757 loc  ~ 5.5k tok  [TypeScript/React]
+        📄 presets.ts    278 loc  ~ 2.3k tok  [TypeScript]
+        📄 sigmaField.ts    113 loc  ~ 1.3k tok  [TypeScript]
+        📄 useLenia.ts    768 loc  ~ 7.1k tok  [TypeScript]
+        📄 webgl.ts    117 loc  ~ 1.0k tok  [TypeScript]
+      📁 particle-life/
+        📄 ParticleLifeExperience.tsx    490 loc  ~ 3.8k tok  [TypeScript/React]
+        📄 simulation.ts    283 loc  ~ 2.9k tok  [TypeScript]
+      📄 SubstrateControls.tsx    524 loc  ~ 3.4k tok  [TypeScript/React]
+      📄 SubstrateFrame.tsx    320 loc  ~ 2.5k tok  [TypeScript/React]
+    📄 LimenLoader.tsx    407 loc  ~ 3.4k tok  [TypeScript/React]
+    📄 LivingSubstrate.tsx   1942 loc  ~  24k tok  [TypeScript/React]
+    📄 PDFReader.tsx    740 loc  ~ 5.4k tok  [TypeScript/React]
+    📄 PDFReaderClient.tsx     81 loc  ~  611 tok  [TypeScript/React]
+    📄 PondDiagnostic.tsx    586 loc  ~ 5.6k tok  [TypeScript/React]
+    📄 PondWhispers.tsx    194 loc  ~ 1.8k tok  [TypeScript/React]
+    📄 SiteChrome.tsx    448 loc  ~ 3.6k tok  [TypeScript/React]
+    📄 SiteHeader.tsx    767 loc  ~ 6.2k tok  [TypeScript/React]
+    📄 SmoothScroll.tsx     53 loc  ~  452 tok  [TypeScript/React]
+  📁 content/
+    📄 posts.ts    209 loc  ~ 3.6k tok  [TypeScript]
+  📁 data/
+    📄 papers.ts    138 loc  ~ 1.5k tok  [TypeScript]
+    📄 substrates.ts    100 loc  ~ 1.1k tok  [TypeScript]
+  📁 lib/
+    📄 gsapConfig.ts      9 loc  ~   53 tok  [TypeScript]
+    📄 pond-types.ts    320 loc  ~ 2.5k tok  [TypeScript]
+    📄 shaders.ts    121 loc  ~ 1.7k tok  [TypeScript]
+    📄 usePond.ts   1214 loc  ~  11k tok  [TypeScript]
+📄 .gitignore     41 loc  ~  145 tok
+📄 AGENTS.md      5 loc  ~   74 tok  [Markdown]
+📄 CLAUDE.md      1 loc  ~    5 tok  [Markdown]
+📄 eslint.config.mjs     18 loc  ~  115 tok  [JavaScript]
+📄 layout.tsx    112 loc  ~  893 tok  [TypeScript/React]
+📄 next.config.ts      7 loc  ~   30 tok  [TypeScript]
+📄 package.json     32 loc  ~  262 tok  [JSON]
+📄 postcss.config.mjs      7 loc  ~   24 tok  [JavaScript]
+📄 README.md    256 loc  ~ 3.1k tok  [Markdown]
+📄 REBUILD.md     92 loc  ~ 1.1k tok  [Markdown]
+📄 tailwind.config.ts     71 loc  ~  582 tok  [TypeScript]
+📄 tsconfig.json     34 loc  ~  206 tok  [JSON]
+
+========================================================================
+LOC + TOKENS BY LANGUAGE
+
+  TypeScript         22205 loc  ~  227k tok  152% ctx   71 files  ████████████████
+  TypeScript/React   17494 loc  ~  146k tok   98% ctx   39 files  ██████████
+  Markdown            1388 loc  ~   27k tok   18% ctx    7 files  █
+  Python               508 loc  ~  4.7k tok    3% ctx    1 files  
+  SQL                  329 loc  ~  3.1k tok    2% ctx    1 files  
+  CSS                  216 loc  ~  2.2k tok    1% ctx    1 files  
+  JSON                 125 loc  ~  1.0k tok    1% ctx    4 files  
+  TOML                  87 loc  ~   949 tok    1% ctx    1 files  
+  JavaScript            25 loc  ~   139 tok    0% ctx    2 files  
+
+  TOTAL              42377 loc  ~  414k tok  276% of usable context
+
+  ⚠️  EXCEEDS usable context by ~264k tokens.
+     Share files selectively — do NOT paste the whole repo.
+
+========================================================================
+FILES BY TOKEN COST  (heaviest context cost first)
+
+   tokens    loc  % ctx  language                path
+  -------  -----  -----  ----------------------  ----------------------------------------
+  ~   24k   1942    16%  TypeScript/React        src/components/LivingSubstrate.tsx
+  ~   22k   2290    15%  TypeScript              pond/src/pond-do.ts
+  ~   17k    527    12%  Markdown                public/LIMEN_POND_MANIFESTO.md
+  ~   11k   1214     8%  TypeScript              src/lib/usePond.ts
+  ~   11k   1494     7%  TypeScript/React        src/app/page.tsx
+  ~  9.9k   1090     7%  TypeScript              pond/src/cognition.ts
+  ~  9.0k   1174     6%  TypeScript/React        src/components/genesis/filter/FilterExperience.tsx
+  ~  8.7k    986     6%  TypeScript/React        src/app/limen-pond/page.tsx
+  ~  8.3k    817     6%  TypeScript              pond/src/mechanisms/play.ts
+  ~  7.7k   1010     5%  TypeScript/React        src/components/genesis/ising/IsingExperience.tsx
+  ~  7.6k    667     5%  TypeScript              pond/src/constants.ts
+  ~  7.6k   1040     5%  TypeScript/React        src/app/about/page.tsx
+  ~  7.1k    768     5%  TypeScript              src/components/genesis/lenia/useLenia.ts
+  ~  6.3k    604     4%  TypeScript              pond/src/kinematics.ts
+  ~  6.2k    670     4%  TypeScript              pond/src/cognition-log.ts
+  ~  6.2k    767     4%  TypeScript/React        src/components/SiteHeader.tsx
+  ~  5.6k    589     4%  TypeScript              pond/src/artifacts.ts
+  ~  5.6k    586     4%  TypeScript/React        src/components/PondDiagnostic.tsx
+  ~  5.5k    757     4%  TypeScript/React        src/components/genesis/lenia/LeniaExperience.tsx
+  ~  5.4k    273     4%  TypeScript              src/components/genesis/lenia/kernel.ts
+  ~  5.4k    740     4%  TypeScript/React        src/components/PDFReader.tsx
+  ~  5.0k    648     3%  TypeScript/React        src/components/genesis/filter/PhasePlot.tsx
+  ~  5.0k    458     3%  TypeScript              pond/src/sweep-contexts-synthetic.ts
+  ~  4.7k    508     3%  Python                  scripts/repo_map.py
+  ~  4.5k    372     3%  TypeScript              pond/src/sweep-contexts.ts
+  ~  4.4k    425     3%  TypeScript              pond/src/types.ts
+  ~  4.2k    443     3%  TypeScript              src/components/genesis/ising/simulation.ts
+  ~  4.1k    415     3%  TypeScript              pond/src/reproduction.ts
+  ~  3.9k    407     3%  TypeScript/React        pond/src/app/curate/sweep/page.tsx
+  ~  3.8k    371     3%  TypeScript              pond/src/koi.ts
+  ~  3.8k    490     3%  TypeScript/React        src/components/genesis/particle-life/ParticleLifeExperience.tsx
+  ~  3.6k    280     2%  TypeScript              pond/test/mechanisms-witnessing.test.ts
+  ~  3.6k    448     2%  TypeScript/React        src/components/SiteChrome.tsx
+  ~  3.6k    384     2%  TypeScript              pond/src/memory.ts
+  ~  3.6k    209     2%  TypeScript              src/content/posts.ts
+  ~  3.5k    393     2%  TypeScript              pond/src/sweep.ts
+  ~  3.5k    315     2%  TypeScript              src/components/genesis/filter/physics.ts
+  ~  3.5k    303     2%  TypeScript              pond/test/genealogy.test.ts
+  ~  3.4k    524     2%  TypeScript/React        src/components/genesis/SubstrateControls.tsx
+  ~  3.4k    366     2%  TypeScript              pond/src/mechanisms/witnessing.ts
+  ~  3.4k    407     2%  TypeScript/React        src/components/LimenLoader.tsx
+  ~  3.4k    311     2%  TypeScript              pond/src/genetics.ts
+  ~  3.3k    411     2%  TypeScript/React        pond/src/app/curate/page.tsx
+  ~  3.3k    322     2%  TypeScript              src/components/genesis/ising/renderer.ts
+  ~  3.3k    338     2%  TypeScript              pond/src/genealogy.ts
+  ~  3.3k    334     2%  TypeScript              pond/src/protocol.ts
+  ~  3.2k    360     2%  TypeScript/React        src/components/genesis/filter/DerivationDrawer.tsx
+  ~  3.2k    307     2%  TypeScript              pond/src/nutrition.ts
+  ~  3.1k    329     2%  SQL                     pond/src/schema.sql
+  ~  3.1k    256     2%  Markdown                pond/README.md
+  ~  3.1k    389     2%  TypeScript/React        src/app/genesis/gray-scott/GrayScottExperience.tsx
+  ~  3.1k    256     2%  Markdown                README.md
+  ~  3.1k    343     2%  TypeScript              pond/src/schema.ts
+  ~  3.0k    263     2%  TypeScript              src/app/genesis/gray-scott/simulation.ts
+  ~  3.0k    259     2%  TypeScript              pond/src/affect.ts
+  ~  2.9k    283     2%  TypeScript              src/components/genesis/particle-life/simulation.ts
+  ~  2.8k    284     2%  TypeScript              pond/src/mechanisms/gift.ts
+  ~  2.8k    419     2%  TypeScript/React        src/app/research/page.tsx
+  ~  2.8k    309     2%  TypeScript              pond/src/mechanisms/repair.ts
+  ~  2.8k    258     2%  TypeScript              pond/test/genetics.test.ts
+  ~  2.7k    344     2%  TypeScript/React        src/components/genesis/filter/TrajectoryRender.tsx
+  ~  2.7k    255     2%  TypeScript              pond/src/world.ts
+  ~  2.7k    203     2%  TypeScript              pond/test/reproduction.test.ts
+  ~  2.6k    268     2%  TypeScript              pond/src/meditation.ts
+  ~  2.6k    251     2%  Markdown                pond/hey-dumbass.md
+  ~  2.5k    320     2%  TypeScript              src/lib/pond-types.ts
+  ~  2.5k    320     2%  TypeScript/React        src/components/genesis/SubstrateFrame.tsx
+  ~  2.3k    290     2%  TypeScript/React        pond/src/app/curate/batch/page.tsx
+  ~  2.3k    278     2%  TypeScript              src/components/genesis/lenia/presets.ts
+  ~  2.2k    206     1%  TypeScript              pond/test/artifacts.test.ts
+  ~  2.2k    224     1%  TypeScript              pond/test/mechanisms-repair.test.ts
+  ~  2.2k    216     1%  CSS                     src/app/globals.css
+  ~  2.1k    156     1%  TypeScript              pond/src/curl-noise.ts
+  ~  2.0k    169     1%  TypeScript              pond/src/naming.ts
+  ~  1.9k    213     1%  TypeScript/React        src/components/genesis/filter/PredictionCurve.tsx
+  ~  1.8k    208     1%  TypeScript              pond/src/mechanisms/types.ts
+  ~  1.8k    194     1%  TypeScript/React        src/components/PondWhispers.tsx
+  ~  1.8k    178     1%  TypeScript              pond/src/safety.ts
+  ~  1.7k    213     1%  TypeScript              pond/src/events.ts
+  ~  1.7k    162     1%  TypeScript              pond/test/memory.test.ts
+  ~  1.7k    121     1%  TypeScript              src/lib/shaders.ts
+  ~  1.5k    138     1%  TypeScript              src/data/papers.ts
+  ~  1.4k    150     1%  TypeScript              pond/src/index.ts
+  ~  1.4k    126     1%  TypeScript              src/components/genesis/filter/scenarios.ts
+  ~  1.3k    115     1%  TypeScript              pond/src/app/curate/api/sweep-launch/route.ts
+  ~  1.3k    113     1%  TypeScript              src/components/genesis/lenia/sigmaField.ts
+  ~  1.3k    166     1%  TypeScript              pond/test/protocol.test.ts
+  ~  1.2k    192     1%  TypeScript/React        src/components/genesis/ising/Sparkline.tsx
+  ~  1.2k    121     1%  TypeScript              pond/src/embeddings.ts
+  ~  1.2k    109     1%  TypeScript              pond/src/sweep-models.ts
+  ~  1.1k    100     1%  TypeScript              src/data/substrates.ts
+  ~  1.1k     92     1%  Markdown                REBUILD.md
+  ~  1.0k    120     1%  TypeScript/React        src/components/genesis/filter/LoopholesPanel.tsx
+  ~  1.0k    117     1%  TypeScript              src/components/genesis/lenia/webgl.ts
+  ~   977    101     1%  TypeScript              pond/test/mechanisms-gift.test.ts
+  ~   949     87     1%  TOML                    pond/wrangler.toml
+  ~   893    112     1%  TypeScript/React        src/app/layout.tsx
+  ~   893    112     1%  TypeScript/React        layout.tsx
+  ~   870     67     1%  TypeScript              pond/test/affect.test.ts
+  ~   861    107     1%  TypeScript/React        src/app/research/[slug]/page.tsx
+  ~   823    105     1%  TypeScript/React        src/components/genesis/ising/PhaseIndicator.tsx
+  ~   791     78     1%  TypeScript              pond/test/world.test.ts
+  ~   767     77     1%  TypeScript              pond/src/rng.ts
+  ~   722     68     0%  TypeScript              pond/test/kinematics.test.ts
+  ~   692     80     0%  TypeScript              pond/src/app/curate/api/cog/[...path]/route.ts
+  ~   672     69     0%  TypeScript              pond/src/mechanisms/index.ts
+  ~   658     95     0%  TypeScript/React        src/components/genesis/filter/RefutationStep.tsx
+  ~   611     81     0%  TypeScript/React        src/components/PDFReaderClient.tsx
+  ~   582     71     0%  TypeScript              tailwind.config.ts
+  ~   529     80     0%  TypeScript/React        pond/src/app/curate/login/page.tsx
+  ~   452     53     0%  TypeScript/React        src/components/SmoothScroll.tsx
+  ~   319     30     0%  JSON                    pond/package.json
+  ~   317     22     0%  TypeScript/React        src/app/genesis/lenia/page.tsx
+  ~   276     23     0%  TypeScript/React        src/app/genesis/filter/page.tsx
+  ~   262     32     0%  JSON                    package.json
+  ~   222     29     0%  JSON                    pond/tsconfig.json
+  ~   206     34     0%  JSON                    tsconfig.json
+  ~   191     22     0%  TypeScript              pond/src/app/curate/api/curate-login/route.ts
+  ~   188     16     0%  TypeScript/React        src/app/genesis/gray-scott/page.tsx
+  ~   182     16     0%  TypeScript/React        src/app/genesis/ising/page.tsx
+  ~   115     18     0%  JavaScript              eslint.config.mjs
+  ~    79     13     0%  TypeScript              pond/vitest.config.ts
+  ~    74      5     0%  Markdown                AGENTS.md
+  ~    53      9     0%  TypeScript              src/lib/gsapConfig.ts
+  ~    30      7     0%  TypeScript              next.config.ts
+  ~    24      7     0%  JavaScript              postcss.config.mjs
+  ~     5      1     0%  Markdown                CLAUDE.md
+
+  Cumulative if all pasted: ~414k (276% of usable context)

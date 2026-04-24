@@ -1,0 +1,29 @@
+HEY DUMBASS
+===========
+
+This is the venv for repo_map.py and any other little utility scripts.
+
+SETUP (one time only):
+    cd /home/kquant/Documents/code/limenresearch/scripts
+    python3 -m venv .venv
+
+ACTIVATE:
+    source .venv/bin/activate
+
+YOU'LL KNOW IT'S WORKING when your prompt shows:
+    (.venv) kquant@skynet:...
+
+INSTALL DEPS (after activating, one time only):
+    pip install tiktoken
+
+    tiktoken = exact Claude/GPT token counts instead of estimates.
+    Without it the script still works, just ±15% accuracy.
+
+RUN THE MAP:
+    python repo_map.py /home/kquant/Documents/code/limenresearch --out map.txt
+    cat map.txt   (or just paste map.txt to Claude)
+
+DEACTIVATE when done:
+    deactivate
+
+THAT'S IT.

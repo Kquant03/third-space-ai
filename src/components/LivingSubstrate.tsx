@@ -4,33 +4,239 @@ import { useEffect, useRef } from "react";
 import { usePond } from "../lib/usePond";
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  LIMEN · Living Substrate · v9 · "Pond"
+//  LIMEN · Living Substrate · v13 · "Pond, coherent"
 //  ─────────────────────────────────────────────────────────────────────────
-//  Integration with the Limen Pond Durable Object. The entire v8 visual
-//  layer is preserved: field shader, bloom, halation, koi silhouette,
-//  forked tail, dorsal fin, pectoral fins, heart particles, tai chi ring,
-//  meeting ceremony. What changes is where the two koi positions come from.
+//  Physical coherence pass on top of v12 (pond-as-place). Every element
+//  of the map tuned to read as a specific place under water, not as
+//  shader variation. Plus: wake field infrastructure (Session B-1) —
+//  the water now tracks disturbance from every koi's body-point motion
+//  in a persistent, decaying, diffusing scalar field. Not yet wired
+//  into the visible render (Session B-2 does that) but computed
+//  correctly and debuggable.
 //
-//  In v8, positions were procedural — two koi on an incommensurate Lissajous
-//  scheduled to meet every 10–18 minutes. In v9, positions come from the
-//  authoritative pond DO over WebSocket. The shader renders the first two
-//  fish in the pond. When the pond is unreachable (initial load, dev without
-//  backend, network drop), the procedural Lissajous resumes seamlessly — so
-//  the site is always beautiful regardless of connectivity.
+//  Shape: asymmetric lobed — two joined rounded basins connected by a
+//  narrowed waist. The shrine sits at the waist. The shelf band
+//  follows the compound perimeter. The triskele recess is in the
+//  smaller basin.
 //
-//  Two substantive changes from v8:
+//  Architecture: seven-pass render.
 //
-//  1. Orbit block → usePond.getOrbitCompatibleFish().
-//     `orbitRaw`, `applyMeeting`, and the meeting scheduler are gone.
-//     Fish positions arrive from the pond (server-authoritative) or the
-//     procedural fallback (same Lissajous as before).
+//  Pass W1 (wake advect+decay+diffuse) — reads previous wake field,
+//    advects by ambient flow, decays toward zero, diffuses spatially.
+//    Writes to back buffer. Quarter-resolution single-channel float.
 //
-//  2. Meeting is proximity-triggered, not timer-triggered.
-//     A low-pass filter watches the distance between the two rendered fish.
-//     When they linger close, u_meeting ramps up smoothly; when they drift
-//     apart, it decays. Hearts spawn only when a meeting is earned.
-//     If the LLMs never bring the fish close, no meeting. That's correct.
+//  Pass W2 (wake injection) — instanced draw, one small Gaussian blob
+//    per body-point per koi. Additive blend into the wake field.
+//    Reads per-body-point positions + velocities computed CPU-side in
+//    usePond's kinematic integrator.
+//
+//  Pass A (field/water) — the pond volume. Renders the 3D-projected
+//    pond with shrine/shelf/triskele, depth-stratified water, caustics,
+//    god-rays, surface plane with Snell's window. Physical coherence
+//    tuned: caustics that read as light-through-water, floor that
+//    reads as silt and stone, shrine with presence, surface with
+//    restraint.
+//
+//  Pass B (koi overlay) — instanced draw with oblique projection.
+//
+//  Pass C (bloom horizontal) — from field pass.
+//  Pass D (bloom vertical).
+//  Pass E (composite) — field + koi + bloom + halation + vignette.
+//
+//  Per-koi quad size scales with stage:
+//    egg       0.008,  fry       0.040,  juvenile  0.080,
+//    adolescent 0.110, adult     0.150,  elder     0.170, dying 0.140.
 // ═══════════════════════════════════════════════════════════════════════════
+
+const MAX_KOI = 32;
+
+interface Phenotype {
+  baseColor: string;
+  markColor: string;
+  markCoverage: number;
+  markDensity: number;
+  backBlue: number;
+  headDot: number;
+  metallic: number;
+}
+
+const ARCHETYPE_PHENOTYPES: Record<string, Phenotype> = {
+  kohaku: {
+    baseColor: "#f6f3ec", markColor: "#c9301f",
+    markCoverage: 0.55, markDensity: 0.35,
+    backBlue: 0.0, headDot: 0.2, metallic: 0.05,
+  },
+  shusui: {
+    baseColor: "#d1cfc4", markColor: "#b63a28",
+    markCoverage: 0.35, markDensity: 0.25,
+    backBlue: 0.85, headDot: 0.0, metallic: 0.0,
+  },
+  asagi: {
+    baseColor: "#c0bfb5", markColor: "#a8341c",
+    markCoverage: 0.30, markDensity: 0.55,
+    backBlue: 0.70, headDot: 0.0, metallic: 0.0,
+  },
+  ogon: {
+    baseColor: "#d9b65c", markColor: "#d9b65c",
+    markCoverage: 0.0, markDensity: 0.0,
+    backBlue: 0.0, headDot: 0.0, metallic: 0.9,
+  },
+  tancho: {
+    baseColor: "#f6f3ec", markColor: "#c7291b",
+    markCoverage: 0.06, markDensity: 0.0,
+    backBlue: 0.0, headDot: 1.0, metallic: 0.0,
+  },
+  showa: {
+    baseColor: "#232129", markColor: "#c7291b",
+    markCoverage: 0.55, markDensity: 0.45,
+    backBlue: 0.0, headDot: 0.15, metallic: 0.15,
+  },
+  goshiki: {
+    baseColor: "#a7a69a", markColor: "#8a2414",
+    markCoverage: 0.65, markDensity: 0.75,
+    backBlue: 0.45, headDot: 0.0, metallic: 0.1,
+  },
+};
+
+function phenotypeFor(color: string | undefined): Phenotype {
+  if (!color) return ARCHETYPE_PHENOTYPES.kohaku!;
+  return ARCHETYPE_PHENOTYPES[color] ?? ARCHETYPE_PHENOTYPES.kohaku!;
+}
+
+function hexToVec3(hex: string): [number, number, number] {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return [1, 1, 1];
+  return [
+    parseInt(m[1]!, 16) / 255,
+    parseInt(m[2]!, 16) / 255,
+    parseInt(m[3]!, 16) / 255,
+  ];
+}
+
+// Stage-dependent size as a multiplier. Adult = 1.0 (matches v10's koi
+// size). Fry are ~0.25× an adult, elders are slightly larger.
+function stageScale(stage: string | undefined): number {
+  switch (stage) {
+    case "egg":        return 0.05;
+    case "fry":        return 0.25;
+    case "juvenile":   return 0.50;
+    case "adolescent": return 0.75;
+    case "adult":      return 1.00;
+    case "elder":      return 1.15;
+    case "dying":      return 0.95;
+    default:           return 1.00;
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────
+//  Shaders
+// ───────────────────────────────────────────────────────────────────
+
+// Shared camera GLSL. Both field and koi-vertex shaders include this
+// via template-literal interpolation so their projections are
+// mathematically identical — no drift between where the floor is
+// rendered and where koi are placed above it.
+//
+// Camera model:
+//   - Pond surface is the plane Y=0.
+//   - Camera positioned at (0, HEIGHT, CAM_BACK), looking toward the
+//     pond center with a downward pitch of TILT radians.
+//   - Vertical FOV = FOV_Y. Aspect-ratio handling via u_resolution.
+//
+// Forward projection (world → clip space):
+//     cam = R_tilt * (world - camera_position)
+//     clip.xy = vec2(cam.x / (aspect * tan(fov/2)),
+//                    cam.y / tan(fov/2)) / -cam.z
+//
+// Inverse projection (viewport → world on Y=0 plane):
+//     dir_cam = normalize(vec3(vp.x * aspect * tan(fov/2),
+//                              vp.y * tan(fov/2), -1))
+//     dir_world = R_tilt^(-1) * dir_cam
+//     t = -camera_position.y / dir_world.y    // solve Y=0
+//     world.xz = camera_position.xz + t * dir_world.xz
+const CAMERA_GLSL = /* glsl */ `
+  // Physical pond camera.
+  const float CAM_HEIGHT  = 2.6;   // meters above water surface
+  const float CAM_BACK    = 6.0;   // meters toward -Z from pond center
+  const float CAM_TILT    = 0.52;  // radians, downward pitch (~30°)
+  const float CAM_FOV_Y   = 0.785; // radians, vertical FOV (~45°)
+
+  // Forward projection: world point (x, y, z) → clip space (x, y, 1/-z).
+  // y and z in world space; y=0 is water surface, y positive = up.
+  // Returns vec3(clip_x, clip_y, 1/(-cam_z)) — the z component is the
+  // perspective denominator for later perspective-correct ops.
+  //
+  // Camera is pitched DOWN by CAM_TILT. To take a world point into
+  // camera space we rotate by +CAM_TILT around X axis (inverse of the
+  // camera's downward pitch).
+  vec3 projectWorldToClip(vec3 world, float aspect) {
+    vec3 rel = world - vec3(0.0, CAM_HEIGHT, CAM_BACK);
+    float cT = cos(CAM_TILT);
+    float sT = sin(CAM_TILT);
+    vec3 cam = vec3(
+      rel.x,
+      cT * rel.y - sT * rel.z,
+      sT * rel.y + cT * rel.z
+    );
+    float fy = tan(CAM_FOV_Y * 0.5);
+    float fx = fy * aspect;
+    float invNegZ = 1.0 / max(1e-4, -cam.z);
+    return vec3(cam.x / fx * invNegZ, cam.y / fy * invNegZ, invNegZ);
+  }
+
+  // Inverse: viewport (vp in [-aspect/2, aspect/2] × [-0.5, 0.5])
+  // → world XZ on the Y=0 plane. If the ray doesn't hit the plane
+  // (pointing at or above horizon), returns a very-far position
+  // marked by z > 1e4.
+  vec2 viewportToPondXZ(vec2 vp, float aspect) {
+    // Convert viewport coords to NDC clip coords: [-1, 1] range.
+    float fy = tan(CAM_FOV_Y * 0.5);
+    float fx = fy * aspect;
+    // vp.y in [-0.5, 0.5] maps to clip_y in [-1, 1]:
+    vec3 dirCam = normalize(vec3(
+      vp.x * 2.0 * fx,
+      vp.y * 2.0 * fy,
+      -1.0
+    ));
+    // Rotate back from camera space to world space. The camera is
+    // pitched DOWN by CAM_TILT, so cam→world rotation is R_x(-TILT).
+    // R_x(-θ) has cos(θ) on diagonals and -sin/+sin on off-diagonals
+    // (negating the signs vs. R_x(+θ)).
+    float cT = cos(CAM_TILT);
+    float sT = sin(CAM_TILT);
+    vec3 dirWorld = vec3(
+      dirCam.x,
+      cT * dirCam.y + sT * dirCam.z,
+      -sT * dirCam.y + cT * dirCam.z
+    );
+    // Camera in world:
+    vec3 camPos = vec3(0.0, CAM_HEIGHT, CAM_BACK);
+    // Solve camPos.y + t * dirWorld.y = 0
+    if (dirWorld.y >= -1e-4) {
+      // Ray pointing up or parallel — no floor intersection.
+      return vec2(1e5, 1e5);
+    }
+    float t = -camPos.y / dirWorld.y;
+    vec2 hit = camPos.xz + t * dirWorld.xz;
+    return hit;
+  }
+
+  // Viewport y of the horizon — where Y=0 plane meets the skyline
+  // looking from this camera. Any fragment above this is sky.
+  float horizonViewportY() {
+    // To hit Y=0 at infinity, the world-space ray must be horizontal
+    // (dirWorld.y == 0). Since the camera is pitched DOWN by CAM_TILT,
+    // the camera-space ray must point UP by CAM_TILT to counteract.
+    //
+    // In camera space, a normalized ray looking forward-but-up-by-TILT:
+    //   dirCam = (0, sin(TILT), -cos(TILT))
+    // Our projection sets dirCam = normalize(vp.x*2*fx, vp.y*2*fy, -1),
+    // and for zero x this simplifies to (0, vp.y*2*fy, -1) / magnitude.
+    // Setting ratios: (vp.y * 2 * fy) / 1 = sin(TILT) / cos(TILT),
+    //                 vp.y = tan(TILT) / (2 * tan(FOV/2))
+    return tan(CAM_TILT) / (2.0 * tan(CAM_FOV_Y * 0.5));
+  }
+`;
 
 const VERT = /* glsl */ `#version 300 es
   in vec2 a_pos;
@@ -43,26 +249,19 @@ const FIELD_FRAG = /* glsl */ `#version 300 es
 
   uniform vec2  u_resolution;
   uniform float u_time;
-  uniform vec2  u_mouse;
   uniform float u_scroll;
-
-  uniform vec2  u_orbitA;
-  uniform vec2  u_orbitB;
-  uniform vec2  u_headingA;
-  uniform vec2  u_headingB;
-  uniform float u_tailEnergy;
-
-  uniform vec2  u_barycenter;
-  uniform float u_orbitR;
-
-  uniform float u_periastron;
-  uniform float u_meeting;
-  uniform float u_meetingElapsed;
-  uniform float u_mouseDwell;
-  uniform float u_moodDrift;
   uniform float u_breath;
-  uniform float u_cardiac;
+  uniform float u_moodDrift;
 
+  uniform vec3  u_koiPositions[${MAX_KOI}];
+  uniform int   u_koiCount;
+
+  ${CAMERA_GLSL}
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Emission-line palette — preserved from v11. Now used as the
+  //  spectral signature of water volume rather than atmospheric nebula.
+  // ─────────────────────────────────────────────────────────────────
   const vec3 C_HALPHA = vec3(1.00, 0.20, 0.28);
   const vec3 C_OIII   = vec3(0.24, 0.85, 0.72);
   const vec3 C_NII    = vec3(0.95, 0.32, 0.44);
@@ -71,9 +270,30 @@ const FIELD_FRAG = /* glsl */ `#version 300 es
   const vec3 C_HEII   = vec3(0.60, 0.35, 1.00);
   const vec3 C_GHOST  = vec3(0.498, 0.686, 0.702);
 
-  const float KOI_BODY_LEN = 0.110;
-  const float KOI_BODY_W   = 0.026;
-  const float KOI_TAIL_LEN = 0.042;
+  // Floor base color — silt, cool, muted.
+  const vec3 C_FLOOR  = vec3(0.045, 0.065, 0.085);
+  // Shrine accent — dim ghost glow.
+  const vec3 C_SHRINE = vec3(0.14, 0.22, 0.24);
+  // Above-surface "sky" — the void seen through Snell's window.
+  const vec3 C_SKY    = vec3(0.010, 0.014, 0.025);
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Pond geometry (matches pond/src/constants.ts POND)
+  //
+  //  Asymmetric lobed shape: large basin at (-1.0, 0), radius 3.5m
+  //  joined with small basin at (+1.8, 0.4), radius 2.2m.
+  //  Shrine at the waist, around (0.2, -0.2).
+  //  Triskele recess in small basin around (2.0, 0.6).
+  //  Shelf band: inner edge at 0.82 × basin_radius, outer edge at
+  //  0.98 × basin_radius.
+  // ─────────────────────────────────────────────────────────────────
+
+  // Camera constants are defined in CAMERA_GLSL above.
+  // Helper: viewportToPondXZ(vp, aspect) gives (x_m, z_m) on water surface.
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Noise
+  // ─────────────────────────────────────────────────────────────────
 
   vec2 hash22(vec2 p) {
     p = vec2(dot(p, vec2(127.1, 311.7)),
@@ -104,44 +324,943 @@ const FIELD_FRAG = /* glsl */ `#version 300 es
     return v;
   }
 
-  vec2 complexField(vec2 p, float t) {
-    vec2 q = vec2(
-      fbm(p + vec2(0.0, 0.0), t),
-      fbm(p + vec2(5.2, 1.3), t)
-    );
-    vec2 r = vec2(
-      fbm(p + 3.6 * q + vec2(1.7, 9.2), t),
-      fbm(p + 3.6 * q + vec2(8.3, 2.8), t)
-    );
-    float u = fbm(p + 3.6 * r,                           t) - 0.5;
-    float v = fbm(p + 3.6 * r + vec2(31.416, 58.217),    t) - 0.5;
-    return vec2(u, v);
+  // ─────────────────────────────────────────────────────────────────
+  //  Pond outline — asymmetric lobed gourd shape
+  //  Two joined rounded basins connected by a waist. The client-side
+  //  kinematic simulator enforces this same shape so fish don't swim
+  //  onto land.
+  // ─────────────────────────────────────────────────────────────────
+
+  float pondSDF(vec2 p) {
+    // Large basin at (-1.0, 0.0), radius 3.5
+    vec2 cA = vec2(-1.0, 0.0);
+    float dA = length(p - cA) - 3.5;
+    // Small basin at (+1.8, 0.4), radius 2.2
+    vec2 cB = vec2(1.8, 0.4);
+    float dB = length(p - cB) - 2.2;
+    // Smooth union — waist softness 0.9
+    float k = 0.9;
+    float h = clamp(0.5 + 0.5 * (dB - dA) / k, 0.0, 1.0);
+    return mix(dB, dA, h) - k * h * (1.0 - h);
   }
 
-  vec3 spectralMix(float T, float energy) {
-    vec3 cold = C_OIII  * 0.60 + C_HBETA * 0.28 + C_HEII * 0.12;
-    vec3 mid  = C_GHOST * 0.75 + C_OIII  * 0.25;
-    vec3 hot  = C_HALPHA * 0.48 + C_NII  * 0.30 + C_SII * 0.22;
+  // ─────────────────────────────────────────────────────────────────
+  //  Screen-to-pond projection (inverse of the 25° tilt)
+  //
+  //  Viewer model: the pond lies on the XZ plane at y=0 (surface).
+  //  Camera pitched forward by TILT. We invert the projection so each
+  //  screen fragment knows which (pond_x, pond_z) floor point it sees
+  //  AND how much water volume sits between viewer and that floor.
+  // ─────────────────────────────────────────────────────────────────
+
+  // Given a viewport coordinate p_vp ∈ [-aspect/2, aspect/2]×[-0.5, 0.5],
+  // return the pond (x, z) in meters at the water surface that this
+  // fragment views. The surface y=0; floor is at y=-3.
+  //
+  // Screen-to-pond is handled by the CAMERA_GLSL helper
+  // viewportToPondXZ(vp, aspect) declared above.
+
+  // Depth of the floor at a given pond XZ position. The pond is
+  // bowl-shaped: deepest (3m) at centroid, shallowest at the shelf.
+  float floorDepthAt(vec2 pondXZ) {
+    // Gourd SDF: most-negative value is at centroid of larger basin
+    // (~-3.5). Map [-3.5, 0] → [3.0, 0.2].
+    float sdf = pondSDF(pondXZ);
+    return clamp(mix(0.2, 3.0, clamp(-sdf / 3.5, 0.0, 1.0)), 0.2, 3.0);
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Floor rendering: shrine, shelf band, triskele, silt texture
+  // ─────────────────────────────────────────────────────────────────
+
+  float shrineMask(vec2 p, float t) {
+    vec2 shrineCenter = vec2(0.2, -0.2);
+    vec2 q = p - shrineCenter;
+    float r = length(q);
+    float ang = atan(q.y, q.x);
+    // Inner stone disc — triskele-biased hex
+    float hexR = 0.38 + 0.05 * cos(ang * 3.0);
+    return smoothstep(hexR + 0.08, hexR - 0.04, r);
+  }
+
+  // Rim of the shrine — a thin bright ring where the stone meets the
+  // floor, so the shrine reads as a physical inset, not a color patch.
+  float shrineRim(vec2 p) {
+    vec2 shrineCenter = vec2(0.2, -0.2);
+    vec2 q = p - shrineCenter;
+    float r = length(q);
+    float ang = atan(q.y, q.x);
+    float hexR = 0.38 + 0.05 * cos(ang * 3.0);
+    float d = abs(r - hexR);
+    return smoothstep(0.045, 0.008, d);
+  }
+
+  // Slow breath pulse from the submerged object — NOT tied to pulsing
+  // the whole mask. The mask is stable; only the emanation breathes.
+  float shrineGlow(float t) {
+    return 0.65 + 0.35 * (0.5 + 0.5 * sin(t * 0.11));
+  }
+
+  float shelfMask(vec2 p) {
+    // Shelf is the band near the pond boundary. Two-lobed smoothstep
+    // picks out the annular region with shallow water.
+    float sdf = pondSDF(p);
+    float band = smoothstep(-0.85, -0.55, sdf) * smoothstep(-0.12, -0.30, sdf);
+    return band;
+  }
+
+  // Subtle darker edge at the inner boundary of the shelf — where the
+  // shelf drops off into the deep center. Reads as a topographic step.
+  float shelfInnerEdge(vec2 p) {
+    float sdf = pondSDF(p);
+    float edge = smoothstep(-1.0, -0.78, sdf) * smoothstep(-0.5, -0.75, sdf);
+    return edge;
+  }
+
+  float triskeleMask(vec2 p, float t) {
+    vec2 center = vec2(2.0, 0.6);
+    vec2 q = p - center;
+    float r = length(q);
+    if (r > 0.55) return 0.0;
+    float ang = atan(q.y, q.x);
+    // Three-arm spiral: r-dependent angular offset gives the twist
+    float arm = mod(ang + r * 3.5, 6.2832 / 3.0);
+    float armMask = smoothstep(0.30, 0.15, abs(arm - 1.047)) *
+                    smoothstep(0.50, 0.05, r);
+    return armMask * 0.55;
+  }
+
+  vec3 floorColor(vec2 pondXZ, float t) {
+    // Layered noise: large silt patches, medium stone grain, fine
+    // sediment. Each at a different scale so the floor reads as
+    // organic material rather than uniform noise.
+    float siltLarge  = fbm(pondXZ * 0.9, t * 0.008);
+    float stoneGrain = fbm(pondXZ * 3.2, t * 0.003);
+    float sediment   = fbm(pondXZ * 7.5 + vec2(12.0, 3.0), t * 0.002);
+
+    // Silt tones — warmer, sandier where the large noise is bright;
+    // cooler, darker where the large noise is dim.
+    vec3 siltWarm = vec3(0.085, 0.075, 0.060);   // sand patch
+    vec3 siltCool = vec3(0.035, 0.048, 0.060);   // organic sediment
+    vec3 base = mix(siltCool, siltWarm, siltLarge);
+    // Stone grain adds a subtle lightness modulation
+    base *= (0.80 + 0.40 * stoneGrain);
+    // Fine sediment adds high-freq variation, keeps the texture from
+    // reading as smooth-noise
+    base += vec3(0.006) * (sediment - 0.5);
+
+    // Depth tint — the deep center of the pond is noticeably darker
+    // AND cooler (less red light at depth)
+    float depthHere = floorDepthAt(pondXZ);
+    float depthN = clamp(depthHere / 3.0, 0.0, 1.0);
+    base *= mix(1.55, 0.42, depthN);
+    base = mix(base, base * vec3(0.72, 0.88, 1.08), depthN * 0.55);
+
+    // Shelf — lighter sandy material, subtle granular texture from the
+    // existing noise layers (no uniform lift)
+    float shelf = shelfMask(pondXZ);
+    vec3 shelfCol = mix(siltCool, siltWarm, 0.75) * 1.7 + C_GHOST * 0.025;
+    base = mix(base, shelfCol, shelf * 0.55);
+
+    // Shelf inner edge — the drop-off. Darker shadow line.
+    float innerEdge = shelfInnerEdge(pondXZ);
+    base = mix(base, base * 0.55, innerEdge * 0.35);
+
+    // Shrine — darker stone inset (the recess), with a faint rim.
+    float shrine = shrineMask(pondXZ, t);
+    base = mix(base, base * 0.45 + C_SHRINE * 0.08, shrine * 0.88);
+    float rim = shrineRim(pondXZ);
+    base += C_SHRINE * 0.22 * rim;
+    // Submerged-object emanation — faint ghost glow that breathes
+    base += C_SHRINE * 0.35 * shrine * shrineGlow(t);
+
+    // Triskele — carved recess. Darker + cyan tint inside the arms.
+    float trisk = triskeleMask(pondXZ, t);
+    base = mix(base, base * 0.5 + C_GHOST * 0.055, trisk);
+
+    return base;
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Caustic network — light lace on the floor, proper contrast
+  //
+  //  Caustics are created when rays refract at a wavy surface and
+  //  converge onto the floor. We proxy with subtracted offset FBM
+  //  fields, but now with depth-aware intensity: caustics are BRIGHT
+  //  on the shallow shelf and DIM in the deep center (fewer rays
+  //  reach depth; those that do are defocused).
+  // ─────────────────────────────────────────────────────────────────
+
+  float caustics(vec2 pondXZ, float t) {
+    float tt = t * 0.11;
+    vec2 p = pondXZ * 1.8;
+    float n1 = fbm(p + vec2(tt, tt * 0.7), tt);
+    float n2 = fbm(p + vec2(-tt * 0.6, tt * 0.9) + vec2(5.0, 9.0), tt);
+    // Secondary higher-frequency layer for lace detail
+    float n3 = fbm(p * 2.4 + vec2(tt * 0.8, -tt * 0.5), tt * 1.2);
+    float n4 = fbm(p * 2.4 + vec2(-tt * 0.4, tt) + vec2(11.0, 7.0), tt * 1.2);
+
+    // Tight thresholds: only true crossings of n1=n2 produce caustic
+    // ribbons. Anything wider than ~0.015 in |n1-n2| reads as zero.
+    // This is what distinguishes "lace network" from "saturated foam".
+    float primary   = pow(smoothstep(0.020, 0.002, abs(n1 - n2)), 2.2);
+    float secondary = pow(smoothstep(0.012, 0.002, abs(n3 - n4)), 2.4) * 0.35;
+    float c = min(1.0, primary + secondary);
+
+    // Depth-dependent intensity: shelves get stronger caustics, deep
+    // center almost none.
+    float depthHere = floorDepthAt(pondXZ);
+    float depthN = clamp(depthHere / 3.0, 0.0, 1.0);
+    float causticGain = mix(0.95, 0.20, depthN);
+    return c * causticGain;
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  God-ray / light-shaft intensity in the water column.
+  // ─────────────────────────────────────────────────────────────────
+
+  float godRays(vec2 pondXZ, float t) {
+    vec2 p = pondXZ * 0.8 + vec2(t * 0.006, 0.0);
+    float rays = 0.45 + 0.55 * fbm(p, t * 0.01);
+    rays = pow(rays, 1.8);
+    float sdf = pondSDF(pondXZ);
+    float interior = smoothstep(0.0, -2.5, sdf);
+    return rays * interior;
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Particulates — drift motes in the water column. Parallax-shifted
+  //  by depth: near-surface motes drift faster and track the camera;
+  //  deep motes drift slower. A few dozen visible at once, spread
+  //  across the viewport. Pure visual — no physical state.
+  // ─────────────────────────────────────────────────────────────────
+
+  float particulates(vec2 p_vp, float t) {
+    // Three layers of moving points at different scales + speeds.
+    float total = 0.0;
+    for (int L = 0; L < 3; L++) {
+      float scale = 26.0 + float(L) * 14.0;
+      float speed = 0.012 + float(L) * 0.006;
+      vec2 p = p_vp * scale + vec2(t * speed, t * speed * 0.4);
+      vec2 cell = floor(p);
+      vec2 f = fract(p);
+      vec2 hash = hash22(cell);
+      vec2 center = 0.5 + hash * 0.35;
+      float d = length(f - center);
+      float mote = smoothstep(0.08, 0.02, d);
+      total += mote * (0.35 + 0.35 * hash.x);
+    }
+    return total * 0.55;
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Water-volume coloring (emission-line palette, depth-stratified)
+  // ─────────────────────────────────────────────────────────────────
+
+  vec3 waterVolume(vec2 pondXZ, float t) {
+    float depthHere = floorDepthAt(pondXZ);
+    float depthN = clamp(depthHere / 3.0, 0.0, 1.0);
+
+    // Temperature gradient: warm near surface, cool at depth.
+    float T = mix(0.70, 0.28, depthN);
+
+    vec3 cold = C_OIII  * 0.55 + C_HBETA * 0.30 + C_HEII * 0.15;
+    vec3 mid  = C_GHOST * 0.72 + C_OIII  * 0.22 + C_HBETA * 0.06;
+    vec3 hot  = C_HALPHA * 0.42 + C_NII  * 0.32 + C_SII  * 0.26;
 
     vec3 c;
     if (T < 0.5) c = mix(cold, mid, smoothstep(0.0, 1.0, T * 2.0));
     else         c = mix(mid,  hot, smoothstep(0.0, 1.0, (T - 0.5) * 2.0));
 
-    c = mix(c, C_NII,  energy * 0.20 * smoothstep(0.6, 0.95, T));
-    c = mix(c, C_HEII, energy * 0.15 * smoothstep(0.6, 0.95, 1.0 - T));
+    // Breath — water holds itself
+    c *= 0.85 + 0.15 * u_breath;
+
+    // Spatial variation from slow noise — clouds of slightly different
+    // temperature drifting through the water column.
+    float variation = fbm(pondXZ * 0.45 + vec2(t * 0.010, t * 0.005), t * 0.006);
+    c *= 0.78 + 0.44 * variation;
+
+    // Shrine volumetric contribution — faint additive glow near the
+    // shrine position, falls off with distance. The shrine is at
+    // (0.2, -0.2) in pondXZ.
+    vec2 shrineC = vec2(0.2, -0.2);
+    float shrineDist = length(pondXZ - shrineC);
+    float shrineContrib = exp(-shrineDist * 1.1) *
+                          (0.65 + 0.35 * sin(t * 0.14));
+    c += C_GHOST * 0.018 * shrineContrib;
 
     return c;
   }
 
-  vec4 koiField(vec2 pL, float t, float breath, float tailEnergy) {
-    float swim = (2.6 + 0.7 * breath) * tailEnergy;
+  // ─────────────────────────────────────────────────────────────────
+  //  Surface plane (air-water interface seen from below)
+  //
+  //  Top ~12% of the viewport is above or at the surface. Inside
+  //  Snell's cone (~97° FOV from below), the viewer sees sky light
+  //  entering; outside, total internal reflection of the floor back
+  //  down.
+  // ─────────────────────────────────────────────────────────────────
+
+  vec3 surfacePlane(vec2 p_vp, float t) {
+    float above = clamp((p_vp.y - 0.38) / 0.12, 0.0, 1.0);
+
+    // Snell's window — softer disc, slight lateral elongation to
+    // match the oblique viewing angle (window stretches toward
+    // viewer along the screen-y axis).
+    vec2 snellCenter = vec2(0.0, 0.44);
+    vec2 snellD = (p_vp - snellCenter) / vec2(0.30, 0.15);
+    float snellR = length(snellD);
+    float snellVis = smoothstep(1.4, 0.35, snellR);
+
+    // Ambient ripple field — two low-amplitude low-frequency sines
+    // crossed to produce a gentle warp, no TV-static banding. The
+    // surface is *almost* still; restraint is the point.
+    float ripA = sin(p_vp.x * 6.0 + t * 0.35 + p_vp.y * 3.0) * 0.5 + 0.5;
+    float ripB = sin(p_vp.x * 3.5 - t * 0.22 + p_vp.y * 7.0) * 0.5 + 0.5;
+    float ripField = ripA * 0.55 + ripB * 0.45;
+
+    // Rare bright glints — where the ripple field crests above a high
+    // threshold, a tiny sharp highlight catches light from above.
+    float glintMask = pow(smoothstep(0.84, 0.99, ripField), 2.5);
+    // Only in Snell's window zone (that's where sky light enters).
+    glintMask *= smoothstep(0.8, 0.3, snellR);
+
+    // Base surface color: almost-void with a hint of atmosphere; Snell
+    // window adds a faint ghost tint; glints add subtle brightness.
+    vec3 skyCol = C_SKY
+                + C_GHOST * 0.022 * snellVis
+                + vec3(0.08, 0.09, 0.11) * glintMask;
+    // Very faint ripple color modulation — NOT the dominant signal
+    skyCol += vec3(0.004) * (ripField - 0.5);
+
+    return skyCol * above;
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Composite
+  // ─────────────────────────────────────────────────────────────────
+
+  // Filmic-ish tonemap.
+  //   - Small lift in the blacks so shadows retain detail (prevents
+  //     crushed deep greens/blues in ground and water).
+  //   - Gentle roll-off in highlights so bright caustic ribbons and
+  //     sunlit stones don't blow to pure white.
+  //   - Slight saturation reduction at the very top end, which is
+  //     how real film handles overexposure and reads as "painted"
+  //     rather than "3D."
+  //   - Subtle S-curve in mid-tones for presence.
+  vec3 toneMap(vec3 c) {
+    // Black lift
+    c = c + vec3(0.004);
+    // Hable-style filmic curve (simplified)
+    vec3 x = c * 1.05;
+    vec3 numer   = x * (0.22 * x + 0.05) + vec3(0.004);
+    vec3 denom   = x * (0.22 * x + 0.50) + vec3(0.06);
+    vec3 mapped  = numer / denom - vec3(0.004 / 0.06);
+    // Normalize so a middle-gray input is roughly middle-gray output
+    mapped /= 0.82;
+    // Gentle highlight desaturation
+    float L = dot(mapped, vec3(0.2126, 0.7152, 0.0722));
+    float desat = smoothstep(0.7, 1.2, L) * 0.35;
+    mapped = mix(mapped, vec3(L), desat);
+    // Mid S-curve
+    mapped = mix(mapped, mapped * mapped * (3.0 - 2.0 * mapped), 0.12);
+    return mapped;
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Ground rendering — the land around the pond
+  //
+  //  The ground covers everything outside the pond SDF. Graded by
+  //  distance from water: wet-mud → moss/grass → drier ground → far
+  //  hazy receding distance. No void. No sky as a flat region. The
+  //  atmosphere at the top of the frame is the ground receding.
+  // ─────────────────────────────────────────────────────────────────
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Ground rendering — a late-afternoon bank
+  //
+  //  Single warm key light from upper-left. Materials CORRELATE: sedge
+  //  grows where stones are, moss grows on the shadier half, leaves
+  //  drift into the sedge near the water. No material is placed by
+  //  independent noise — every patch is conditioned on the regional
+  //  terrain so the image reads as a painted place rather than
+  //  stacked generative bands.
+  // ─────────────────────────────────────────────────────────────────
+
+  // Warm key light direction in pond-XZ (upper-left).
+  const vec2 LIGHT_DIR_XZ = vec2(-0.55, -0.83);
+
+  // Terrain height field — the underlying undulation of the bank.
+  // Used to compute surface-normal for shading AND to condition where
+  // material clusters appear (moss and sedge favor troughs; stones
+  // surface on crests; leaf-litter settles in hollows).
+  float terrainHeight(vec2 p) {
+    return fbm(p * 0.42, 0.0)
+         + 0.35 * fbm(p * 1.35 + vec2(5.0, 3.0), 0.0)
+         + 0.12 * fbm(p * 4.0 + vec2(11.0, 9.0), 0.0);
+  }
+
+  // Lambert shade from terrain height field.
+  float groundShade(vec2 pondXZ) {
+    float eps = 0.10;
+    float h0 = terrainHeight(pondXZ);
+    float hx = terrainHeight(pondXZ + vec2(eps, 0.0));
+    float hz = terrainHeight(pondXZ + vec2(0.0, eps));
+    vec2 slope = vec2(hx - h0, hz - h0) / eps;
+    float lambert = clamp(-dot(slope, LIGHT_DIR_XZ), -1.0, 1.0);
+    // Baseline ambient + directional response. Side-lit afternoon feel.
+    return 0.72 + 0.38 * lambert;
+  }
+
+  vec3 groundColor(vec2 pondXZ, float sdf, float t, bool farRay) {
+    float d = max(sdf, 0.0);
+    float h = terrainHeight(pondXZ);
+
+    // ─── Palette ─── earthy, warm, one cool mineral accent.
+    vec3 mudDeep    = vec3(0.022, 0.019, 0.017);   // water-saturated mud
+    vec3 mudWarm    = vec3(0.062, 0.049, 0.036);   // ordinary bank soil
+    vec3 mudDry     = vec3(0.098, 0.082, 0.058);   // drier sunlit ground
+    vec3 mineralSt  = vec3(0.070, 0.072, 0.078);   // pale cool streak
+    vec3 sedgeGreen = vec3(0.046, 0.078, 0.044);   // fresh clumped sedge
+    vec3 mossDark   = vec3(0.035, 0.063, 0.040);   // old shaded moss
+    vec3 dryGrass   = vec3(0.110, 0.098, 0.054);   // sun-warm grass-tip
+    vec3 pebble     = vec3(0.075, 0.070, 0.062);
+    vec3 stoneFlat  = vec3(0.105, 0.092, 0.074);
+    vec3 leafWarm   = vec3(0.145, 0.082, 0.038);
+
+    // ─── Regional tonal zones — very slow large-scale variation ───
+    float macroTone = fbm(pondXZ * 0.30 + vec2(3.0, 7.0), 0.0);
+
+    // Start: soil whose warmth depends on regional tone.
+    vec3 col = mix(mudWarm, mudDry, smoothstep(0.3, 0.8, macroTone));
+    // Cool mineral streaks where the regional tone dips low.
+    col = mix(col, mineralSt, smoothstep(0.3, 0.15, macroTone) * 0.25);
+
+    // ─── Wet-mud band — right at the water, darkest in hollows ───
+    float wetBand = smoothstep(0.8, 0.0, d);
+    // Hollows (low terrain h) hold water longer → darker mud
+    float wetness = wetBand * (0.55 + 0.55 * (1.0 - smoothstep(0.45, 0.75, h)));
+    col = mix(col, mudDeep, wetness * 0.88);
+
+    // ─── Pebble band — where small stones accumulate at the water line ──
+    // Pebbles on mid-height terrain only (not deep hollows, not crests).
+    float pebbleBand = smoothstep(0.05, 0.40, d) * smoothstep(1.1, 0.45, d);
+    float pebbleSpeckle = smoothstep(0.58, 0.74, fbm(pondXZ * 6.5, 0.0));
+    float pebbleHere = pebbleBand * pebbleSpeckle *
+                       smoothstep(0.35, 0.65, h);
+    col = mix(col, pebble, pebbleHere * 0.55);
+
+    // ─── Weathered flat stones — terrain crests ───
+    // Stones surface where h is high AND macroTone is mid-range.
+    float stoneField = fbm(pondXZ * 1.2 + vec2(17.0, 4.0), 0.0);
+    float stoneHere = smoothstep(0.72, 0.80, stoneField)
+                    * smoothstep(0.48, 0.85, h)
+                    * smoothstep(0.15, 0.55, d);
+    col = mix(col, stoneFlat, stoneHere * 0.62);
+
+    // ─── Sedge clumps — grow at the roots of stones and in hollows ───
+    // Conditioned on being NEAR stone field (not on it) AND in a low-h
+    // zone (moist root area).
+    float sedgeSeed = fbm(pondXZ * 2.1 + vec2(23.0, 11.0), t * 0.002);
+    float nearStone = smoothstep(0.60, 0.80, stoneField)
+                    * (1.0 - smoothstep(0.75, 0.82, stoneField));
+    float sedgeMask = smoothstep(0.52, 0.75, sedgeSeed);
+    float sedgeHere = (sedgeMask * 0.65 + nearStone * 0.55 * sedgeMask)
+                    * smoothstep(2.8, 0.2, d);
+    col = mix(col, sedgeGreen, sedgeHere * 0.55);
+
+    // ─── Moss — on the shadier side (lambert-negative) ───
+    float shade01 = groundShade(pondXZ);
+    float shadierHere = smoothstep(0.90, 0.75, shade01);
+    float mossSeed = smoothstep(0.58, 0.82, fbm(pondXZ * 2.4 + vec2(31.0, 19.0), 0.0));
+    float mossHere = mossSeed * shadierHere * smoothstep(3.0, 0.5, d);
+    // Prefer moss on stones and in the crevices between them
+    mossHere *= 0.55 + 0.55 * smoothstep(0.55, 0.75, stoneField);
+    col = mix(col, mossDark, mossHere * 0.50);
+
+    // ─── Dry grass in mid-ground, lit edges ───
+    float grassSeed = fbm(pondXZ * 1.0 + vec2(41.0, 29.0), t * 0.002);
+    float grassHere = smoothstep(0.50, 0.78, grassSeed)
+                    * smoothstep(2.2, 6.5, d) * smoothstep(15.0, 4.5, d)
+                    * smoothstep(0.70, 0.95, shade01);  // on lit slopes
+    col = mix(col, dryGrass, grassHere * 0.38);
+
+    // ─── Leaf litter — drifts into sedge near the water ───
+    // High-freq warm speckle gated by proximity to sedge.
+    float leafSpeckle = smoothstep(0.85, 0.94, fbm(pondXZ * 15.0, 0.0));
+    float leafHere = leafSpeckle * smoothstep(1.8, 0.1, d)
+                   * (0.35 + 0.65 * smoothstep(0.3, 0.6, sedgeHere));
+    col = mix(col, leafWarm, leafHere * 0.35);
+
+    // ─── Micro-grain on close ground ───
+    float microGrain = fbm(pondXZ * 12.0, 0.0);
+    float closeness = smoothstep(5.0, 0.5, d);
+    col *= 0.93 + 0.14 * (microGrain - 0.5) * closeness;
+
+    // ─── Key-light shading ───
+    col *= shade01;
+
+    // ─── Rim AO — the ground cups down into the water ───
+    // Steepest darkening in the final 15cm before the water.
+    float rimAO = smoothstep(0.15, 0.0, d);
+    col *= mix(1.0, 0.50, rimAO);
+
+    // ─── Warm water-bounce light on the very first few cm of bank ───
+    // The water reflects a hint of warm-cyan bounce back onto the
+    // lit side of the rim — it's a small touch, but makes the water
+    // feel like it's contributing light to its surroundings.
+    float bounceBand = smoothstep(0.5, 0.05, d) *
+                       smoothstep(0.70, 1.0, shade01);
+    col += C_GHOST * 0.028 * bounceBand;
+
+    // ─── Distance haze ───
+    float horizonFade = farRay ? 1.0 : smoothstep(6.0, 32.0, d);
+    // Warm neutral haze — the late-afternoon air.
+    vec3 hazeCol = vec3(0.048, 0.044, 0.048);
+    col = mix(col, hazeCol, horizonFade * 0.92);
+
+    return col;
+  }
+
+  // Depth shadow on the water SIDE of the pond edge — a darker band
+  // where the basin wall is cast in shadow, showing the pond is sunken.
+  float pondWallShadow(float sdf) {
+    // sdf is negative inside pond. Darkest right at the edge (sdf near 0),
+    // fading over about 0.6m into the water.
+    return smoothstep(-0.6, 0.0, sdf);
+  }
+
+  void main() {
+    vec2 p_vp = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
+    float aspect = u_resolution.x / u_resolution.y;
+    float t = u_time;
+
+    float horizon = horizonViewportY();
+    bool aboveHorizon = p_vp.y > horizon;
+
+    // Ray-trace to Y=0 plane. For fragments above the horizon, the ray
+    // never hits the plane (goes to infinity). We still want ground
+    // there — the ground receding into haze.
+    vec2 pondXZ;
+    bool farRay;
+    if (aboveHorizon) {
+      // Sample pondXZ just below the horizon for continuity, mark far.
+      pondXZ = viewportToPondXZ(vec2(p_vp.x, horizon - 0.0005), aspect);
+      farRay = true;
+    } else {
+      pondXZ = viewportToPondXZ(p_vp, aspect);
+      farRay = length(pondXZ) > 40.0;
+    }
+
+    float sdf = pondSDF(pondXZ);
+
+    // Ground branch — outside the pond SDF OR above horizon.
+    // Organic shoreline: break the perfect SDF contour with a subtle
+    // distortion so the water-land meeting isn't a mathematically
+    // perfect curve. This alone moves the image from "3D render" to
+    // "looked-at place."
+    float shoreWarp = (fbm(pondXZ * 2.8, 0.0) - 0.5) * 0.18;
+    float effSdf = sdf + shoreWarp;
+
+    if (effSdf > 0.0 || aboveHorizon) {
+      vec3 col = groundColor(pondXZ, max(effSdf, 0.0), t, farRay || aboveHorizon);
+
+      // Surface-tension highlight at the shoreline — a thin bright
+      // band on the ground side, where wet-shore catches a sheen of
+      // reflected water-surface light. Very thin (0..15cm).
+      if (!aboveHorizon) {
+        float sheen = smoothstep(0.05, 0.015, effSdf) * smoothstep(0.0, 0.01, effSdf);
+        col += C_GHOST * 0.12 * sheen;
+      }
+
+      // Gentle vignette — corners slightly dimmer, center slightly warmer.
+      float vignette = 1.0 - smoothstep(0.55, 1.1, length(p_vp));
+      col *= mix(0.88, 1.04, vignette);
+
+      col = toneMap(col);
+      fragColor = vec4(col, 1.0);
+      return;
+    }
+
+    // Inside pond. Floor + water volume + caustics + god-rays + basin
+    // wall + surface-view hint + particulates + koi-presence.
+    vec3 floorCol = floorColor(pondXZ, t);
+
+    // Caustics lay on the floor
+    float caust = caustics(pondXZ, t);
+    floorCol += C_GHOST * caust * 0.18 + C_HALPHA * caust * 0.03;
+
+    // God-ray scattered light in water column
+    float gr = godRays(pondXZ, t);
+    vec3 waterCol = waterVolume(pondXZ, t);
+    vec3 volumeCol = waterCol * gr * 0.28;
+
+    // Depth attenuation: deeper water dims floor, strengthens volume
+    float depthHere = floorDepthAt(pondXZ);
+    float depthN = clamp(depthHere / 3.0, 0.0, 1.0);
+    float floorVis = exp(-depthN * 1.1);
+
+    vec3 col = floorCol * floorVis + volumeCol;
+
+    // ─── Basin wall band — the sunken sloped wall ───
+    float wallBand = smoothstep(-1.3, -0.05, effSdf);
+    if (wallBand > 0.01) {
+      // Warm dark stone, wet at the foot, drier higher — but this is
+      // underwater so "dry" is relative. Sheen diminishes with depth.
+      vec3 wallStone = vec3(0.048, 0.039, 0.032);
+      float wallGrain = fbm(pondXZ * 5.0, t * 0.001)
+                      + 0.4 * fbm(pondXZ * 13.0, 0.0);
+      wallStone *= 0.55 + 0.80 * wallGrain;
+      // Tangential striations — water-flow erosion marks
+      float ang = atan(pondXZ.y, pondXZ.x);
+      float stri = sin(ang * 42.0 + wallGrain * 4.0) * 0.5 + 0.5;
+      wallStone *= 0.88 + 0.14 * stri;
+      // Moss at the wet foot of the wall (visible through water)
+      float wallMoss = smoothstep(0.60, 0.85, fbm(pondXZ * 3.5 + vec2(7.0, 4.0), 0.0));
+      vec3 wallWithMoss = mix(wallStone, vec3(0.038, 0.058, 0.040), wallMoss * 0.38);
+      // Deeper parts of the wall are more water-column-filtered — cooler
+      wallWithMoss *= mix(vec3(1.0), vec3(0.75, 0.88, 1.05), 1.0 - wallBand);
+      col = mix(col, wallWithMoss, wallBand * 0.82);
+    }
+
+    // ─── Submerged shadow line — darker rim right at the waterline ───
+    // This is the shadow cast by the bank overhang just above the
+    // water surface. Thin dark band just inside the pond SDF.
+    float submergedShadow = smoothstep(0.0, -0.15, effSdf) *
+                           smoothstep(-0.40, -0.18, effSdf);
+    col *= mix(1.0, 0.55, submergedShadow);
+
+    // Particulates
+    float motes = particulates(p_vp, t);
+    float moteDepthFalloff = 1.0 - depthN * 0.5;
+    col += C_GHOST * motes * 0.035 * moteDepthFalloff;
+
+    // Koi-presence warm patches above the floor
+    for (int i = 0; i < ${MAX_KOI}; i++) {
+      if (i >= u_koiCount) break;
+      vec3 kp = u_koiPositions[i];
+      vec2 koiPondXZ = kp.xy;
+      float d = length(pondXZ - koiPondXZ);
+      float influence = exp(-d * 0.8) * kp.z * 0.08;
+      col += C_GHOST * influence + C_HALPHA * influence * 0.25;
+    }
+
+    // Very subtle overall ghost-tint keyed to breath — this is the
+    // pond's "held breath" quality. Subconscious.
+    col += C_GHOST * 0.012 * (0.6 + 0.4 * u_breath);
+
+    // Mood drift — slight global warm/cool bias
+    col = mix(col, col * vec3(1.06, 0.98, 0.94), u_moodDrift * 0.15);
+
+    // ─── Surface hint from above ───
+    // Where the water is shallow near the bank, a very subtle warm
+    // highlight reads as the water surface catching sidelight from
+    // the key. This is what makes the water feel like it has a top.
+    float surfaceHint = smoothstep(-1.0, 0.0, effSdf) *
+                       smoothstep(0.3, 0.0, depthN) *
+                       smoothstep(0.0, 0.3, p_vp.y + 0.2);
+    col += vec3(0.025, 0.022, 0.018) * surfaceHint;
+
+    // Gentle vignette across the whole image
+    float vignette = 1.0 - smoothstep(0.55, 1.1, length(p_vp));
+    col *= mix(0.88, 1.04, vignette);
+
+    col = toneMap(col);
+    fragColor = vec4(col, 1.0);
+  }
+`;
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  WAKE FIELD SHADERS
+//  ─────────────────────────────────────────────────────────────────────────
+//  Quarter-resolution scalar field. Each frame:
+//    1. WAKE_ADVECT pass reads previous field, advects by ambient flow,
+//       decays, diffuses spatially. Writes to back buffer.
+//    2. WAKE_INJECT pass renders Gaussian blobs at body-point positions
+//       per koi, additively blended into the field.
+//  Field is then read by Session B-2 rendering (surface ripples,
+//  caustic distortion, volume perturbation).
+// ═══════════════════════════════════════════════════════════════════════════
+
+const WAKE_ADVECT_FRAG = /* glsl */ `#version 300 es
+  precision highp float;
+  out vec4 fragColor;
+
+  uniform sampler2D u_prev;
+  uniform vec2 u_resolution;
+  uniform float u_time;
+  uniform float u_dt;
+
+  // Ambient flow field — slow curl-noise drift. Wake drifts slightly
+  // over time rather than sitting perfectly still.
+  vec2 hash22(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)),
+             dot(p, vec2(269.5, 183.3)));
+    return fract(sin(p) * 43758.5453) * 2.0 - 1.0;
+  }
+  float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    float a = dot(hash22(i + vec2(0,0)), f - vec2(0,0));
+    float b = dot(hash22(i + vec2(1,0)), f - vec2(1,0));
+    float c = dot(hash22(i + vec2(0,1)), f - vec2(0,1));
+    float d = dot(hash22(i + vec2(1,1)), f - vec2(1,1));
+    return mix(mix(a,b,u.x), mix(c,d,u.x), u.y) * 0.5 + 0.5;
+  }
+
+  vec2 ambientFlow(vec2 uv, float t) {
+    float n1 = vnoise(uv * 4.0 + vec2(t * 0.05, 0.0));
+    float n2 = vnoise(uv * 4.0 + vec2(0.0, t * 0.05) + vec2(7.3, 2.1));
+    // Curl-like: orthogonal gradient of scalar noise
+    return vec2(n2 - 0.5, n1 - 0.5) * 0.06;
+  }
+
+  void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution;
+    vec2 texel = 1.0 / u_resolution;
+
+    // Advect: sample previous field offset by negative flow (the fluid
+    // carries wake forward, so we look backward to find what came from
+    // where we are).
+    vec2 flow = ambientFlow(uv, u_time);
+    vec2 sampleUV = uv - flow * u_dt;
+
+    // Clamp — don't wrap
+    sampleUV = clamp(sampleUV, texel, vec2(1.0) - texel);
+
+    float advected = texture(u_prev, sampleUV).r;
+
+    // Decay — exponential fade toward zero. ~2-second half-life at 60fps.
+    float decay = exp(-u_dt * 0.35);
+    advected *= decay;
+
+    // Diffuse — 5-tap Gaussian, small kernel. Smooths sharp peaks.
+    float c0 = texture(u_prev, uv).r;
+    float cU = texture(u_prev, uv + vec2(0.0, texel.y)).r;
+    float cD = texture(u_prev, uv - vec2(0.0, texel.y)).r;
+    float cL = texture(u_prev, uv - vec2(texel.x, 0.0)).r;
+    float cR = texture(u_prev, uv + vec2(texel.x, 0.0)).r;
+    float diffused = c0 * 0.4 + (cU + cD + cL + cR) * 0.15;
+
+    // Blend advected + diffused — mostly advected, small diffusion
+    float result = mix(advected, diffused, 0.25);
+
+    fragColor = vec4(result, 0.0, 0.0, 1.0);
+  }
+`;
+
+// Injection vertex shader — each instance is a small quad per body
+// point, positioned via instance attribute. Quad is clamped to a small
+// region of the wake field texture UV space.
+const WAKE_INJECT_VERT = /* glsl */ `#version 300 es
+  in vec2 a_quadPos;  // ±1 ±1 quad
+
+  // Per-instance: body-point position (pond meters), strength, radius
+  in vec3 a_bpPos;    // x=pondX, y=pondZ, z=strength
+  in float a_radius;  // Gaussian radius in wake-field-UV units
+
+  out vec2 v_localUV;  // -1..1 within the injection quad
+  out float v_strength;
+
+  // Must match pond-meter mapping used elsewhere. We convert pond-meter
+  // (x, z) to field UV space [0, 1] using the same METERS_PER_VP scale
+  // so injection lines up with the world geometry.
+  //
+  // Field is full-viewport quarter-res, so UV space covers the same
+  // viewport x range [-aspect/2, aspect/2] as the main field shader.
+  //
+  // For the injection quad, we sidestep the oblique projection — wake
+  // is a top-down phenomenon; it's injected in pond-meters space and
+  // consumed by the field shader in pond-meters space for proper
+  // top-down alignment.
+
+  uniform vec2 u_resolution;  // wake field resolution (not screen)
+  // We use a simple top-down mapping: field_u = (pondX / METERS_X) + 0.5,
+  // field_v = (pondZ / METERS_Z) + 0.5, with aspect-preserved scale.
+  const float WAKE_METERS_HALF = 6.0;  // ±6m covers the pond comfortably
+
+  void main() {
+    float aspect = u_resolution.x / u_resolution.y;
+    // Center in field UV, accounting for aspect
+    vec2 centerUV;
+    centerUV.x = 0.5 + a_bpPos.x / (WAKE_METERS_HALF * 2.0) / aspect * aspect;
+    centerUV.y = 0.5 + a_bpPos.y / (WAKE_METERS_HALF * 2.0);
+
+    // Quad offset in UV, in both axes
+    vec2 offsetUV = a_quadPos * a_radius;
+    vec2 finalUV = centerUV + offsetUV;
+
+    // Map UV [0,1] to clip [-1,1]
+    vec2 clip = finalUV * 2.0 - 1.0;
+    gl_Position = vec4(clip, 0.0, 1.0);
+
+    v_localUV = a_quadPos;
+    v_strength = a_bpPos.z;
+  }
+`;
+
+const WAKE_INJECT_FRAG = /* glsl */ `#version 300 es
+  precision highp float;
+  in vec2 v_localUV;
+  in float v_strength;
+  out vec4 fragColor;
+
+  void main() {
+    // Gaussian blob
+    float d = dot(v_localUV, v_localUV);
+    float blob = exp(-d * 3.5) * v_strength;
+    fragColor = vec4(blob, 0.0, 0.0, 1.0);
+  }
+`;
+
+const KOI_VERT = /* glsl */ `#version 300 es
+  in vec2 a_quadPos;
+
+  // a_posHead: (pond_x_meters, pond_z_meters, heading_radians, stageScale)
+  in vec4 a_posHead;
+  // a_depth: pond_y in meters (0 at surface, negative going down)
+  in float a_depth;
+  in vec3 a_base;
+  in vec3 a_mark;
+  in vec4 a_params;    // x=markCoverage, y=markDensity, z=backBlue, w=headDot
+  in float a_metallic;
+
+  out vec2 v_local;
+  out vec3 v_base;
+  out vec3 v_mark;
+  out vec4 v_params;
+  out float v_metallic;
+  out float v_depthShade;   // water-column attenuation, 0..1
+  out float v_waterDist;    // distance through water from viewer to koi (meters)
+
+  uniform vec2 u_resolution;
+
+  ${CAMERA_GLSL}
+
+  // Body-local frame matches KOI_BODY_LEN/W in the fragment shader.
+  const float BODY_HALF_LEN = 0.100;
+  const float BODY_HALF_W   = 0.035;
+
+  // World scale — how large a canonical adult koi appears in the pond.
+  // Adult koi ~0.5m long. Canonical body quad is 0.2 vp long.
+  // Tuned so adult koi read as proper size in the pond at the current
+  // camera.
+  const float KOI_WORLD_SCALE = 2.0;
+
+  void main() {
+    float aspect = u_resolution.x / u_resolution.y;
+
+    // World position of the koi's center.
+    //   x, z = horizontal pond position (meters)
+    //   y    = water depth (0 surface, -3 floor)
+    vec3 world = vec3(a_posHead.x, a_depth, a_posHead.y);
+
+    // Body-local quad — rotate by heading IN WORLD XZ PLANE.
+    // Each corner is projected independently so koi swimming toward
+    // the camera naturally foreshorten (item G polished for free).
+    // Body axes live in the XZ world plane; we orient the quad so the
+    // tail-head axis aligns with world heading, then project each body
+    // corner through the camera independently to get proper
+    // foreshortening (a koi swimming toward the camera will project
+    // shorter than a koi swimming sideways).
+    float ch = cos(a_posHead.z);
+    float sh = sin(a_posHead.z);
+    vec3 bodyLocal = vec3(
+      a_quadPos.x * BODY_HALF_LEN * a_posHead.w * KOI_WORLD_SCALE,
+      0.0,  // stay at koi's depth
+      a_quadPos.y * BODY_HALF_W * a_posHead.w * KOI_WORLD_SCALE
+    );
+    // Rotate body-local XZ by heading.
+    vec3 rotated = vec3(
+      ch * bodyLocal.x - sh * bodyLocal.z,
+      0.0,
+      sh * bodyLocal.x + ch * bodyLocal.z
+    );
+
+    vec3 cornerWorld = world + rotated;
+    vec3 cornerClip = projectWorldToClip(cornerWorld, aspect);
+
+    // Output clip position. The x and y are already in the correct
+    // range (projection math returns values where ±1 is screen edge).
+    gl_Position = vec4(cornerClip.x, cornerClip.y, 0.0, 1.0);
+
+    // Body-local coords (unscaled) for fragment shader silhouette math.
+    v_local = vec2(a_quadPos.x * BODY_HALF_LEN, a_quadPos.y * BODY_HALF_W);
+    v_base = a_base;
+    v_mark = a_mark;
+    v_params = a_params;
+    v_metallic = a_metallic;
+
+    // ─── Water-column attenuation ───
+    // Depth-correct shading: a koi deeper in the water has more water
+    // column between it and the viewer. We compute the world-space
+    // distance from camera to koi through water, then use Beer's-law-ish
+    // attenuation.
+    vec3 camPos = vec3(0.0, CAM_HEIGHT, CAM_BACK);
+    float dist = length(world - camPos);
+    // Attenuate by the water column through the water, not the air part.
+    // We approximate by the negative-y component scaled into the ray
+    // length: water-ray-length ≈ dist * (-world.y) / (camPos.y - world.y).
+    float waterRayLen = dist * max(0.0, -world.y) /
+                         max(0.1, camPos.y - world.y);
+    v_waterDist = waterRayLen;
+    // Exponential attenuation — e^(-k·d). k ~ 0.35/m gives visible
+    // dimming at 3m depth without obliterating the floor.
+    v_depthShade = 1.0 - exp(-waterRayLen * 0.35);
+    v_depthShade = clamp(v_depthShade, 0.0, 0.85);
+  }
+`;
+
+const KOI_FRAG = /* glsl */ `#version 300 es
+  precision highp float;
+  in vec2 v_local;
+  in vec3 v_base;
+  in vec3 v_mark;
+  in vec4 v_params;
+  in float v_metallic;
+  in float v_depthShade;
+  in float v_waterDist;
+  out vec4 fragColor;
+
+  uniform float u_time;
+  uniform float u_breath;
+  uniform float u_tailEnergy;
+
+  const float KOI_BODY_LEN = 0.110;
+  const float KOI_BODY_W   = 0.026;
+  const float KOI_TAIL_LEN = 0.042;
+
+  vec2 hash22(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)),
+             dot(p, vec2(269.5, 183.3)));
+    return fract(sin(p) * 43758.5453) * 2.0 - 1.0;
+  }
+
+  float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    float a = dot(hash22(i + vec2(0,0)), f - vec2(0,0));
+    float b = dot(hash22(i + vec2(1,0)), f - vec2(1,0));
+    float c = dot(hash22(i + vec2(0,1)), f - vec2(0,1));
+    float d = dot(hash22(i + vec2(1,1)), f - vec2(1,1));
+    return mix(mix(a,b,u.x), mix(c,d,u.x), u.y) * 0.5 + 0.5;
+  }
+
+  void main() {
+    vec2 pL = v_local;
+    float t = u_time;
+
+    float swim = (2.6 + 0.7 * u_breath) * u_tailEnergy;
     float phase = t * swim;
 
     float s = (pL.x + KOI_BODY_LEN * 0.5) / KOI_BODY_LEN;
 
     float env = clamp(1.0 - s, 0.0, 1.4);
     env = env * env;
-    float ampBase = 0.010 * tailEnergy;
+    float ampBase = 0.010 * u_tailEnergy;
     float waveK = 8.0;
     float wave = ampBase * env * sin(phase - waveK * s);
 
@@ -184,248 +1303,148 @@ const FIELD_FRAG = /* glsl */ `#version 300 es
     dorsal *= smoothstep(-0.004, 0.004, pL.y - wave);
     dorsal *= 0.42;
 
-    vec2 eyePos = vec2(KOI_BODY_LEN * 0.36, KOI_BODY_W * 0.30);
-    vec2 eyeD   = pU - eyePos;
-    float eyeR2 = dot(eyeD, eyeD);
-    float eyeCore = exp(-eyeR2 * 28000.0);
-    float eyeHalo = exp(-eyeR2 * 7000.0) * 0.28;
-    float eye = (eyeCore + eyeHalo) * body;
+    // Eye — beady, present, dignified. Placed at 36% from center, above
+    // the midline. Anatomically this is where the lateral eye sits on a
+    // koi's head.
+    //
+    // Three layers:
+    //   (a) eyeBody:     the white-ish sclera / eye-socket plane. Very
+    //                    soft, more of a darkening-halo than a visible
+    //                    white. Keeps the pupil from floating.
+    //   (b) eyePupil:    the actual dark beady dot. Smoothstep-edged
+    //                    so it holds shape at any render size.
+    //   (c) eyeHighlight: tiny off-center catchlight. The wet-eye
+    //                     spec. This is what makes the eye look
+    //                     ALIVE instead of painted on.
+    //
+    // All three are masked by 'body' so an eye can't render outside
+    // the fish silhouette.
+    vec2 eyePos = vec2(KOI_BODY_LEN * 0.39, KOI_BODY_W * 0.33);
+    vec2 eyeD = pU - eyePos;
+    float eyeDist = length(eyeD);
 
-    return vec4(body, fin, eye, dorsal);
-  }
+    // Dinky-cute: smaller overall, but pupil fills most of the iris.
+    // The wide-pupil-on-small-eye ratio is what reads charming — like
+    // a pupil caught mid-dilation looking up at something interesting.
+    float pupilR  = 0.0055;
+    float irisR   = 0.0075;
+    float socketR = 0.0110;
 
-  vec2 yinYang(vec2 p) {
-    float rMain = length(p);
-    float mask = 1.0 - smoothstep(0.96, 1.04, rMain);
+    float socket = smoothstep(socketR + 0.0020, socketR - 0.0014, eyeDist);
+    float iris   = smoothstep(irisR + 0.0010, irisR - 0.0008, eyeDist);
+    float pupil  = smoothstep(pupilR + 0.0008, pupilR - 0.0006, eyeDist);
 
-    float rUp = length(p - vec2(0.0, 0.5));
-    float rDn = length(p - vec2(0.0, -0.5));
-
-    float upperHalf = smoothstep(-0.04, 0.04, p.y);
-    float inUpSmall = 1.0 - smoothstep(0.47, 0.53, rUp);
-    float inDnSmall = 1.0 - smoothstep(0.47, 0.53, rDn);
-
-    float upperL = inUpSmall;
-    float lowerL = 1.0 - inDnSmall;
-    float L = mix(lowerL, upperL, upperHalf);
-
-    float eyeUp = 1.0 - smoothstep(0.13, 0.17, rUp);
-    float eyeDn = 1.0 - smoothstep(0.13, 0.17, rDn);
-    L = mix(L, 0.0, eyeUp);
-    L = mix(L, 1.0, eyeDn);
-
-    return vec2(L, mask);
-  }
-
-  vec3 toneMap(vec3 c) {
-    c *= 1.00;
-    float L  = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    float Lm = L / (1.0 + L);
-    return c * (Lm / max(L, 1e-5));
-  }
-
-  void main() {
-    vec2 p_vp  = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
-    vec2 p_raw = p_vp;
-    p_raw.y += u_scroll * 0.00020;
-    float t    = u_time;
-
-    vec2 mouseP = (u_mouse - 0.5 * u_resolution) / u_resolution.y;
-    vec2 toMouse = p_raw - mouseP;
-    float md = length(toMouse);
-    vec2 lens = normalize(toMouse + 1e-5) * exp(-md * 2.4) * 0.26;
-    vec2 p_field = p_raw - lens;
-
-    vec2 dA = p_vp - u_orbitA;
-    vec2 dB = p_vp - u_orbitB;
-    float warpA = exp(-dot(dA,dA) * 22.0) * 0.030;
-    float warpB = exp(-dot(dB,dB) * 22.0) * 0.030;
-    vec2 pSample = p_field
-      - normalize(dA + 1e-5) * warpA
-      - normalize(dB + 1e-5) * warpB;
-
-    vec2 psi = complexField(pSample * 1.55, t);
-    float psiMag2 = dot(psi, psi);
-    float phase = atan(psi.y, psi.x);
-
-    float singMag = exp(-psiMag2 * 52.0) * 0.36;
-    float armPh = sin(3.0 * phase - t * 0.15) * 0.35 + 0.65;
-    armPh = pow(armPh, 1.6);
-
-    float fieldMag = length(psi) * 2.0;
-    float baseField = smoothstep(0.0, 1.1, fieldMag);
-
-    float dust = 0.45 + 0.55 * fbm(p_raw * 0.38 + vec2(t * 0.003, t * 0.002), t);
-    dust = smoothstep(0.15, 0.9, dust);
-    baseField *= dust;
-
-    float tempSpatial = 0.5 + 0.22 *
-      (vnoise(p_raw * 0.7 + vec2(t * 0.018, 0.0)) - 0.5) * 2.0;
-    float mouseHeat = exp(-md * 1.6) * 0.20 * (0.5 + 0.5 * u_mouseDwell);
-    float dwellWarmth = exp(-md * 2.0) * u_mouseDwell * 0.16;
-    float moodT = u_moodDrift * 0.08;
-
-    float T = clamp(
-      tempSpatial
-        + (u_breath - 0.5) * 0.18
-        + mouseHeat
-        + dwellWarmth
-        + moodT,
-      0.0, 1.0
+    // Primary catchlight — up-and-forward.
+    vec2 highlightOffset = vec2(-0.0018, 0.0022);
+    float highlightR = 0.0020;
+    float highlightDist = length(eyeD - highlightOffset);
+    float highlight = smoothstep(
+      highlightR + 0.0005, highlightR - 0.0004, highlightDist
     );
 
-    float energy = smoothstep(0.3, 1.0, fieldMag);
-    vec3 baseCol = spectralMix(T, energy);
+    // Tiny second sparkle — just enough to read as "wet alive eye" and
+    // not "painted dot with one highlight."
+    vec2 sparkleOffset = vec2(0.0012, -0.0015);
+    float sparkleR = 0.0008;
+    float sparkleDist = length(eyeD - sparkleOffset);
+    float sparkle = smoothstep(
+      sparkleR + 0.0004, sparkleR - 0.0003, sparkleDist
+    );
 
-    float dA_field = length(p_raw - u_orbitA);
-    float dB_field = length(p_raw - u_orbitB);
-    float nearer = min(dA_field, dB_field);
-    float ratio = dB_field / (dA_field + dB_field + 1e-5);
-    float territoryT = mix(0.34, 0.74, ratio);
-    float territoryInf = exp(-nearer * 2.4) * 0.18;
-    vec3 territoryCol = spectralMix(territoryT, 0.5);
-    baseCol = mix(baseCol, territoryCol, territoryInf);
+    float eye = max(max(socket, iris), pupil);
+    eye *= body;
+    highlight *= body;
+    sparkle *= body;
 
-    float vortexT = 0.35 + 0.35 * u_breath + 0.18 * sin(phase * 2.0 + t * 0.042);
-    vortexT = clamp(vortexT, 0.0, 1.0);
-    vec3 vortexCol = spectralMix(vortexT, 0.80);
+    if (body + fin + dorsal + eye < 0.004) discard;
 
-    vec3 col = baseCol * baseField * 0.48;
-    col += vortexCol * singMag * armPh * 0.62;
+    float coverage = v_params.x;
+    float density = v_params.y;
+    float backBlue = v_params.z;
+    float headDot = v_params.w;
 
-    float distBary = length(p_vp - u_barycenter);
-    float ringBand = abs(distBary - u_orbitR);
-    float ring = exp(-ringBand * ringBand * 2200.0) * 0.040;
-    vec3 ringCol = spectralMix(0.52 + 0.05 * u_moodDrift, 0.45);
-    col += ringCol * ring * (0.85 + 0.20 * u_breath);
+    float patchScale = 2.5 + density * 12.0;
+    vec2 patchCoord = vec2(s * 1.4, pU.y / KOI_BODY_W * 0.6) * patchScale;
+    float n1 = vnoise(patchCoord + vec2(17.3, 4.1));
+    float n2 = vnoise(patchCoord * 2.2 + vec2(3.3, 11.7));
+    float patchField = n1 * 0.65 + n2 * 0.35;
+    float threshold = mix(0.70, 0.25, coverage);
+    float patchSoftness = 0.05 + 0.03 * (1.0 - density);
+    float patchMask = smoothstep(
+      threshold - patchSoftness,
+      threshold + patchSoftness,
+      patchField
+    );
 
-    vec3 colWarmBody = spectralMix(0.78, 0.55);
-    vec3 colCoolBody = spectralMix(0.28, 0.55);
-    vec3 colWarmEye  = spectralMix(0.26, 0.85);
-    vec3 colCoolEye  = spectralMix(0.80, 0.85);
+    vec3 bodyCol = mix(v_base, v_mark, patchMask);
 
-    float bleed = u_periastron * 0.22 + u_meeting * 0.15;
-    vec3 warmBodyBleed = mix(colWarmBody, colCoolBody, bleed);
-    vec3 coolBodyBleed = mix(colCoolBody, colWarmBody, bleed);
+    float dorsalBand = smoothstep(-0.002, 0.012, pU.y);
+    vec3 blueCol = vec3(0.40, 0.54, 0.70);
+    bodyCol = mix(
+      bodyCol,
+      mix(bodyCol * 0.55, blueCol, 0.62),
+      backBlue * dorsalBand * 0.75
+    );
 
-    mat2 R_A = mat2(u_headingA.x, -u_headingA.y,
-                    u_headingA.y,  u_headingA.x);
-    vec2 pL_A = R_A * (p_vp - u_orbitA);
-    vec4 koiA = koiField(pL_A, t, u_breath, u_tailEnergy);
+    vec2 headCenter = vec2(KOI_BODY_LEN * 0.32, 0.0);
+    vec2 dHead = pU - headCenter;
+    float dotRN = length(dHead) / 0.0135;
+    float dotMask = smoothstep(1.15, 0.75, dotRN);
+    float dotPresent = smoothstep(0.45, 0.55, headDot);
+    bodyCol = mix(bodyCol, v_mark, dotPresent * dotMask);
 
-    mat2 R_B = mat2(u_headingB.x, -u_headingB.y,
-                    u_headingB.y,  u_headingB.x);
-    vec2 pL_B = R_B * (p_vp - u_orbitB);
-    vec4 koiB = koiField(pL_B, t + 3.14, u_breath, u_tailEnergy);
+    float specPhase = s * 7.5 + t * 0.18;
+    float spec = pow(max(0.0, sin(specPhase)), 8.0);
+    vec3 specCol = vec3(1.0, 0.92, 0.70);
+    bodyCol += specCol * spec * v_metallic * 0.38;
+    bodyCol *= 1.0 + v_metallic * 0.08;
 
-    float eyePulse = 0.80 + 0.35 * u_cardiac + 0.35 * u_meeting + 0.15 * u_periastron;
+    float edge = 1.0 - smoothstep(0.0, 0.35, body);
+    vec3 darkEdge = bodyCol * 0.55;
 
-    col += warmBodyBleed * (koiA.x * 0.32 + koiA.y * 0.20 + koiA.w * 0.22);
-    col += colWarmEye    * koiA.z * 0.55 * eyePulse;
+    vec3 col = vec3(0.0);
+    col += bodyCol * body * 0.85;
+    col = mix(col, darkEdge, edge * body * 0.55);
+    col += bodyCol * 0.72 * fin * 0.48;
+    col += bodyCol * 0.88 * dorsal * 0.60;
 
-    col += coolBodyBleed * (koiB.x * 0.32 + koiB.y * 0.20 + koiB.w * 0.22);
-    col += colCoolEye    * koiB.z * 0.55 * eyePulse;
+    // Eye composite. Three tones, layered dark-to-light:
+    //   socket — soft darkening of surrounding body color (not pure
+    //            black; just a tonal pit).
+    //   iris   — near-black ring under the pupil. Gives the eye depth.
+    //   pupil  — true black center. This is the beady part.
+    //   highlight — tiny bright catchlight. LAST so nothing occludes it.
+    //
+    // Composited after metallic spec: fish eyes don't reflect sun. This
+    // is intentional — otherwise ogon and other metallic koi lose their
+    // eyes to body highlights.
+    vec3 socketCol = bodyCol * 0.45;
+    vec3 irisCol   = vec3(0.04, 0.035, 0.030);
+    vec3 pupilCol  = vec3(0.015, 0.012, 0.010);
+    vec3 catchlightCol = vec3(0.98, 0.96, 0.88);
 
-    vec2 ab = u_orbitB - u_orbitA;
-    float abLen = length(ab);
-    vec2 M = 0.5 * (u_orbitA + u_orbitB);
-    if (abLen > 0.001) {
-      vec2 abDir = ab / abLen;
-      vec2 abNorm = vec2(-abDir.y, abDir.x);
-      vec2 fromA  = p_vp - u_orbitA;
-      float along = dot(fromA, abDir);
-      float perp  = dot(fromA, abNorm);
+    col = mix(col, socketCol, socket * body * 0.65);
+    col = mix(col, irisCol,   iris * body * 0.90);
+    col = mix(col, pupilCol,  pupil * body * 0.98);
+    col = mix(col, catchlightCol, highlight * body * 0.95);
+    col = mix(col, catchlightCol, sparkle * body * 0.75);
 
-      float onSeg = smoothstep(-0.05, 0.02, along)
-                  * smoothstep(-0.05, 0.02, abLen - along);
-      float perpFall = exp(-perp * perp * 280.0);
-      float proximity = smoothstep(1.2, 0.2, abLen);
-      float bridge = onSeg * perpFall * proximity * 0.26;
-      vec3 bridgeCol = spectralMix(0.60 + 0.08 * u_periastron, 0.65);
-      col += bridgeCol * bridge * (0.85 + 0.25 * u_cardiac);
-    }
+    float silhouette = max(max(body, fin), max(dorsal, eye));
 
-    if (u_meeting > 0.05 && u_meetingElapsed > 0.0 && abLen > 0.001) {
-      vec3 partGlowCol = vec3(1.05, 0.80, 0.88);
-      vec3 yyLightCol  = spectralMix(0.78, 0.70);
-      vec3 yyDarkCol   = spectralMix(0.28, 0.70);
+    // DIAGNOSTIC MODE: uncomment the next line to see the raw silhouette
+    // mask — bright white where body should render, black elsewhere. If
+    // the whole quad shows up white, the mask is broken. If only a
+    // fish-shape shows white, the mask works and the issue is elsewhere.
+    // fragColor = vec4(vec3(silhouette), 1.0); return;
 
-      float partSize = 0.020;
-      float partLife = 2.5;
+    // Depth cueing: koi far from the viewer (higher v_depthShade) render
+    // dimmer and slightly blue-shifted, as if light is attenuating
+    // through water volume before reaching the eye.
+    float depthAtten = mix(1.0, 0.55, v_depthShade);
+    vec3 depthTint = mix(vec3(1.0), vec3(0.75, 0.85, 1.05), v_depthShade);
+    col *= depthAtten * depthTint;
 
-      for (int i = 0; i < 24; i++) {
-        vec2 s1 = hash22(vec2(float(i) + 0.5, 7.31));
-        vec2 s2 = hash22(vec2(float(i) + 0.5, 13.17));
-        float s1x = s1.x * 0.5 + 0.5;
-        float s1y = s1.y * 0.5 + 0.5;
-        float s2x = s2.x * 0.5 + 0.5;
-        float s2y = s2.y * 0.5 + 0.5;
-
-        float birth = s1x * 8.0;
-        float age = u_meetingElapsed - birth;
-        if (age < 0.0 || age > partLife) continue;
-
-        vec2 jitter = (s2 * 2.0 - 1.0) * 0.004;
-        float ang = s1y * 6.28318;
-        vec2 baseVel = vec2(cos(ang), sin(ang)) * (0.010 + s2x * 0.010);
-        vec2 flutter = vec2(
-          sin(age * 6.0 + s1y * 10.0) - sin(s1y * 10.0),
-          sin(age * 5.2 + s2y * 10.0) - sin(s2y * 10.0)
-        ) * 0.004;
-        vec2 buoy = vec2(0.0, age * 0.010);
-        vec2 partPos = M + jitter + baseVel * age + flutter + buoy;
-
-        vec2 pLocal = (p_vp - partPos) / partSize;
-        if (dot(pLocal, pLocal) > 2.5) continue;
-
-        float px = pLocal.x, py = pLocal.y;
-        float hf = pow(px*px + py*py - 1.0, 3.0) - px*px * py*py*py;
-        float hIn = smoothstep(0.03, -0.02, hf);
-        float hEdge = exp(-hf * hf * 80.0);
-
-        vec2 yyCoord = pLocal * 1.8;
-        vec2 yy = yinYang(yyCoord);
-        vec3 yyCol = mix(yyDarkCol, yyLightCol, yy.x);
-
-        float normAge = age / partLife;
-        float hFade  = 1.0 - smoothstep(0.3,  1.0, normAge);
-        float yyFade = 1.0 - smoothstep(0.10, 0.50, normAge);
-
-        float birthSparkle = 1.0 - smoothstep(0.0, 0.35, age);
-        float sparkleN = vnoise(pLocal * 8.0 + vec2(age * 3.0, 0.0));
-        float sparkle = smoothstep(0.72, 0.95, sparkleN) * hEdge * birthSparkle;
-
-        vec3 pCol = partGlowCol * (hIn * 0.45 + hEdge * 0.75);
-        pCol += yyCol * yy.y * yyFade * 1.3;
-        pCol += vec3(1.00, 0.95, 0.88) * sparkle * 1.6;
-        pCol *= hFade;
-
-        col += pCol;
-      }
-    }
-
-    float irid = sin(fieldMag * 11.0 + t * 0.28) * 0.5 + 0.5;
-    vec3 iridTint = spectralMix(T + (irid - 0.5) * 0.25, energy);
-    col = mix(col, col * iridTint * 1.3, energy * 0.12);
-
-    float eps = 0.004;
-    vec2 grad;
-    grad.x = complexField((p_field + vec2(eps, 0.0)) * 1.55, t).x - psi.x;
-    grad.y = complexField((p_field + vec2(0.0, eps)) * 1.55, t).x - psi.x;
-    grad = normalize(grad + 1e-5);
-    float disp = energy * energy * 0.08;
-    col.r *= 1.0 + grad.x * disp;
-    col.b *= 1.0 - grad.x * disp;
-    col.g *= 1.0 + grad.y * disp * 0.5;
-
-    col += C_GHOST * 0.024 * (0.7 + 0.3 * u_breath);
-
-    float closeness = max(u_periastron * 0.6, u_meeting);
-    col *= 1.0 + closeness * 0.07;
-
-    col = toneMap(col);
-
-    fragColor = vec4(col, 1.0);
+    fragColor = vec4(col * silhouette, silhouette);
   }
 `;
 
@@ -474,16 +1493,19 @@ const COMPOSITE_FRAG = /* glsl */ `#version 300 es
   out vec4 fragColor;
 
   uniform sampler2D u_field;
+  uniform sampler2D u_koi;
   uniform sampler2D u_bloom;
   uniform vec2  u_resolution;
   uniform float u_time;
-  uniform float u_periastron;
-  uniform float u_meeting;
 
   void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution;
 
     vec3 base = texture(u_field, uv).rgb;
+    vec4 koi  = texture(u_koi, uv);
+
+    // Additive composite — koi color was premultiplied by silhouette
+    vec3 composite = base + koi.rgb;
 
     float ang = u_time * 0.05;
     vec2 dispDir = vec2(cos(ang), sin(ang));
@@ -503,12 +1525,10 @@ const COMPOSITE_FRAG = /* glsl */ `#version 300 es
     }
     halo *= 0.125;
     vec3 halationTint = vec3(1.18, 0.83, 0.70);
-    float closeness = max(u_periastron, u_meeting);
-    float halationStrength = 0.20 + 0.28 * closeness;
 
-    vec3 col = base
+    vec3 col = composite
              + bloom * 0.46
-             + halo * halationTint * halationStrength;
+             + halo * halationTint * 0.22;
 
     vec2 vg = uv - 0.5;
     float vignette = 1.0 - dot(vg, vg) * 0.42;
@@ -518,33 +1538,12 @@ const COMPOSITE_FRAG = /* glsl */ `#version 300 es
   }
 `;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Component
-// ═══════════════════════════════════════════════════════════════════════════
-
-// Proximity-triggered meeting state. A low-pass filter watches the distance
-// between the two rendered fish; meetings emerge when they sustain closeness.
-const MEETING_NEAR        = 0.045;  // shader-space distance for "very close"
-const MEETING_FAR         = 0.14;   // shader-space distance for "apart"
-const MEETING_SMOOTH      = 0.018;  // LPF per-frame coefficient (~60fps)
-const MEETING_ACTIVATE    = 0.55;   // filtered prox at which meeting starts
-const MEETING_DEACTIVATE  = 0.15;   // filtered prox at which meeting ends
-const MEETING_COOLDOWN_S  = 90;     // min seconds between meetings
-
-function smoothstepF(a: number, b: number, x: number): number {
-  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-}
-
 export default function LivingSubstrate() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Hook up the pond. In dev or on first load before WS connects, the hook
-  // returns positions from the procedural Lissajous — same visuals v8 has
-  // always had. When the DO is reachable, it streams authoritative state.
   const pond = usePond({
     url: process.env.NEXT_PUBLIC_POND_WS_URL ?? "",
-    fallback: { koiCount: 2, procedural: true },
+    fallback: { koiCount: 5, procedural: true },
   });
 
   useEffect(() => {
@@ -565,7 +1564,7 @@ export default function LivingSubstrate() {
       gl.shaderSource(sh, src);
       gl.compileShader(sh);
       if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-        console.error("Shader compile error:", gl.getShaderInfoLog(sh));
+        console.error("Shader compile:", gl.getShaderInfoLog(sh));
         return null;
       }
       return sh;
@@ -580,27 +1579,73 @@ export default function LivingSubstrate() {
       gl.attachShader(p, f);
       gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-        console.error("Program link error:", gl.getProgramInfoLog(p));
+        console.error("Program link:", gl.getProgramInfoLog(p));
         return null;
       }
       return p;
     };
 
     const fieldProgram = program(VERT, FIELD_FRAG);
+    const koiProgram   = program(KOI_VERT, KOI_FRAG);
     const bloomProgram = program(VERT, BLOOM_FRAG);
     const compProgram  = program(VERT, COMPOSITE_FRAG);
-    if (!fieldProgram || !bloomProgram || !compProgram) return;
+    if (!fieldProgram || !koiProgram || !bloomProgram || !compProgram) return;
 
-    const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-    const vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    // Full-screen triangle VAO
+    const fsVao = gl.createVertexArray();
+    gl.bindVertexArray(fsVao);
+    const fsVbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, fsVbo);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const bindAttrib = (prog: WebGLProgram) => {
+
+    const bindFsAttrib = (prog: WebGLProgram) => {
       const loc = gl.getAttribLocation(prog, "a_pos");
+      gl.bindBuffer(gl.ARRAY_BUFFER, fsVbo);
       gl.enableVertexAttribArray(loc);
       gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     };
+
+    // Koi instanced VAO
+    const koiVao = gl.createVertexArray();
+    gl.bindVertexArray(koiVao);
+
+    const quadVbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,  1, -1, -1,  1,
+      -1,  1,  1, -1,  1,  1,
+    ]), gl.STATIC_DRAW);
+    const locQuad = gl.getAttribLocation(koiProgram, "a_quadPos");
+    gl.enableVertexAttribArray(locQuad);
+    gl.vertexAttribPointer(locQuad, 2, gl.FLOAT, false, 0, 0);
+
+    const INSTANCE_FLOATS = 16;
+    const instanceVbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, instanceVbo);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      MAX_KOI * INSTANCE_FLOATS * 4,
+      gl.DYNAMIC_DRAW,
+    );
+    const stride = INSTANCE_FLOATS * 4;
+
+    const bindInstanceAttr = (
+      name: string, size: number, offsetFloats: number,
+    ) => {
+      const loc = gl.getAttribLocation(koiProgram, name);
+      if (loc < 0) return;
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, offsetFloats * 4);
+      gl.vertexAttribDivisor(loc, 1);
+    };
+    bindInstanceAttr("a_posHead",  4, 0);
+    bindInstanceAttr("a_base",     3, 4);
+    bindInstanceAttr("a_mark",     3, 7);
+    bindInstanceAttr("a_params",   4, 10);
+    bindInstanceAttr("a_metallic", 1, 14);
+    bindInstanceAttr("a_depth",    1, 15);
+
+    const instanceData = new Float32Array(MAX_KOI * INSTANCE_FLOATS);
 
     const makeFBO = (w: number, h: number) => {
       const tex = gl.createTexture()!;
@@ -618,46 +1663,48 @@ export default function LivingSubstrate() {
 
     let W = 0, H = 0;
     let fieldFBO: ReturnType<typeof makeFBO> | null = null;
+    let koiFBO:   ReturnType<typeof makeFBO> | null = null;
     let bloomA:   ReturnType<typeof makeFBO> | null = null;
     let bloomB:   ReturnType<typeof makeFBO> | null = null;
 
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      const scale = 0.5;
-      const nw = Math.max(1, Math.floor(window.innerWidth * dpr * scale));
-      const nh = Math.max(1, Math.floor(window.innerHeight * dpr * scale));
-      if (nw === W && nh === H) return;
-      W = nw; H = nh;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      W = Math.floor(window.innerWidth * dpr);
+      H = Math.floor(window.innerHeight * dpr);
       canvas.width = W;
       canvas.height = H;
-      canvas.style.width = "100%";
-      canvas.style.height = "100%";
+      canvas.style.width  = window.innerWidth  + "px";
+      canvas.style.height = window.innerHeight + "px";
       fieldFBO = makeFBO(W, H);
-      bloomA   = makeFBO(W, H);
-      bloomB   = makeFBO(W, H);
+      koiFBO   = makeFBO(W, H);
+      bloomA   = makeFBO(Math.floor(W / 2), Math.floor(H / 2));
+      bloomB   = makeFBO(Math.floor(W / 2), Math.floor(H / 2));
     };
     resize();
     window.addEventListener("resize", resize);
 
+    let scroll = 0;
+    const onScroll = () => { scroll = window.scrollY; };
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    let paused = false;
+    const onVis = () => { paused = document.hidden; };
+    document.addEventListener("visibilitychange", onVis);
+
     const uField = {
-      u_resolution:      gl.getUniformLocation(fieldProgram, "u_resolution"),
-      u_time:            gl.getUniformLocation(fieldProgram, "u_time"),
-      u_mouse:           gl.getUniformLocation(fieldProgram, "u_mouse"),
-      u_scroll:          gl.getUniformLocation(fieldProgram, "u_scroll"),
-      u_orbitA:          gl.getUniformLocation(fieldProgram, "u_orbitA"),
-      u_orbitB:          gl.getUniformLocation(fieldProgram, "u_orbitB"),
-      u_headingA:        gl.getUniformLocation(fieldProgram, "u_headingA"),
-      u_headingB:        gl.getUniformLocation(fieldProgram, "u_headingB"),
-      u_tailEnergy:      gl.getUniformLocation(fieldProgram, "u_tailEnergy"),
-      u_barycenter:      gl.getUniformLocation(fieldProgram, "u_barycenter"),
-      u_orbitR:          gl.getUniformLocation(fieldProgram, "u_orbitR"),
-      u_periastron:      gl.getUniformLocation(fieldProgram, "u_periastron"),
-      u_meeting:         gl.getUniformLocation(fieldProgram, "u_meeting"),
-      u_meetingElapsed:  gl.getUniformLocation(fieldProgram, "u_meetingElapsed"),
-      u_mouseDwell:      gl.getUniformLocation(fieldProgram, "u_mouseDwell"),
-      u_moodDrift:       gl.getUniformLocation(fieldProgram, "u_moodDrift"),
-      u_breath:          gl.getUniformLocation(fieldProgram, "u_breath"),
-      u_cardiac:         gl.getUniformLocation(fieldProgram, "u_cardiac"),
+      u_resolution:    gl.getUniformLocation(fieldProgram, "u_resolution"),
+      u_time:          gl.getUniformLocation(fieldProgram, "u_time"),
+      u_scroll:        gl.getUniformLocation(fieldProgram, "u_scroll"),
+      u_breath:        gl.getUniformLocation(fieldProgram, "u_breath"),
+      u_moodDrift:     gl.getUniformLocation(fieldProgram, "u_moodDrift"),
+      u_koiPositions:  gl.getUniformLocation(fieldProgram, "u_koiPositions"),
+      u_koiCount:      gl.getUniformLocation(fieldProgram, "u_koiCount"),
+    };
+    const uKoi = {
+      u_resolution: gl.getUniformLocation(koiProgram, "u_resolution"),
+      u_time:       gl.getUniformLocation(koiProgram, "u_time"),
+      u_breath:     gl.getUniformLocation(koiProgram, "u_breath"),
+      u_tailEnergy: gl.getUniformLocation(koiProgram, "u_tailEnergy"),
     };
     const uBloom = {
       u_tex:        gl.getUniformLocation(bloomProgram, "u_tex"),
@@ -667,228 +1714,169 @@ export default function LivingSubstrate() {
     };
     const uComp = {
       u_field:      gl.getUniformLocation(compProgram, "u_field"),
+      u_koi:        gl.getUniformLocation(compProgram, "u_koi"),
       u_bloom:      gl.getUniformLocation(compProgram, "u_bloom"),
       u_resolution: gl.getUniformLocation(compProgram, "u_resolution"),
       u_time:       gl.getUniformLocation(compProgram, "u_time"),
-      u_periastron: gl.getUniformLocation(compProgram, "u_periastron"),
-      u_meeting:    gl.getUniformLocation(compProgram, "u_meeting"),
     };
 
-    let mouseRaw      = { x: window.innerWidth * 0.5, y: window.innerHeight * 0.5 };
-    let mouseSmoothed = { x: mouseRaw.x, y: mouseRaw.y };
-    let lastMoveTime  = performance.now();
-    let dwell         = 0;
-
-    const onMove = (e: MouseEvent) => {
-      mouseRaw = { x: e.clientX, y: e.clientY };
-      lastMoveTime = performance.now();
-    };
-    window.addEventListener("mousemove", onMove);
-
-    let visible = !document.hidden;
-    const onVis = () => { visible = !document.hidden; };
-    document.addEventListener("visibilitychange", onVis);
-
-    // ── Meeting state (proximity-driven) ────────────────────────────
-    // filteredProximity is the low-pass proximity signal. When it crosses
-    // MEETING_ACTIVATE, a meeting begins and meetingStartAt records the
-    // wall-clock time. When it drops below MEETING_DEACTIVATE, the meeting
-    // ends. Cooldown prevents rapid re-triggering.
-    let filteredProximity = 0;
-    let meetingActive     = false;
-    let meetingStartAt    = -1;
-    let lastMeetingEndAt  = -1e9;
-
-    // ── Smoothed kinematic state for heading derivation ─────────────
-    // The DO broadcasts heading in radians, but we also want stable
-    // finite-difference velocities for shader heading unit vectors. We
-    // maintain smoothed positions and derive heading from motion when
-    // the fish is moving fast enough; otherwise we fall back on the
-    // broadcast heading directly.
-    let prevAx = 0, prevAy = 0;
-    let prevBx = 0, prevBy = 0;
-    let hasPrev = false;
-
-    const startTime = performance.now();
+    const startMs = performance.now();
     let rafId = 0;
 
+    const prevPos = new Map<string, { x: number; y: number }>();
+
+    // Precompute: phenotype color vec3 per archetype so the render loop
+    // doesn't re-parse hex strings 5× per frame.
+    interface PhenoRGB {
+      baseR: number; baseG: number; baseB: number;
+      markR: number; markG: number; markB: number;
+      coverage: number; density: number;
+      backBlue: number; headDot: number; metallic: number;
+    }
+    const phenoCache = new Map<string, PhenoRGB>();
+    for (const [name, ph] of Object.entries(ARCHETYPE_PHENOTYPES)) {
+      const b = hexToVec3(ph.baseColor);
+      const m = hexToVec3(ph.markColor);
+      phenoCache.set(name, {
+        baseR: b[0], baseG: b[1], baseB: b[2],
+        markR: m[0], markG: m[1], markB: m[2],
+        coverage: ph.markCoverage, density: ph.markDensity,
+        backBlue: ph.backBlue, headDot: ph.headDot, metallic: ph.metallic,
+      });
+    }
+    const fallbackPheno = phenoCache.get("kohaku")!;
+    const getPheno = (color: string | undefined): PhenoRGB =>
+      (color ? phenoCache.get(color) : undefined) ?? fallbackPheno;
+
+    // Pre-allocated buffers reused every frame.
+    const posArr = new Float32Array(MAX_KOI * 3);
+
     const render = () => {
-      if (!visible) { rafId = requestAnimationFrame(render); return; }
+      if (paused) { rafId = requestAnimationFrame(render); return; }
 
-      const now = performance.now();
-      const t   = (now - startTime) * 0.001;
+      const nowMs = performance.now();
+      const t = (nowMs - startMs) / 1000;
 
-      const k = 0.028;
-      mouseSmoothed.x += (mouseRaw.x - mouseSmoothed.x) * k;
-      mouseSmoothed.y += (mouseRaw.y - mouseSmoothed.y) * k;
+      const fish = pond.getAllShaderFish();
+      const count = Math.min(fish.length, MAX_KOI);
 
-      const mx = (mouseSmoothed.x / window.innerWidth) * W;
-      const my = ((window.innerHeight - mouseSmoothed.y) / window.innerHeight) * H;
-      const scroll = window.scrollY;
-
-      const sinceMove = (now - lastMoveTime) * 0.001;
-      const dwellTarget = Math.min(1, sinceMove / 4);
-      dwell += (dwellTarget - dwell) * 0.04;
-
-      // ── Pond subscription: read positions in shader-space ─────────
-      // usePond returns primary/secondary already mapped to viewport
-      // coordinates (pond 3D top-down view at SHADER_SCALE). When the
-      // WebSocket is disconnected, this falls back to the procedural
-      // Lissajous — identical to v8. No visual discontinuity.
-      const orbit = pond.getOrbitCompatibleFish();
-      const aX = orbit.primary.x;
-      const aY = orbit.primary.y;
-      const bX = orbit.secondary.x;
-      const bY = orbit.secondary.y;
-
-      // ── Derive headings ────────────────────────────────────────────
-      // Prefer finite-difference velocity for stable swim direction.
-      // Fall back to the broadcast heading radians when motion is tiny.
-      let hAx: number, hAy: number, hBx: number, hBy: number;
-      if (hasPrev) {
-        const vAx = aX - prevAx;
-        const vAy = aY - prevAy;
-        const vBx = bX - prevBx;
-        const vBy = bY - prevBy;
-        const sA = Math.hypot(vAx, vAy);
-        const sB = Math.hypot(vBx, vBy);
-        if (sA > 1e-4) { hAx = vAx / sA; hAy = vAy / sA; }
-        else           { hAx = Math.cos(orbit.primary.h);   hAy = Math.sin(orbit.primary.h); }
-        if (sB > 1e-4) { hBx = vBx / sB; hBy = vBy / sB; }
-        else           { hBx = Math.cos(orbit.secondary.h); hBy = Math.sin(orbit.secondary.h); }
-      } else {
-        hAx = Math.cos(orbit.primary.h);   hAy = Math.sin(orbit.primary.h);
-        hBx = Math.cos(orbit.secondary.h); hBy = Math.sin(orbit.secondary.h);
-        hasPrev = true;
-      }
-      prevAx = aX; prevAy = aY; prevBx = bX; prevBy = bY;
-
-      // ── Proximity → meeting state machine ──────────────────────────
-      const dx = aX - bX;
-      const dy = aY - bY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const rawProx = 1 - smoothstepF(MEETING_NEAR, MEETING_FAR, dist);
-      filteredProximity += (rawProx - filteredProximity) * MEETING_SMOOTH;
-
-      if (!meetingActive) {
-        // Can we start a meeting?
-        const cooldownOk = (t - lastMeetingEndAt) > MEETING_COOLDOWN_S;
-        if (cooldownOk && filteredProximity > MEETING_ACTIVATE) {
-          meetingActive  = true;
-          meetingStartAt = t;
-        }
-      } else {
-        // Are we done?
-        if (filteredProximity < MEETING_DEACTIVATE) {
-          meetingActive    = false;
-          lastMeetingEndAt = t;
-        }
-      }
-      const meetStr = meetingActive
-        ? Math.min(1.0, filteredProximity)
-        : Math.max(0, filteredProximity - MEETING_DEACTIVATE) / (1 - MEETING_DEACTIVATE);
-      const meetingElapsed = meetingActive ? (t - meetingStartAt) : -1;
-
-      // During a meeting, blend headings toward face-to-face (same as v8).
-      if (meetStr > 0 && dist > 1e-4) {
-        const fAx = (bX - aX) / dist;
-        const fAy = (bY - aY) / dist;
-        const blend = Math.min(1, meetStr);
-        const bAx = hAx * (1 - blend) + fAx * blend;
-        const bAy = hAy * (1 - blend) + fAy * blend;
-        const bAm = Math.hypot(bAx, bAy) || 1;
-        hAx = bAx / bAm; hAy = bAy / bAm;
-        const fBx = -fAx, fBy = -fAy;
-        const bBx = hBx * (1 - blend) + fBx * blend;
-        const bBy = hBy * (1 - blend) + fBy * blend;
-        const bBm = Math.hypot(bBx, bBy) || 1;
-        hBx = bBx / bBm; hBy = bBy / bBm;
-      }
-
-      // ── Periastron, tailEnergy, barycenter ─────────────────────────
-      const PERIASTRON_DIST = 0.26;
-      const periastron = Math.max(0, 1 - dist / PERIASTRON_DIST);
-      const periastronEased = periastron * periastron * (3 - 2 * periastron);
-
-      // tailEnergy matches the v8 meeting envelope: spike on approach,
-      // still during hold, relaxing on part. Here we derive it from
-      // meetingElapsed when active, else baseline + periastron.
-      let tailEnergy: number;
-      if (meetingActive) {
-        const APPROACH = 8.0;
-        const HOLD     = 6.0;
-        const PART     = 8.0;
-        const elapsed = meetingElapsed;
-        if (elapsed < APPROACH) {
-          tailEnergy = 1.0 + 0.7 * (elapsed / APPROACH);
-        } else if (elapsed < APPROACH + HOLD) {
-          tailEnergy = 0.35;
-        } else if (elapsed < APPROACH + HOLD + PART) {
-          const p = (elapsed - APPROACH - HOLD) / PART;
-          tailEnergy = 1.7 - 0.7 * p;
-        } else {
-          tailEnergy = 1.0;
-        }
-      } else {
-        tailEnergy = 1.0 + 0.35 * Math.max(0, Math.min(1, (periastronEased - 0.2) / 0.5));
-      }
-
-      // Barycenter: midpoint of the two rendered fish.
-      const baryX = (aX + bX) * 0.5;
-      const baryY = (aY + bY) * 0.5;
-      // Tai chi ring radius: scale with separation so the ring breathes
-      // with the pair. Clamped to avoid extremes.
-      const ringR = Math.max(0.08, Math.min(0.25, dist * 0.55));
-
+      const tailEnergy = 1.0 + 0.10 * Math.sin(t * 0.23);
       const breathPeriodMod = 0.055 + 0.015 * Math.sin(t * 0.019);
       const breath = 0.5 + 0.5 * Math.sin(t * breathPeriodMod);
-
-      const cardiacPeriod = 28.0;
-      const cardT = (t % cardiacPeriod) / cardiacPeriod;
-      const cardiac = cardT < 0.12
-        ? Math.sin((cardT / 0.12) * Math.PI * 0.5)
-        : Math.pow(Math.max(0, 1 - (cardT - 0.12) / 0.88), 1.8);
-
       const moodDrift =
         0.7 * Math.sin(t * 0.0052) +
         0.3 * Math.sin(t * 0.0021 + 1.3);
 
-      if (!fieldFBO || !bloomA || !bloomB) {
+      // Zero unused slots in posArr so stale data from previous frames
+      // can't influence territory coloring.
+      for (let i = count; i < MAX_KOI; i++) {
+        posArr[i * 3 + 0] = 0;
+        posArr[i * 3 + 1] = 0;
+        posArr[i * 3 + 2] = 0;
+      }
+
+      for (let i = 0; i < count; i++) {
+        const f = fish[i]!;
+        const ph = getPheno(f.color);
+        const scale = stageScale(f.stage);
+
+        // Derive heading from motion when available; falls back to f.h
+        const prev = prevPos.get(f.id);
+        let h = f.h;
+        if (prev) {
+          const dx = f.x - prev.x;
+          const dy = f.y - prev.y;
+          const sp = Math.hypot(dx, dy);
+          if (sp > 1e-4) h = Math.atan2(dy, dx);
+        }
+        prevPos.set(f.id, { x: f.x, y: f.y });
+
+        // Convert shader-viewport coords to pond-meters for the koi
+        // vertex shader. SHADER_SCALE in usePond.ts is 0.1, so
+        // pond_m = vp × 10. ShaderFish.y is actually pond_z (horizontal),
+        // and ShaderFish.depth is pond_y (water depth, negative going
+        // down).
+        const pondX = f.x * 10.0;
+        const pondZ = f.y * 10.0;
+        const pondY = f.depth;  // already in meters, negative
+
+        const off = i * INSTANCE_FLOATS;
+        instanceData[off + 0] = pondX;
+        instanceData[off + 1] = pondZ;
+        instanceData[off + 2] = h;
+        instanceData[off + 3] = scale;
+        instanceData[off + 4] = ph.baseR;
+        instanceData[off + 5] = ph.baseG;
+        instanceData[off + 6] = ph.baseB;
+        instanceData[off + 7] = ph.markR;
+        instanceData[off + 8] = ph.markG;
+        instanceData[off + 9] = ph.markB;
+        instanceData[off + 10] = ph.coverage;
+        instanceData[off + 11] = ph.density;
+        instanceData[off + 12] = ph.backBlue;
+        instanceData[off + 13] = ph.headDot;
+        instanceData[off + 14] = ph.metallic;
+        instanceData[off + 15] = pondY;
+
+        // Field shader also wants pond-meter XZ for koi-presence coloring.
+        posArr[i * 3 + 0] = pondX;
+        posArr[i * 3 + 1] = pondZ;
+        posArr[i * 3 + 2] = 1.0;
+      }
+
+      if (!fieldFBO || !koiFBO || !bloomA || !bloomB) {
         rafId = requestAnimationFrame(render);
         return;
       }
 
       gl.viewport(0, 0, W, H);
-      gl.disable(gl.BLEND);
       gl.disable(gl.DEPTH_TEST);
-      gl.bindVertexArray(vao);
 
+      // Pass A: field
       gl.bindFramebuffer(gl.FRAMEBUFFER, fieldFBO.fbo);
+      gl.disable(gl.BLEND);
       gl.useProgram(fieldProgram);
-      bindAttrib(fieldProgram);
+      gl.bindVertexArray(fsVao);
+      bindFsAttrib(fieldProgram);
       gl.uniform2f(uField.u_resolution, W, H);
       gl.uniform1f(uField.u_time, t);
-      gl.uniform2f(uField.u_mouse, mx, my);
       gl.uniform1f(uField.u_scroll, scroll);
-      gl.uniform2f(uField.u_orbitA,        aX, aY);
-      gl.uniform2f(uField.u_orbitB,        bX, bY);
-      gl.uniform2f(uField.u_headingA,      hAx, hAy);
-      gl.uniform2f(uField.u_headingB,      hBx, hBy);
-      gl.uniform1f(uField.u_tailEnergy,    tailEnergy);
-      gl.uniform2f(uField.u_barycenter,    baryX, baryY);
-      gl.uniform1f(uField.u_orbitR,        ringR);
-      gl.uniform1f(uField.u_periastron,    periastronEased);
-      gl.uniform1f(uField.u_meeting,       meetStr);
-      gl.uniform1f(uField.u_meetingElapsed, meetingElapsed);
-      gl.uniform1f(uField.u_mouseDwell,    dwell);
-      gl.uniform1f(uField.u_moodDrift,     moodDrift);
-      gl.uniform1f(uField.u_breath,        breath);
-      gl.uniform1f(uField.u_cardiac,       cardiac);
+      gl.uniform1f(uField.u_breath, breath);
+      gl.uniform1f(uField.u_moodDrift, moodDrift);
+      gl.uniform3fv(uField.u_koiPositions, posArr);
+      gl.uniform1i(uField.u_koiCount, count);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
+      // Pass B: koi overlay
+      gl.bindFramebuffer(gl.FRAMEBUFFER, koiFBO.fbo);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+      gl.useProgram(koiProgram);
+      gl.bindVertexArray(koiVao);
+      gl.uniform2f(uKoi.u_resolution, W, H);
+      gl.uniform1f(uKoi.u_time, t);
+      gl.uniform1f(uKoi.u_breath, breath);
+      gl.uniform1f(uKoi.u_tailEnergy, tailEnergy);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, instanceVbo);
+      gl.bufferSubData(
+        gl.ARRAY_BUFFER, 0,
+        instanceData.subarray(0, count * INSTANCE_FLOATS),
+      );
+
+      if (count > 0) {
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
+      }
+
+      // Pass C: bloom horizontal
+      gl.disable(gl.BLEND);
       gl.bindFramebuffer(gl.FRAMEBUFFER, bloomA.fbo);
       gl.useProgram(bloomProgram);
-      bindAttrib(bloomProgram);
+      gl.bindVertexArray(fsVao);
+      bindFsAttrib(bloomProgram);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, fieldFBO.tex);
       gl.uniform1i(uBloom.u_tex, 0);
@@ -897,9 +1885,10 @@ export default function LivingSubstrate() {
       gl.uniform1f(uBloom.u_threshold, 0.72);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
+      // Pass D: bloom vertical
       gl.bindFramebuffer(gl.FRAMEBUFFER, bloomB.fbo);
       gl.useProgram(bloomProgram);
-      bindAttrib(bloomProgram);
+      bindFsAttrib(bloomProgram);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, bloomA.tex);
       gl.uniform1i(uBloom.u_tex, 0);
@@ -908,19 +1897,21 @@ export default function LivingSubstrate() {
       gl.uniform1f(uBloom.u_threshold, 0.0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
+      // Pass E: composite
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.useProgram(compProgram);
-      bindAttrib(compProgram);
+      bindFsAttrib(compProgram);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, fieldFBO.tex);
       gl.uniform1i(uComp.u_field, 0);
       gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, koiFBO.tex);
+      gl.uniform1i(uComp.u_koi, 1);
+      gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, bloomB.tex);
-      gl.uniform1i(uComp.u_bloom, 1);
+      gl.uniform1i(uComp.u_bloom, 2);
       gl.uniform2f(uComp.u_resolution, W, H);
       gl.uniform1f(uComp.u_time, t);
-      gl.uniform1f(uComp.u_periastron, periastronEased);
-      gl.uniform1f(uComp.u_meeting,    meetStr);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       rafId = requestAnimationFrame(render);
@@ -931,11 +1922,9 @@ export default function LivingSubstrate() {
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
-      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("scroll", onScroll);
       document.removeEventListener("visibilitychange", onVis);
     };
-    // pond methods are stable (read from a module-level store imperatively),
-    // so we can capture once on mount — no re-subscribe needed on re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

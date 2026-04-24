@@ -37,12 +37,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/", label: "Index", roman: "I" },
   { href: "/research", label: "Research", roman: "II" },
-  {
-    href: "https://kquant03.github.io/genesis-phase-transition/",
-    label: "Genesis",
-    roman: "III",
-    external: true,
-  },
+  { href: "/genesis", label: "Genesis", roman: "III" },
   { href: "/about", label: "About", roman: "IV" },
 ];
 
