@@ -70,14 +70,19 @@ export function Body({
   muted = false,
   size = 17,
   maxWidth = "62ch",
+  style,
+  className,
 }: {
   children: ReactNode;
   muted?: boolean;
   size?: number;
   maxWidth?: string | number;
+  style?: CSSProperties;
+  className?: string;
 }) {
   return (
     <p
+      className={className}
       style={{
         fontFamily: FONT.body,
         fontSize: size,
@@ -85,6 +90,7 @@ export function Body({
         color: muted ? COLOR.inkMuted : COLOR.inkBody,
         margin: 0,
         maxWidth,
+        ...style,
       }}
     >
       {children}
