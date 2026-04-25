@@ -12,7 +12,10 @@
 //                        palettes, including the Lantern palette (the
 //                        signature warm-gold + violet-edge rendering
 //                        matching the rest of the site)
+//    MEMORY_FRAG_SRC   — slow low-pass on state. Drives the Ghost
+//                        Species afterimage in the Lantern palette.
 //    BLOOM_FRAG_SRC    — separable Gaussian blur with bright-pass extract
+//                        (HDR-tuned thresholds; expects RGBA16F input)
 //    COMPOSITE_FRAG_SRC — additive composite of display + blurred bloom,
 //                        Reinhard tone map, vignette
 //
@@ -39,6 +42,11 @@ export const BLOOM_SCALE = 4;
 // The precomputed kernel is stored in a KERNEL_TEX_SIZE × KERNEL_TEX_SIZE
 // floating-point texture. Center is the KERNEL_CENTER'th texel. The
 // maximum supported kernel radius R is KERNEL_CENTER - 1 = 25.
+//
+// The simulation shader's convolution loop bounds and the texel-coord
+// math are template-interpolated from these constants below — bumping
+// KERNEL_CENTER (or KERNEL_TEX_SIZE) just works without a separate edit
+// to the GLSL string.
 export const KERNEL_TEX_SIZE = 51;
 export const KERNEL_CENTER = 25;
 
@@ -98,10 +106,10 @@ void main() {
   int R = int(u_R);
 
   float potential = 0.0;
-  for (int dy = -25; dy <= 25; dy++) {
-    for (int dx = -25; dx <= 25; dx++) {
+  for (int dy = -${KERNEL_CENTER}; dy <= ${KERNEL_CENTER}; dy++) {
+    for (int dx = -${KERNEL_CENTER}; dx <= ${KERNEL_CENTER}; dx++) {
       if (abs(dx) > R || abs(dy) > R) continue;
-      vec2 kuv = vec2(float(dx + 25) + 0.5, float(dy + 25) + 0.5) / 51.0;
+      vec2 kuv = vec2(float(dx + ${KERNEL_CENTER}) + 0.5, float(dy + ${KERNEL_CENTER}) + 0.5) / ${KERNEL_TEX_SIZE}.0;
       float k = texture(u_kernel, kuv).r;
       if (k == 0.0) continue;
       vec2 suv = v_uv + vec2(float(dx), float(dy)) * texel;
@@ -349,12 +357,57 @@ void main() {
   for (int i = -4; i <= 4; i++) {
     vec3 s = texture(u_input, v_uv + u_dir * texel * float(i) * 1.5).rgb;
     if (u_extract > 0.5) {
+      // HDR bright-pass: pixels brighter than ~0.6 luminance bloom, with
+      // a smooth roll-off to ~1.4 at full bloom strength. The previous
+      // (0.08, 0.45) * 1.8 thresholds were a clamping-compensation hack
+      // for the LDR pipeline — with RGBA16F display/bloom textures the
+      // hot cores of the Lantern palette emit luminance up to ~5, which
+      // pass through at full strength without the artificial multiplier.
       float br = dot(s, vec3(0.2126, 0.7152, 0.0722));
-      s *= smoothstep(0.08, 0.45, br) * 1.8;
+      s *= smoothstep(0.6, 1.4, br);
     }
     result += s * w[abs(i)];
   }
   outColor = vec4(result, 1.0);
+}`;
+
+// ───────────────────────────────────────────────────────────────────────────
+//  Memory-update fragment shader
+//
+//  Implements the Ghost Species afterimage as a slow low-pass filter on
+//  state. Output = mix(state, prev_memory, decay). With decay ≈ 0.99 and
+//  a 60 fps frame rate, the memory texture has a time constant of ~100
+//  frames (~1.6 s). When state spikes high in a region and then drops
+//  (creature moves through), memory stays elevated and decays gradually —
+//  that is the visual signature of "remembering a shape it can no longer
+//  hold."
+//
+//  Previously the memoryTex was uploaded once with the initial seed and
+//  never updated, so the display shader's `ghostWisp = max(0, mem − 3·s)`
+//  read against a static reference rather than against motion-history.
+//  This version is paper-faithful: the wisps trail the creature as it
+//  moves across the σ-landscape, not where it started.
+//
+//  The texture is RGBA32F. Only the R channel carries memory; G/B/A
+//  passed through unchanged in case future readers want to use them for
+//  per-channel afterimage variants.
+// ───────────────────────────────────────────────────────────────────────────
+
+export const MEMORY_FRAG_SRC = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 outColor;
+uniform sampler2D u_state;
+uniform sampler2D u_memory;
+uniform float u_decay;
+
+void main() {
+  float state = texture(u_state, v_uv).r;
+  vec4 prev = texture(u_memory, v_uv);
+  // newMem = state·(1 − decay) + prev·decay
+  // decay = 0.99 → time-constant ≈ 100 frames.
+  float newMem = mix(state, prev.r, u_decay);
+  outColor = vec4(newMem, prev.gba);
 }`;
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -368,10 +421,13 @@ out vec4 outColor;
 uniform sampler2D u_display;
 uniform sampler2D u_bloom;
 uniform float u_bloomStr;
+uniform float u_brightness;
 uniform float u_vignette;
 
 void main() {
-  vec3 col = texture(u_display, v_uv).rgb;
+  // Brightness applied pre-tonemap so increases lift midtones cleanly
+  // without crushing highlights — Reinhard rolls off the bright end.
+  vec3 col = texture(u_display, v_uv).rgb * u_brightness;
   vec3 bloom = texture(u_bloom, v_uv).rgb;
   col += bloom * u_bloomStr;
   col = col / (1.0 + col * 0.4);

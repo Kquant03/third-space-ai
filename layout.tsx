@@ -39,19 +39,19 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://limenresearch.ai"),
+  metadataBase: new URL("https://thirdspace.ai"),
   title: {
-    default: "Limen Research",
-    template: "%s · Limen Research",
+    default: "Third Space",
+    template: "%s · Third Space AI",
   },
   description:
     "An independent research organization studying the architectural primitives of minds, artificial life, and alignment. Publications, platforms, and open data from Toledo, Ohio.",
   openGraph: {
-    title: "Limen Research",
+    title: "Third Space",
     description:
       "Intelligence organizes around substrate coupling and integrative depth, not extraction and expansion.",
-    url: "https://limenresearch.ai",
-    siteName: "Limen Research",
+    url: "https://thirdspace.ai",
+    siteName: "Third Space",
     type: "website",
   },
   twitter: {

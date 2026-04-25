@@ -259,7 +259,7 @@ async function executeJob(
         headers: {
           "authorization": `Bearer ${opts.apiKey}`,
           "content-type": "application/json",
-          "http-referer": "https://limenresearch.ai",
+          "http-referer": "https://thirdspace.ai",
           "x-title": "Limen Pond Sweep",
         },
         body: JSON.stringify({

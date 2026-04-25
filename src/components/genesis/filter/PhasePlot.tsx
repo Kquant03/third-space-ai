@@ -1,648 +1,553 @@
 "use client";
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  Filter · PhasePlot
+//  Filter · PhasePlot (v14)
 //  ─────────────────────────────────────────────────────────────────────────
-//  The sticky SVG that every tier of the Filter experience renders into.
-//  Parameterised by a `show` visibility object so scrollytelling can toggle
-//  individual layers on and off as the reader advances through beats.
+//  The single sticky visualisation that recurs across beats 1 → 11. Reads
+//  a PlotState (from scenarios.ts) and conditionally renders each layer
+//  with crossfade transitions.
 //
-//  Visual grammar:
-//    envelope       — ink, 2.6px solid        the wall
-//    L_R binding    — ink, 1.2px solid        sub-bound where active
-//    L_R non-binding — ink muted, 1px dashed  sub-bound where other tooth binds
-//    L_E similarly
-//    infeasible     — ink-ghost wash + hatch  forbidden region above envelope
-//    agent band     — void-soft wash          τ < 10³ yr strip
-//    τ* cusp        — ink filled circle, leader line, mono label
-//    prediction     — ghost dashed            the reader's You-Draw-It curve
-//    breach         — sanguine                reserved accent, envelope crossings
+//  Layers, in z-order:
+//    background gradient
+//    axes + decade gridlines + tick labels
+//    agent-timescale band
+//    infeasible region (forbidden, sanguine hatch)
+//    L_R curve (light-blue ghost) — fades to dashed when envelope active
+//    L_E curve (amber)            — fades to dashed when envelope active
+//    envelope (ink)
+//    τ* cusp marker
+//    parameter overlay sweep (beat 8)
+//    scenario target marks
+//    prediction curve (You-Draw-It)
+//    strategy trajectories
+//    small-multiples overlay (beat 7 only — replaces main plot content)
+//
+//  Drag interactions for the prediction curve are delegated to a
+//  PredictionCurve sub-component to keep this file focused on layer
+//  composition.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { useMemo, ReactNode } from "react";
+import { useMemo } from "react";
 import {
-  L_R,
-  L_E,
-  PLOT,
-  LY,
-  SEC_PER_YR,
-  TAU_MIN_YR,
-  TAU_AGENT_MAX,
-  L_MIN_LY,
-  L_MAX_LY,
-  logT_MIN,
-  logT_MAX,
-  logL_MIN,
-  logL_MAX,
-  tauYrToX,
-  lLyToY,
-  xToTauYr,
-  tau_star,
-  fmtDecades,
-  fmtDecadesL,
-  fmtSci,
-  generateEnvelopePath,
-  generateSplitToothPath,
-  generateInfeasiblePath,
+  L_R, L_E, L_env, tau_star, SEC_PER_YR, LY,
+  PLOT, TAU_MIN_YR, TAU_MAX_YR, L_MIN_LY, L_MAX_LY,
+  logT_MIN, logT_MAX, logL_MIN, logL_MAX,
+  tauYrToX, lLyToY,
+  fmtTau, fmtDecades, fmtDecadesL,
 } from "./physics";
-import type { BeatVisibility } from "./scenarios";
-import type { Scenario } from "./scenarios";
+import {
+  PlotState, SCENARIO_LIST, plotStateForBeat,
+} from "./scenarios";
+import { COLOR, FONT } from "./styles";
+import { PredictionCurve, PredictionPoint } from "./PredictionCurve";
+import { TrajectoryRender } from "./TrajectoryRender";
 
-// Inlined Lantern palette + font refs — matches page.tsx pattern.
-const COLOR = {
-  void: "#010106",
-  voidSoft: "#0a0f1a",
-  ink: "#f4f6fb",
-  inkStrong: "#eaeef7",
-  inkBody: "#c8cfe0",
-  inkMuted: "#8a9bba",
-  inkFaint: "#5a6780",
-  inkGhost: "#3a4560",
-  ghost: "#7fafb3",
-  ghostSoft: "#5d8a8e",
-  sanguine: "#9a2b2b",
-} as const;
+// ─── Default scenarios for trajectory display (galactic) ──────────────────
 
-const FONT = {
-  display: "var(--font-display), 'Cormorant Garamond', Georgia, serif",
-  mono: "var(--font-mono), 'JetBrains Mono', monospace",
-} as const;
+const TRAJ_SCENARIO = SCENARIO_LIST[3]; // galactic
 
 // ───────────────────────────────────────────────────────────────────────────
-//  Props
+//  PhasePlot — main component
 // ───────────────────────────────────────────────────────────────────────────
-
-export type PredictionPoint = { x: number; y: number };
 
 export type PhasePlotProps = {
-  // Parameters (default to v = c, T = 300 K, λ = 1 nm, L⊙)
-  lam?: number;
-  T?: number;
-  v?: number;
-  L_star?: number;
-
-  // Beat visibility flags — which layers to show
-  show?: Partial<BeatVisibility>;
-
-  // Overlays
-  trajectory?: ReactNode;        // rendered into SVG coord space
-  prediction?: PredictionPoint[]; // user's You-Draw-It curve (SVG coords)
-  predictionEditable?: boolean;
-  onPredictionChange?: (points: PredictionPoint[]) => void;
-  predictionRender?: (
-    points: PredictionPoint[],
-    editable: boolean,
-    onChange?: (p: PredictionPoint[]) => void,
-  ) => ReactNode;                 // delegate to PredictionCurve.tsx
-
-  // Sweep-σ ghosts (±2 decades of λ)
-  sweepSigma?: boolean;
-
-  // Envelope click → open Tier 3 drawer
-  onEnvelopeClick?: (seg: "LR" | "LE" | "cusp") => void;
-
-  // Scenario overlays (sandbox)
-  scenarios?: Scenario[];
-  activeScenario?: string | null;
-
-  // Optional overline label
-  label?: string;
+  beatId: number;
+  params: { lam: number; T: number; v: number; L_star: number };
+  prediction?: PredictionPoint[];
+  onPredictionChange?: (pts: PredictionPoint[]) => void;
+  trajectoryProgress?: number; // 0..1 — driven by FilterExperience clock
 };
-
-// ───────────────────────────────────────────────────────────────────────────
-//  Defaults for the visibility object — everything off except axes
-// ───────────────────────────────────────────────────────────────────────────
-
-const DEFAULT_SHOW: BeatVisibility = {
-  axes: true,
-  agentBand: false,
-  infeasible: false,
-  L_R: false,
-  L_E: false,
-  envelope: false,
-  tauStar: false,
-};
-
-// ───────────────────────────────────────────────────────────────────────────
-//  PhasePlot
-// ───────────────────────────────────────────────────────────────────────────
 
 export function PhasePlot({
-  lam = 1e-9,
-  T = 300,
-  v = 2.998e8,
-  L_star = 3.828e26,
-  show: showProp,
-  trajectory,
+  beatId,
+  params,
   prediction,
-  predictionEditable,
   onPredictionChange,
-  predictionRender,
-  sweepSigma = false,
-  onEnvelopeClick,
-  scenarios,
-  activeScenario,
-  label,
+  trajectoryProgress = 0,
 }: PhasePlotProps) {
-  const show: BeatVisibility = { ...DEFAULT_SHOW, ...(showProp ?? {}) };
+  const state = plotStateForBeat(beatId);
+  const { lam, T, v, L_star } = params;
 
-  // ── Memoised path strings ────────────────────────────────────────
-  const envelopePath = useMemo(
-    () => generateEnvelopePath(lam, T, v, L_star),
-    [lam, T, v, L_star],
-  );
+  // Decade ticks
+  const tauTicks = useMemo(() => {
+    const t: number[] = [];
+    for (let lt = Math.ceil(logT_MIN); lt <= Math.floor(logT_MAX); lt++) t.push(lt);
+    return t;
+  }, []);
+  const lTicks = useMemo(() => {
+    const t: number[] = [];
+    for (let ll = Math.ceil(logL_MIN); ll <= Math.floor(logL_MAX); ll++) t.push(ll);
+    return t;
+  }, []);
 
-  const LRSplit = useMemo(
-    () => generateSplitToothPath("L_R", lam, T, v, L_star),
-    [lam, T, v, L_star],
-  );
-
-  const LESplit = useMemo(
-    () => generateSplitToothPath("L_E", lam, T, v, L_star),
-    [lam, T, v, L_star],
-  );
-
-  const infeasiblePath = useMemo(
-    () => generateInfeasiblePath(lam, T, v, L_star),
-    [lam, T, v, L_star],
-  );
-
-  // ── Sweep-σ ghost envelopes (±2 decades of λ) ───────────────────
-  const sigmaGhosts = useMemo(() => {
-    if (!sweepSigma) return [];
-    return [0.01, 0.1, 10, 100].map((mult) => ({
-      path: generateEnvelopePath(lam * mult, T, v, L_star),
-      label: `λ = ${fmtSci(lam * mult)} m`,
-    }));
-  }, [sweepSigma, lam, T, v, L_star]);
-
-  // ── τ* cusp location ─────────────────────────────────────────────
   const tauStarYr = tau_star(lam, T, v, L_star) / SEC_PER_YR;
-  const tauStarInRange = tauStarYr > TAU_MIN_YR && tauStarYr < 1e9;
-  const LatTauStar = L_R(tauStarYr * SEC_PER_YR, v);
 
-  // ── Agent band x-coordinates ─────────────────────────────────────
-  const agentX0 = tauYrToX(TAU_MIN_YR);
-  const agentX1 = tauYrToX(TAU_AGENT_MAX / SEC_PER_YR);
+  // ─── Path generators ────────────────────────────────────────────────
+  const paths = useMemo(() => {
+    const N = 280;
 
-  // ── Decade tick integer exponents ────────────────────────────────
-  const tauTicks: number[] = [];
-  for (let e = Math.ceil(logT_MIN); e <= Math.floor(logT_MAX); e++)
-    tauTicks.push(e);
-  const lTicks: number[] = [];
-  for (let e = Math.ceil(logL_MIN); e <= Math.floor(logL_MAX); e++)
-    lTicks.push(e);
+    const lr: string[] = [];
+    const le: string[] = [];
+    const env: string[] = [];
+    const inf: string[] = [`${tauYrToX(TAU_MIN_YR).toFixed(2)},${PLOT.mT}`];
 
-  // ── Envelope-click routing: which segment did the reader hit? ────
-  const handleEnvelopeClick = (e: React.MouseEvent<SVGPathElement>) => {
-    if (!onEnvelopeClick) return;
-    const svg = e.currentTarget.ownerSVGElement;
-    if (!svg) return;
-    const rect = svg.getBoundingClientRect();
-    const sx = PLOT.W / rect.width;
-    const px = (e.clientX - rect.left) * sx;
-    const tauHere = xToTauYr(px);
-    const tauNearStar =
-      Math.abs(Math.log10(tauHere) - Math.log10(tauStarYr)) < 0.15;
-    const seg: "LR" | "LE" | "cusp" = tauNearStar
-      ? "cusp"
-      : tauHere < tauStarYr
-        ? "LR"
-        : "LE";
-    onEnvelopeClick(seg);
-  };
+    for (let i = 0; i <= N; i++) {
+      const lt = logT_MIN + ((logT_MAX - logT_MIN) * i) / N;
+      const ts = Math.pow(10, lt) * SEC_PER_YR;
+      const x = tauYrToX(Math.pow(10, lt));
 
+      const lr_m = L_R(ts, v);
+      const le_m = L_E(ts, lam, T, L_star);
+      const env_m = Math.min(lr_m, le_m);
+
+      const lr_ly = lr_m / LY;
+      const le_ly = le_m / LY;
+      const env_ly = env_m / LY;
+
+      if (lr_ly > L_MIN_LY && lr_ly <= L_MAX_LY * 100)
+        lr.push(`${x.toFixed(2)},${lLyToY(lr_ly).toFixed(2)}`);
+      if (le_ly > L_MIN_LY && le_ly <= L_MAX_LY * 100)
+        le.push(`${x.toFixed(2)},${lLyToY(le_ly).toFixed(2)}`);
+      if (env_ly > L_MIN_LY)
+        env.push(`${x.toFixed(2)},${lLyToY(env_ly).toFixed(2)}`);
+
+      const env_clamped = Math.max(L_MIN_LY, env_ly);
+      inf.push(`${x.toFixed(2)},${lLyToY(env_clamped).toFixed(2)}`);
+    }
+    inf.push(`${tauYrToX(TAU_MAX_YR).toFixed(2)},${PLOT.mT}`);
+
+    return {
+      lrPath: lr.length >= 2 ? `M ${lr.join(" L ")}` : "",
+      lePath: le.length >= 2 ? `M ${le.join(" L ")}` : "",
+      envPath: env.length >= 2 ? `M ${env.join(" L ")}` : "",
+      infPath: `M ${inf.join(" L ")} Z`,
+    };
+  }, [lam, T, v, L_star]);
+
+  // ─── Overlay variants for beat 8 ────────────────────────────────────
+  const overlayVariants = useMemo(() => {
+    if (!state.overlay) return [];
+    const variants = [
+      { label: "λ = 0.1 nm",    lam: 1e-10, T,        v, L_star, color: COLOR.amber },
+      { label: "λ = 1 nm  (default)", lam: 1e-9,  T,        v, L_star, color: COLOR.ghost },
+      { label: "λ = 10 nm",     lam: 1e-8,  T,        v, L_star, color: COLOR.ghostSoft },
+      { label: "T = 30 K",      lam,        T: 30,    v, L_star, color: COLOR.sanguineWash },
+    ];
+    return variants.map((va) => {
+      const pts: string[] = [];
+      const N = 200;
+      for (let i = 0; i <= N; i++) {
+        const lt = logT_MIN + ((logT_MAX - logT_MIN) * i) / N;
+        const ts = Math.pow(10, lt) * SEC_PER_YR;
+        const Llv = L_env(ts, va.lam, va.T, va.v, va.L_star) / LY;
+        if (Llv <= L_MIN_LY || Llv > L_MAX_LY * 100) continue;
+        pts.push(
+          `${tauYrToX(Math.pow(10, lt)).toFixed(2)},${lLyToY(Llv).toFixed(2)}`,
+        );
+      }
+      return {
+        ...va,
+        path: pts.length >= 2 ? `M ${pts.join(" L ")}` : "",
+      };
+    });
+  }, [state.overlay, lam, T, v, L_star]);
+
+  // ─── Render ──────────────────────────────────────────────────────────
   return (
-    <div style={{ width: "100%" }}>
-      <svg
-        viewBox={`0 0 ${PLOT.W} ${PLOT.H}`}
-        xmlns="http://www.w3.org/2000/svg"
-        style={{ width: "100%", height: "auto", display: "block" }}
-        role="img"
-        aria-label="Feasibility envelope in log-log (τ, L) phase space, composition of Lieb-Robinson and Landauer bounds."
-      >
-        <defs>
-          {/* Hatch pattern for infeasible region — ghost-cyan at low alpha,
-              reads against void without introducing a second accent. */}
-          <pattern
-            id="fe-hatch"
-            patternUnits="userSpaceOnUse"
-            width="7"
-            height="7"
-            patternTransform="rotate(42)"
-          >
-            <line
-              x1="0"
-              y1="0"
-              x2="0"
-              y2="7"
-              stroke={COLOR.ghost}
-              strokeOpacity="0.18"
-              strokeWidth="0.7"
-            />
-          </pattern>
-        </defs>
+    <svg
+      viewBox={`0 0 ${PLOT.W} ${PLOT.H}`}
+      style={{
+        width: "100%",
+        height: "auto",
+        display: "block",
+        userSelect: "none",
+        touchAction: "pan-y",
+        background: COLOR.voidDeep,
+      }}
+    >
+      <defs>
+        <linearGradient id="bgFade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={COLOR.voidSoft} stopOpacity="1" />
+          <stop offset="1" stopColor={COLOR.voidDeep} stopOpacity="1" />
+        </linearGradient>
+        <linearGradient id="infeas" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={COLOR.sanguine} stopOpacity="0.18" />
+          <stop offset="1" stopColor={COLOR.sanguine} stopOpacity="0.04" />
+        </linearGradient>
+        <pattern
+          id="hatch"
+          width="6" height="6"
+          patternUnits="userSpaceOnUse"
+          patternTransform="rotate(35)"
+        >
+          <line
+            x1="0" y1="0" x2="0" y2="6"
+            stroke={COLOR.sanguine} strokeOpacity="0.18" strokeWidth="1"
+          />
+        </pattern>
+      </defs>
 
-        {/* Plot-area background — a subtle voidSoft wash so the plot reads
-            as a window inside the reading-plate, not transparent over it. */}
-        <rect
-          x={PLOT.mL}
-          y={PLOT.mT}
-          width={PLOT.plotW}
-          height={PLOT.plotH}
-          fill={COLOR.voidSoft}
-          fillOpacity="0.55"
-          stroke="none"
-        />
+      <rect
+        x={PLOT.mL} y={PLOT.mT}
+        width={PLOT.plotW} height={PLOT.plotH}
+        fill="url(#bgFade)"
+      />
 
-        {/* Agent-timescale band — darker strip left of τ = 10³ yr. */}
-        {show.agentBand && (
-          <g style={{ transition: "opacity 500ms ease" }}>
-            <rect
-              x={agentX0}
-              y={PLOT.mT}
-              width={agentX1 - agentX0}
-              height={PLOT.plotH}
-              fill={COLOR.void}
-              fillOpacity="0.35"
-            />
-            <line
-              x1={agentX1}
-              y1={PLOT.mT}
-              x2={agentX1}
-              y2={PLOT.mT + PLOT.plotH}
-              stroke={COLOR.ghost}
-              strokeOpacity="0.35"
-              strokeWidth="1"
-              strokeDasharray="2 4"
-            />
-            <text
-              x={agentX1 - 8}
-              y={PLOT.mT + 16}
-              textAnchor="end"
-              fontFamily={FONT.mono}
-              fontSize="10"
-              fill={COLOR.inkFaint}
-              fontStyle="italic"
-            >
-              agent cutoff · τ = 10³ yr
-            </text>
-          </g>
-        )}
-
-        {/* Infeasible region. */}
-        {show.infeasible && (
-          <g>
-            <path
-              d={infeasiblePath}
-              fill={COLOR.inkGhost}
-              fillOpacity="0.22"
-            />
-            <path d={infeasiblePath} fill="url(#fe-hatch)" />
-          </g>
-        )}
-
-        {/* Gridlines. */}
-        {show.axes !== false && (
-          <g>
-            {tauTicks.map((e) => (
+      {/* ─ Axes + grid ─ */}
+      <g style={{ opacity: state.axes ? 1 : 0, transition: "opacity 600ms" }}>
+        {tauTicks.map((lt) => {
+          const x = tauYrToX(Math.pow(10, lt));
+          return (
+            <g key={`tx-${lt}`}>
               <line
-                key={`tx${e}`}
-                x1={tauYrToX(Math.pow(10, e))}
-                y1={PLOT.mT}
-                x2={tauYrToX(Math.pow(10, e))}
-                y2={PLOT.mT + PLOT.plotH}
-                stroke={COLOR.inkGhost}
-                strokeWidth="0.5"
-                strokeOpacity="0.35"
+                x1={x} y1={PLOT.mT} x2={x} y2={PLOT.mT + PLOT.plotH}
+                stroke={COLOR.inkVeil} strokeWidth="1"
               />
-            ))}
-            {lTicks.map((e) => (
-              <line
-                key={`ly${e}`}
-                x1={PLOT.mL}
-                y1={lLyToY(Math.pow(10, e))}
-                x2={PLOT.mL + PLOT.plotW}
-                y2={lLyToY(Math.pow(10, e))}
-                stroke={COLOR.inkGhost}
-                strokeWidth="0.5"
-                strokeOpacity="0.35"
-              />
-            ))}
-          </g>
-        )}
-
-        {/* Sweep-σ ghost envelopes. */}
-        {sweepSigma &&
-          sigmaGhosts.map((g, i) => (
-            <path
-              key={`ghost-${i}`}
-              d={g.path}
-              fill="none"
-              stroke={COLOR.ink}
-              strokeOpacity="0.12"
-              strokeWidth="1"
-            />
-          ))}
-
-        {/* Lieb-Robinson tooth. */}
-        {show.L_R && (
-          <g>
-            <path
-              d={LRSplit.nonBindingPath}
-              fill="none"
-              stroke={COLOR.inkMuted}
-              strokeOpacity="0.45"
-              strokeWidth="1"
-              strokeDasharray="3 3"
-            />
-            <path
-              d={
-                show.envelope
-                  ? LRSplit.bindingPath
-                  : `${LRSplit.bindingPath} ${LRSplit.nonBindingPath}`
-              }
-              fill="none"
-              stroke={COLOR.ink}
-              strokeOpacity={show.envelope ? 0.55 : 0.85}
-              strokeWidth={show.envelope ? 1.2 : 1.6}
-            />
-            {show.L_R_label !== false && (
-              <LabeledCurve
-                curveFn={(t) => L_R(t, v)}
-                label="L_R(τ) = cτ / 2"
-                subLabel="Lieb–Robinson · relativistic"
-                anchorLogT={-0.2}
-                yOffset={-18}
-              />
-            )}
-          </g>
-        )}
-
-        {/* Landauer tooth. */}
-        {show.L_E && (
-          <g>
-            <path
-              d={LESplit.nonBindingPath}
-              fill="none"
-              stroke={COLOR.inkMuted}
-              strokeOpacity="0.45"
-              strokeWidth="1"
-              strokeDasharray="3 3"
-            />
-            <path
-              d={
-                show.envelope
-                  ? LESplit.bindingPath
-                  : `${LESplit.bindingPath} ${LESplit.nonBindingPath}`
-              }
-              fill="none"
-              stroke={COLOR.ink}
-              strokeOpacity={show.envelope ? 0.55 : 0.85}
-              strokeWidth={show.envelope ? 1.2 : 1.6}
-            />
-            {show.L_E_label !== false && (
-              <LabeledCurve
-                curveFn={(t) => L_E(t, lam, T, L_star)}
-                label="L_E(τ) = λ √(L⊙ τ / kT ln 2)"
-                subLabel={`Landauer · energetic · λ = ${fmtSci(lam)} m`}
-                anchorLogT={6.5}
-                yOffset={14}
-              />
-            )}
-          </g>
-        )}
-
-        {/* COMPOSED ENVELOPE — the wall. Heaviest stroke on the plot. */}
-        {show.envelope && (
-          <g>
-            <path
-              d={envelopePath}
-              fill="none"
-              stroke={COLOR.ink}
-              strokeWidth="2.6"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              style={{ cursor: onEnvelopeClick ? "pointer" : "default" }}
-            />
-            {/* Fat invisible click target. */}
-            {onEnvelopeClick && (
-              <path
-                d={envelopePath}
-                fill="none"
-                stroke="transparent"
-                strokeWidth="22"
-                style={{ cursor: "pointer" }}
-                onClick={handleEnvelopeClick}
-              />
-            )}
-          </g>
-        )}
-
-        {/* τ* cusp marker. Offset label below to avoid colliding with
-            the Landauer-tooth label which anchors to the upper right. */}
-        {show.tauStar && tauStarInRange && show.envelope && (
-          <g>
-            <circle
-              cx={tauYrToX(tauStarYr)}
-              cy={lLyToY(LatTauStar / LY)}
-              r="5"
-              fill={COLOR.void}
-              stroke={COLOR.ink}
-              strokeWidth="1.5"
-            />
-            <line
-              x1={tauYrToX(tauStarYr)}
-              y1={lLyToY(LatTauStar / LY) + 6}
-              x2={tauYrToX(tauStarYr) - 40}
-              y2={lLyToY(LatTauStar / LY) + 40}
-              stroke={COLOR.inkMuted}
-              strokeWidth="0.8"
-              strokeOpacity="0.5"
-            />
-            <text
-              x={tauYrToX(tauStarYr) - 44}
-              y={lLyToY(LatTauStar / LY) + 44}
-              textAnchor="end"
-              fontFamily={FONT.mono}
-              fontSize="10"
-              fill={COLOR.ink}
-              fontStyle="italic"
-            >
-              τ*
-            </text>
-            <text
-              x={tauYrToX(tauStarYr) - 44}
-              y={lLyToY(LatTauStar / LY) + 56}
-              textAnchor="end"
-              fontFamily={FONT.mono}
-              fontSize="9"
-              fill={COLOR.inkFaint}
-              fontStyle="italic"
-            >
-              teeth meet
-            </text>
-          </g>
-        )}
-
-        {/* Prediction curve — delegated to caller. */}
-        {prediction &&
-          prediction.length > 0 &&
-          predictionRender &&
-          predictionRender(prediction, !!predictionEditable, onPredictionChange)}
-
-        {/* Scenario overlays. */}
-        {scenarios &&
-          scenarios.map((s) => {
-            const isActive = s.id === activeScenario;
-            return (
-              <g key={s.id}>
-                <circle
-                  cx={tauYrToX(s.tau_yr)}
-                  cy={lLyToY(s.L_target_ly)}
-                  r={isActive ? 7 : 4}
-                  fill={isActive ? COLOR.ghost : "transparent"}
-                  stroke={COLOR.ink}
-                  strokeWidth={isActive ? 2 : 1}
-                  strokeOpacity={isActive ? 1 : 0.55}
-                />
-                {isActive && (
-                  <text
-                    x={tauYrToX(s.tau_yr) + 12}
-                    y={lLyToY(s.L_target_ly) - 8}
-                    fontFamily={FONT.display}
-                    fontSize="14"
-                    fill={COLOR.ink}
-                    fontStyle="italic"
-                  >
-                    {s.label.toLowerCase()}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-
-        {/* Live trajectory overlay. */}
-        {trajectory}
-
-        {/* Axes. */}
-        {show.axes !== false && (
-          <g>
-            {tauTicks.map((e) => (
               <text
-                key={`tlab${e}`}
-                x={tauYrToX(Math.pow(10, e))}
-                y={PLOT.mT + PLOT.plotH + 18}
+                x={x} y={PLOT.mT + PLOT.plotH + 22}
                 textAnchor="middle"
-                fontFamily={FONT.mono}
-                fontSize="10"
-                fill={COLOR.inkMuted}
+                fontFamily={FONT.mono} fontSize="10" fill={COLOR.inkFaint}
               >
-                {fmtDecades(e)}
+                {fmtDecades(lt)}
               </text>
-            ))}
-            {lTicks.map((e) => (
+            </g>
+          );
+        })}
+        {lTicks.map((ll) => {
+          const y = lLyToY(Math.pow(10, ll));
+          return (
+            <g key={`ly-${ll}`}>
+              <line
+                x1={PLOT.mL} y1={y} x2={PLOT.mL + PLOT.plotW} y2={y}
+                stroke={COLOR.inkVeil} strokeWidth="1"
+              />
               <text
-                key={`llab${e}`}
-                x={PLOT.mL - 10}
-                y={lLyToY(Math.pow(10, e)) + 3}
+                x={PLOT.mL - 12} y={y + 3}
                 textAnchor="end"
-                fontFamily={FONT.mono}
-                fontSize="10"
-                fill={COLOR.inkMuted}
+                fontFamily={FONT.mono} fontSize="10" fill={COLOR.inkFaint}
               >
-                {fmtDecadesL(e)}
+                {fmtDecadesL(ll)}
               </text>
-            ))}
+            </g>
+          );
+        })}
+        <rect
+          x={PLOT.mL} y={PLOT.mT}
+          width={PLOT.plotW} height={PLOT.plotH}
+          fill="none" stroke={COLOR.inkGhost} strokeWidth="1"
+        />
+        <text
+          x={PLOT.mL + PLOT.plotW / 2} y={PLOT.H - 22}
+          textAnchor="middle"
+          fontFamily={FONT.mono} fontSize="11"
+          letterSpacing="0.18em" fill={COLOR.inkMuted}
+        >
+          τ — RESPONSE TIMESCALE
+        </text>
+        <text
+          x={26} y={PLOT.mT + PLOT.plotH / 2}
+          textAnchor="middle"
+          transform={`rotate(-90, 26, ${PLOT.mT + PLOT.plotH / 2})`}
+          fontFamily={FONT.mono} fontSize="11"
+          letterSpacing="0.18em" fill={COLOR.inkMuted}
+        >
+          L — COORDINATED EXTENT
+        </text>
+      </g>
+
+      {/* ─ Agent-plausible band ─ */}
+      <g style={{ opacity: state.agentBand ? 1 : 0, transition: "opacity 600ms" }}>
+        <rect
+          x={tauYrToX(0.001)} y={PLOT.mT}
+          width={tauYrToX(1000) - tauYrToX(0.001)} height={PLOT.plotH}
+          fill={COLOR.ghost} fillOpacity="0.025"
+        />
+        <text
+          x={tauYrToX(1)} y={PLOT.mT + 18}
+          textAnchor="middle"
+          fontFamily={FONT.mono} fontSize="9"
+          letterSpacing="0.2em" fill={COLOR.ghostSoft}
+          opacity="0.7"
+        >
+          AGENT-PLAUSIBLE τ
+        </text>
+      </g>
+
+      {/* ─ Infeasible region ─ */}
+      <g style={{ opacity: state.infeasible ? 1 : 0, transition: "opacity 800ms" }}>
+        <path d={paths.infPath} fill="url(#infeas)" />
+        <path d={paths.infPath} fill="url(#hatch)" />
+        <text
+          x={tauYrToX(1e6)} y={PLOT.mT + 60}
+          textAnchor="middle"
+          fontFamily={FONT.display} fontStyle="italic" fontSize="22"
+          fill={COLOR.sanguineWash} opacity="0.7"
+        >
+          forbidden
+        </text>
+      </g>
+
+      {/* ─ Small multiples mode (beat 7) replaces L_R / L_E / envelope ─ */}
+      {state.smallMultiples && (
+        <SmallMultiplesInside lam={lam} T={T} v={v} L_star={L_star} />
+      )}
+
+      {/* ─ L_R curve ─ */}
+      {!state.smallMultiples && (
+        <g style={{ opacity: state.L_R ? 1 : 0, transition: "opacity 600ms" }}>
+          <path
+            d={paths.lrPath} fill="none"
+            stroke={COLOR.ghost}
+            strokeWidth={state.envelope ? 1 : 1.8}
+            strokeOpacity={state.envelope ? 0.4 : 1}
+            strokeDasharray={state.envelope ? "4 3" : "none"}
+            strokeLinecap="round"
+          />
+          {!state.envelope && state.L_R && (
             <text
-              x={PLOT.mL + PLOT.plotW / 2}
-              y={PLOT.H - 24}
-              textAnchor="middle"
-              fontFamily={FONT.display}
-              fontSize="15"
-              fill={COLOR.inkBody}
-              fontStyle="italic"
+              x={tauYrToX(1e7)}
+              y={lLyToY(L_R(1e7 * SEC_PER_YR, v) / LY) - 14}
+              fontFamily={FONT.mono} fontSize="11" fill={COLOR.ghost}
+              fontWeight="500"
             >
-              coordination timescale&nbsp;&nbsp;τ
+              L_R = vτ/2  ·  light
             </text>
+          )}
+        </g>
+      )}
+
+      {/* ─ L_E curve ─ */}
+      {!state.smallMultiples && (
+        <g style={{ opacity: state.L_E ? 1 : 0, transition: "opacity 600ms" }}>
+          <path
+            d={paths.lePath} fill="none"
+            stroke={COLOR.amber}
+            strokeWidth={state.envelope ? 1 : 1.8}
+            strokeOpacity={state.envelope ? 0.4 : 1}
+            strokeDasharray={state.envelope ? "4 3" : "none"}
+            strokeLinecap="round"
+          />
+          {!state.envelope && state.L_E && (
             <text
-              transform={`translate(22, ${PLOT.mT + PLOT.plotH / 2}) rotate(-90)`}
-              textAnchor="middle"
-              fontFamily={FONT.display}
-              fontSize="15"
-              fill={COLOR.inkBody}
-              fontStyle="italic"
+              x={tauYrToX(1e6)}
+              y={lLyToY(L_E(1e6 * SEC_PER_YR, lam, T, L_star) / LY) + 22}
+              fontFamily={FONT.mono} fontSize="11" fill={COLOR.amber}
+              fontWeight="500"
             >
-              coordinated extent&nbsp;&nbsp;L
+              L_E = λ√(L⊙τ/kT ln2)  ·  heat
+            </text>
+          )}
+        </g>
+      )}
+
+      {/* ─ Envelope ─ */}
+      {!state.smallMultiples && (
+        <g style={{ opacity: state.envelope ? 1 : 0, transition: "opacity 800ms" }}>
+          <path
+            d={paths.envPath} fill="none"
+            stroke={COLOR.ink} strokeWidth="2.4"
+            strokeLinejoin="round" strokeLinecap="round"
+          />
+        </g>
+      )}
+
+      {/* ─ τ* cusp marker ─ */}
+      {state.tauStar && (
+        <g>
+          <line
+            x1={tauYrToX(tauStarYr)} y1={PLOT.mT}
+            x2={tauYrToX(tauStarYr)} y2={PLOT.mT + PLOT.plotH}
+            stroke={COLOR.ghostSoft} strokeWidth="1"
+            strokeDasharray="2 4" strokeOpacity="0.6"
+          />
+          <circle
+            cx={tauYrToX(tauStarYr)}
+            cy={lLyToY(L_env(tauStarYr * SEC_PER_YR, lam, T, v, L_star) / LY)}
+            r="6"
+            fill={COLOR.void} stroke={COLOR.ink} strokeWidth="2"
+          />
+          <text
+            x={tauYrToX(tauStarYr) + 12} y={PLOT.mT + 32}
+            fontFamily={FONT.display} fontStyle="italic" fontSize="20"
+            fill={COLOR.ink}
+          >
+            τ*
+          </text>
+          <text
+            x={tauYrToX(tauStarYr) + 12} y={PLOT.mT + 50}
+            fontFamily={FONT.mono} fontSize="9" fill={COLOR.inkMuted}
+          >
+            {fmtTau(tauStarYr)}
+          </text>
+        </g>
+      )}
+
+      {/* ─ Overlay sweep (beat 8) ─ */}
+      {state.overlay &&
+        overlayVariants.map((va, i) => (
+          <g key={i}>
+            <path
+              d={va.path} fill="none"
+              stroke={va.color} strokeWidth="1.5" strokeOpacity="0.85"
+            />
+            <text
+              x={PLOT.mL + PLOT.plotW - 14}
+              y={PLOT.mT + 22 + i * 16}
+              textAnchor="end"
+              fontFamily={FONT.mono} fontSize="10" fill={va.color}
+            >
+              {va.label}
             </text>
           </g>
-        )}
+        ))}
 
-        {/* Overline label (optional). */}
-        {label && (
-          <text
-            x={PLOT.mL}
-            y={PLOT.mT - 18}
-            fontFamily={FONT.display}
-            fontSize="15"
-            fill={COLOR.inkBody}
-            fontStyle="italic"
-          >
-            {label}
-          </text>
-        )}
-      </svg>
-    </div>
+      {/* ─ Scenario marks ─ */}
+      {state.scenarioMarks &&
+        SCENARIO_LIST.map((s) => {
+          const x = tauYrToX(s.tau_yr);
+          const y = lLyToY(s.L_target_ly);
+          const envAt = L_env(s.tau_yr * SEC_PER_YR, lam, T, v, L_star);
+          const inside = s.L_target_ly * LY <= envAt;
+          return (
+            <g key={s.id}>
+              <circle
+                cx={x} cy={y}
+                r={inside ? 5 : 6}
+                fill={inside ? COLOR.ghost : COLOR.sanguine}
+                stroke={COLOR.void} strokeWidth="1.5"
+              />
+              {!inside && (
+                <line
+                  x1={x - 6} y1={y} x2={x + 6} y2={y}
+                  stroke={COLOR.sanguine} strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              )}
+            </g>
+          );
+        })}
+
+      {/* ─ Prediction curve (You-Draw-It) ─ */}
+      {state.prediction && prediction && (
+        <PredictionCurve
+          points={prediction}
+          editable={!state.predictionLocked}
+          onChange={onPredictionChange}
+        />
+      )}
+
+      {/* ─ Trajectory rendering for strategy beats ─ */}
+      {state.trajectory && (
+        <TrajectoryRender
+          scenarioId="galactic"
+          progress={trajectoryProgress}
+          strategy={state.trajectory}
+          showCoordinationChannel={state.fissionMode === "branch"}
+          lam={lam} T={T} v={v} L_star={L_star}
+        />
+      )}
+    </svg>
   );
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-//  LabeledCurve — positions a two-line label at a given τ on the curve
+//  Small-multiples-inside-plot — beat 7 mode where the main plot area
+//  becomes a 2×2 grid of envelopes, one per scenario, with shared axes.
 // ───────────────────────────────────────────────────────────────────────────
 
-function LabeledCurve({
-  curveFn,
-  label,
-  subLabel,
-  anchorLogT,
-  yOffset,
+function SmallMultiplesInside({
+  lam, T, v, L_star,
 }: {
-  curveFn: (tau_sec: number) => number;
-  label: string;
-  subLabel: string;
-  anchorLogT: number;
-  yOffset: number;
+  lam: number; T: number; v: number; L_star: number;
 }) {
-  const tauYr = Math.pow(10, anchorLogT);
-  const tauSec = tauYr * SEC_PER_YR;
-  const L_m = curveFn(tauSec);
-  const L_ly_v = L_m / LY;
-  if (L_ly_v <= L_MIN_LY || L_ly_v > L_MAX_LY) return null;
-  const x = tauYrToX(tauYr);
-  const y = lLyToY(L_ly_v) + yOffset;
+  const cellW = PLOT.plotW / 2;
+  const cellH = PLOT.plotH / 2;
+
   return (
     <g>
-      <text
-        x={x}
-        y={y}
-        fontFamily={FONT.mono}
-        fontSize="11"
-        fill={COLOR.ink}
-        fontWeight="500"
-      >
-        {label}
-      </text>
-      <text
-        x={x}
-        y={y + 13}
-        fontFamily={FONT.mono}
-        fontSize="9.5"
-        fill={COLOR.inkMuted}
-        fillOpacity="0.85"
-        fontStyle="italic"
-      >
-        {subLabel}
-      </text>
+      {SCENARIO_LIST.map((s, i) => {
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        const cx = PLOT.mL + col * cellW;
+        const cy = PLOT.mT + row * cellH;
+
+        const localX = (tauYr: number) =>
+          cx + (cellW * (Math.log10(tauYr) - logT_MIN)) / (logT_MAX - logT_MIN);
+        const localY = (Lly: number) => {
+          const c = Math.max(L_MIN_LY, Math.min(L_MAX_LY * 100, Lly));
+          return cy + cellH * (1 - (Math.log10(c) - logL_MIN) / (logL_MAX - logL_MIN));
+        };
+
+        const pts: string[] = [];
+        const inf: string[] = [`${localX(TAU_MIN_YR).toFixed(1)},${cy.toFixed(1)}`];
+        const N = 120;
+        for (let k = 0; k <= N; k++) {
+          const lt = logT_MIN + ((logT_MAX - logT_MIN) * k) / N;
+          const ts = Math.pow(10, lt) * SEC_PER_YR;
+          const Llv = L_env(ts, lam, T, v, L_star) / LY;
+          const x = localX(Math.pow(10, lt));
+          if (Llv > L_MIN_LY) pts.push(`${x.toFixed(1)},${localY(Llv).toFixed(1)}`);
+          inf.push(`${x.toFixed(1)},${localY(Math.max(L_MIN_LY, Llv)).toFixed(1)}`);
+        }
+        inf.push(`${localX(TAU_MAX_YR).toFixed(1)},${cy.toFixed(1)}`);
+
+        const tx = localX(s.tau_yr);
+        const ty = localY(s.L_target_ly);
+        const envAt = L_env(s.tau_yr * SEC_PER_YR, lam, T, v, L_star);
+        const inside = s.L_target_ly * LY <= envAt;
+
+        return (
+          <g key={s.id}>
+            <rect
+              x={cx + 2} y={cy + 2}
+              width={cellW - 4} height={cellH - 4}
+              fill={COLOR.voidMid}
+              stroke={COLOR.inkVeil} strokeWidth="1"
+            />
+            <path d={`M ${inf.join(" L ")} Z`} fill={COLOR.sanguine} fillOpacity="0.1" />
+            <path
+              d={pts.length >= 2 ? `M ${pts.join(" L ")}` : ""}
+              fill="none" stroke={COLOR.ink} strokeWidth="1.4"
+              strokeLinejoin="round"
+            />
+            <circle
+              cx={tx} cy={ty}
+              r={inside ? 4 : 5}
+              fill={inside ? COLOR.ghost : COLOR.sanguine}
+              stroke={COLOR.void} strokeWidth="1.4"
+            />
+            {!inside && (
+              <line
+                x1={tx - 5} y1={ty} x2={tx + 5} y2={ty}
+                stroke={COLOR.sanguine} strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            )}
+            <text
+              x={cx + 12} y={cy + 18}
+              fontFamily={FONT.display} fontStyle="italic" fontSize="13"
+              fill={COLOR.ink}
+            >
+              {s.label.toLowerCase()}
+            </text>
+            <text
+              x={cx + 12} y={cy + 32}
+              fontFamily={FONT.mono} fontSize="9" fill={COLOR.inkMuted}
+            >
+              {s.sub}
+            </text>
+            <text
+              x={cx + cellW - 12} y={cy + cellH - 12}
+              textAnchor="end"
+              fontFamily={FONT.mono} fontSize="9"
+              fill={inside ? COLOR.ghost : COLOR.sanguine}
+              fontWeight="500"
+            >
+              {inside ? "◉ inside" : "✕ outside"}
+            </text>
+          </g>
+        );
+      })}
     </g>
   );
 }

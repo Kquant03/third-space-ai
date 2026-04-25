@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+**/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -39,3 +40,31 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# cloudflare workers / wrangler
+.wrangler/
+**/.wrangler/
+.dev.vars
+**/.dev.vars
+
+# python
+.venv/
+**/.venv/
+venv/
+**/venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# editor / os
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+
+# logs
+*.log

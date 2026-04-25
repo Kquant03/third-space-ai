@@ -5,7 +5,7 @@
 //  framebuffer creation. Deliberately identical in shape to Lenia's
 //  webgl.ts — both substrates use the same pipeline primitives, but we
 //  keep them per-substrate so each module can be read and reasoned about
-//  without jumping directories. The duplication is <120 lines and it
+//  without jumping directories. The duplication is <140 lines and it
 //  means a future simulation that wants to use, say, REPEAT-wrapped
 //  textures instead of CLAMP doesn't have to touch anyone else's code.
 //
@@ -41,6 +41,13 @@ export function compileShader(
   return s;
 }
 
+/**
+ * Compile + link a shader pair, then query all active uniforms and cache
+ * their locations. After successful link the individual shader objects
+ * are detached and deleted — the linked program retains its own copy of
+ * the compiled binaries, so leaving the source shaders attached is just
+ * a leak. Returns null on failure.
+ */
 export function makeProgram(
   gl: WebGL2RenderingContext,
   vsSrc: string,
@@ -48,18 +55,40 @@ export function makeProgram(
 ): Program | null {
   const vs = compileShader(gl, gl.VERTEX_SHADER, vsSrc);
   const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSrc);
-  if (!vs || !fs) return null;
+  if (!vs || !fs) {
+    if (vs) gl.deleteShader(vs);
+    if (fs) gl.deleteShader(fs);
+    return null;
+  }
+
   const p = gl.createProgram();
-  if (!p) return null;
+  if (!p) {
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    return null;
+  }
   gl.attachShader(p, vs);
   gl.attachShader(p, fs);
   gl.linkProgram(p);
+
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
     // eslint-disable-next-line no-console
     console.error("Program link error:", gl.getProgramInfoLog(p));
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
     gl.deleteProgram(p);
     return null;
   }
+
+  // Detach + delete the individual shaders now that the program has
+  // linked successfully. Without this the shader source is held alive
+  // for the program's lifetime — small leak per program but accumulates
+  // under Strict Mode double-mount.
+  gl.detachShader(p, vs);
+  gl.detachShader(p, fs);
+  gl.deleteShader(vs);
+  gl.deleteShader(fs);
+
   const u: UniformMap = {};
   const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS) as number;
   for (let i = 0; i < n; i++) {

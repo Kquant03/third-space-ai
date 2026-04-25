@@ -167,9 +167,52 @@ export default function PDFReader({
     return () => window.removeEventListener("keydown", onKey);
   }, [currentPage, numPages, goToPage]);
 
-  const onPageInView = useCallback((n: number) => {
-    setCurrentPage((prev) => (prev === n ? prev : n));
-  }, []);
+  // Current-page tracking via scroll + rAF. A per-page
+  // IntersectionObserver is unreliable here — intersectionRatio is
+  // computed relative to the target (the page), so a tall page in a
+  // narrower sensor band never crosses a meaningful ratio threshold.
+  // Instead: on every scroll tick, find the page whose top has last
+  // crossed a sensor line in the upper third of the viewport. Works
+  // regardless of page size and updates correctly during Lenis's
+  // programmatic scrolls. rAF-throttled, ~free.
+  useEffect(() => {
+    if (!numPages) return;
+
+    const SENSOR_Y = 220; // px from top of viewport
+    let rafId = 0;
+
+    const update = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        let best = 1;
+        for (let p = 1; p <= numPages; p++) {
+          const el = document.getElementById(`pdf-page-${p}`);
+          if (!el) continue;
+          const top = el.getBoundingClientRect().top;
+          if (top <= SENSOR_Y) {
+            best = p;
+          } else {
+            // pages are in DOM order; once one's top is below the
+            // sensor, every later page is too.
+            break;
+          }
+        }
+        setCurrentPage((prev) => (prev === best ? prev : best));
+      });
+    };
+
+    type LenisLike = { on?: (e: string, cb: () => void) => void; off?: (e: string, cb: () => void) => void };
+    const lenis = (window as unknown as { __lenis?: LenisLike }).__lenis;
+    lenis?.on?.("scroll", update);
+    window.addEventListener("scroll", update, { passive: true });
+    update(); // establish initial value once pages have mounted
+
+    return () => {
+      window.removeEventListener("scroll", update);
+      lenis?.off?.("scroll", update);
+      cancelAnimationFrame(rafId);
+    };
+  }, [numPages]);
 
   // Keep Document options stable — handing a new object every render
   // makes react-pdf re-fetch the worker assets.
@@ -295,7 +338,6 @@ export default function PDFReader({
                 key={i + 1}
                 pageNumber={i + 1}
                 width={width}
-                onInView={onPageInView}
               />
             ))}
           </div>
@@ -337,22 +379,17 @@ export default function PDFReader({
 // ───────────────────────────────────────────────────────────────────
 //  PageFrame — per-page lazy render
 // ───────────────────────────────────────────────────────────────────
-//  Two observers per frame:
-//   (1) a generous "should render" observer with ±600px root margin,
-//       so rasterization starts well before the page scrolls in;
-//   (2) a narrower "in view" observer for updating the current-page
-//       meter at the bottom, tuned so the meter advances when the
-//       page's centerline enters the middle third of the viewport.
+//  Single observer per frame with a generous ±600px root margin, so
+//  rasterization starts well before the page scrolls in. Current-page
+//  tracking lives in PDFReader (scroll-based) and is handled there.
 // ───────────────────────────────────────────────────────────────────
 
 function PageFrame({
   pageNumber,
   width,
-  onInView,
 }: {
   pageNumber: number;
   width: number;
-  onInView: (n: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [shouldRender, setShouldRender] = useState(false);
@@ -375,26 +412,6 @@ function PageFrame({
     io.observe(el);
     return () => io.disconnect();
   }, []);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting && entry.intersectionRatio > 0.4) {
-            onInView(pageNumber);
-          }
-        }
-      },
-      {
-        rootMargin: "-30% 0px -30% 0px",
-        threshold: [0, 0.25, 0.5, 0.75, 1],
-      },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [onInView, pageNumber]);
 
   return (
     <div

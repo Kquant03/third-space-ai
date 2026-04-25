@@ -36,7 +36,10 @@ export function compileShader(
 
 /**
  * Compile + link a shader pair, then query all active uniforms and cache
- * their locations. Returns null on failure.
+ * their locations. After successful link the individual shader objects
+ * are detached and deleted — the linked program retains its own copy of
+ * the compiled binaries, so leaving the source shaders attached is just
+ * a leak. Returns null on failure.
  */
 export function createProgram(
   gl: WebGL2RenderingContext,
@@ -45,10 +48,18 @@ export function createProgram(
 ): Program | null {
   const vs = compileShader(gl, gl.VERTEX_SHADER, vsSrc);
   const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSrc);
-  if (!vs || !fs) return null;
+  if (!vs || !fs) {
+    if (vs) gl.deleteShader(vs);
+    if (fs) gl.deleteShader(fs);
+    return null;
+  }
 
   const p = gl.createProgram();
-  if (!p) return null;
+  if (!p) {
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    return null;
+  }
   gl.attachShader(p, vs);
   gl.attachShader(p, fs);
   gl.linkProgram(p);
@@ -56,9 +67,20 @@ export function createProgram(
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
     // eslint-disable-next-line no-console
     console.error("Program link error:", gl.getProgramInfoLog(p));
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
     gl.deleteProgram(p);
     return null;
   }
+
+  // Detach and free the individual shader objects now that the program
+  // has been linked successfully. Without this, the shader source is
+  // held alive for the lifetime of the program — a textbook GL leak,
+  // small per program but it accumulates under Strict Mode double-mount.
+  gl.detachShader(p, vs);
+  gl.detachShader(p, fs);
+  gl.deleteShader(vs);
+  gl.deleteShader(fs);
 
   const uniforms: UniformMap = {};
   const count = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS) as number;

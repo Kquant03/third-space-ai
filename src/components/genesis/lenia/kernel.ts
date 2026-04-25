@@ -60,6 +60,9 @@ export function buildKernelData(R: number, peaks: number[]): Float32Array {
  * Format: digits for run-length; letters for intensity (A=1..Z=26, then
  * p-y are base multipliers of 26 composed with A-Z); '.' zero; '$' row
  * separator; '!' string terminator.
+ *
+ * Throws on malformed input — `safeDecodeRLE` wraps this with a fallback
+ * so a typo in the species table doesn't take down the whole page.
  */
 export function decodeRLE(str: string): number[][] {
   const rows = str.replace(/!$/, "").split("$");
@@ -106,7 +109,29 @@ export function decodeRLE(str: string): number[][] {
       for (let j = 0; j < row.length; j++) row[j] /= maxVal;
     }
   }
+  if (grid.length === 0 || grid[0].length === 0) {
+    throw new Error("decodeRLE produced empty grid");
+  }
   return grid;
+}
+
+/**
+ * Wrapper around decodeRLE that swallows decode failures and falls back
+ * to ORBIUM_FALLBACK with a console warning. Use this anywhere a
+ * hand-typed RLE string is being decoded — a single typo elsewhere should
+ * not prevent the whole page from mounting.
+ */
+function safeDecodeRLE(str: string, label: string): number[][] {
+  try {
+    return decodeRLE(str);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[Lenia] decodeRLE failed for "${label}", falling back to Orbium:`,
+      err,
+    );
+    return ORBIUM_FALLBACK;
+  }
 }
 
 // ─── Species library ──────────────────────────────────────────────────────
@@ -196,27 +221,54 @@ export function scaleSeed(
   return out;
 }
 
+// ─── Seeded RNG (mulberry32) ──────────────────────────────────────────────
+/**
+ * Returns Math.random when `seed` is undefined, or a deterministic
+ * mulberry32 PRNG bound to the given seed otherwise. Used by
+ * buildInitialState so paper figures can be reproducible — Stanley can
+ * pass a fixed seed when generating the figures for "Against Grabby
+ * Expansion" or the Ghost Species paper, then rerun and get the same
+ * creature placement every time. Without a seed the historical
+ * non-deterministic behaviour is preserved.
+ */
+function makeRng(seed?: number): () => number {
+  if (seed === undefined) return Math.random;
+  let s = (seed >>> 0) || 1; // seed of 0 collapses mulberry32 — bump to 1
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), s | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // ─── Initial-state builder ────────────────────────────────────────────────
 /**
  * Build the initial RGBA32F state texture (N×N). Places `count` copies of
  * the chosen species seed at distinct positions on the torus, with a
  * minimum separation proportional to R. Soup mode lays out a 3×3 grid
  * (minus centre) for competitive ecosystem tests.
+ *
+ * `seed` (optional) makes the placement deterministic via mulberry32.
+ * Use this for reproducible paper figures; omit it for the default
+ * non-deterministic behaviour.
  */
 export function buildInitialState(
   R: number,
   count: number,
   isSoup: boolean,
   speciesKey: SpeciesKey | undefined,
+  seed?: number,
 ): Float32Array {
+  const rng = makeRng(seed);
   const data = new Float32Array(N * N * 4);
   const baseSeed =
     speciesKey && SPECIES_RLE[speciesKey]
-      ? decodeRLE(SPECIES_RLE[speciesKey])
+      ? safeDecodeRLE(SPECIES_RLE[speciesKey], speciesKey)
       : ORBIUM_FALLBACK;
-  const seed = R !== 13 ? scaleSeed(baseSeed, 13, R) : baseSeed;
-  const h = seed.length;
-  const w = seed[0].length;
+  const seedGrid = R !== 13 ? scaleSeed(baseSeed, 13, R) : baseSeed;
+  const h = seedGrid.length;
+  const w = seedGrid[0].length;
   const minDist = R * 4;
   const positions: Array<[number, number]> = [];
 
@@ -228,10 +280,10 @@ export function buildInitialState(
         if (row === 1 && col === 1) continue;
         positions.push([
           Math.floor(
-            spacing * (col + 0.5) + (Math.random() - 0.5) * spacing * 0.3,
+            spacing * (col + 0.5) + (rng() - 0.5) * spacing * 0.3,
           ),
           Math.floor(
-            spacing * (row + 0.5) + (Math.random() - 0.5) * spacing * 0.3,
+            spacing * (row + 0.5) + (rng() - 0.5) * spacing * 0.3,
           ),
         ]);
         placed++;
@@ -240,8 +292,8 @@ export function buildInitialState(
   } else {
     let attempts = 0;
     while (positions.length < count && attempts < 300) {
-      const cx = Math.floor(N * 0.12 + Math.random() * N * 0.76);
-      const cy = Math.floor(N * 0.12 + Math.random() * N * 0.76);
+      const cx = Math.floor(N * 0.12 + rng() * N * 0.76);
+      const cy = Math.floor(N * 0.12 + rng() * N * 0.76);
       let ok = true;
       for (const [px, py] of positions) {
         if (
@@ -263,7 +315,7 @@ export function buildInitialState(
         const gx = (((cx - Math.floor(w / 2) + x) % N) + N) % N;
         const gy = (((cy - Math.floor(h / 2) + y) % N) + N) % N;
         const idx = (gy * N + gx) * 4;
-        const v = seed[y][x];
+        const v = seedGrid[y][x];
         data[idx] = Math.max(data[idx], v);
         data[idx + 1] = Math.max(data[idx + 1], v);
       }

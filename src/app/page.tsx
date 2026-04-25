@@ -50,7 +50,7 @@ const PUBLICATIONS: Publication[] = [
     abstract:
       "The instrumental-convergence inference from coherent utility functions to catastrophic resource acquisition is a conjecture, not a theorem — and its scope conditions fail for actual deep-learning systems. This paper argues that the grabby-alien imagination is an economic projection, develops a positive design for homeostatic minds organized around substrate coupling and local coherence, and demonstrates a 4.5× persistence separation between homeostatic and expansionist configurations under a Darwinian fission extension.",
     authors: "Stanley Sebastian",
-    affiliation: "Limen Research",
+    affiliation: "Third Space",
     note: "In sustained dialogue with Claude — Anthropic.",
     href: "/research/against-grabby-expansion",
   },
@@ -63,7 +63,7 @@ const PUBLICATIONS: Publication[] = [
     abstract:
       "We report a Ghost species — a continuous cellular-automaton organism whose parameters place it on the critical boundary between stable pattern and diffusive collapse. The species exhibits persistent structure under perturbation, extended correlation length, and a characteristic flickering morphology consistent with operation near a phase transition. We describe the discovery procedure, the σ-landscape topology, and the implications for artificial-life substrate design.",
     authors: "Stanley Sebastian & Claude",
-    affiliation: "Limen Research",
+    affiliation: "Third Space",
     note: null,
     href: "/research/ghost-species",
   },
@@ -77,7 +77,7 @@ const PUBLICATIONS: Publication[] = [
     abstract:
       "We introduce a Lenia organism defined in four spatial dimensions whose projected 2D cross-section functions as generative seed material for a surrounding ecosystem of lower-dimensional species. The construction formalizes a relationship between dimensional embedding and ecological scaffolding and suggests a design pattern for artificial-life substrates in which organisms and environments are not separable categories.",
     authors: "Stanley Sebastian & Claude",
-    affiliation: "Limen Research",
+    affiliation: "Third Space",
     note: null,
     href: "/research/dihypersphaerome-ventilans",
   },
@@ -106,7 +106,7 @@ const PLATFORMS: Platform[] = [
       "Six simulations running in the browser, each a different thesis about what a substrate is: a lattice of spins at the critical temperature; a reaction-diffusion chemistry cycling through Pearson's classes; an asymmetric force matrix producing predation and membrane; a continuous cellular automaton whose creatures remember shapes they can no longer hold; a four-channel ecosystem seeded by a four-dimensional organism; and The Filter — the paper artifact whose envelope bounds what any expanding agent can do. Paint into any of them. Watch what the rules permit.",
     href: "/genesis",
     cta: "Enter the room",
-    origin: "limenresearch.ai/genesis",
+    origin: "thirdspace.ai/genesis",
   },
   {
     id: "Λ — 002",
@@ -118,7 +118,7 @@ const PLATFORMS: Platform[] = [
       "A pond, ten meters across, three meters deep. Five or six koi at a time, each the sensory surface of a small language model. Lives thirty sim-days long. Relationships form from sustained mutual reflection rather than threshold on a counter. Deaths leave name-tiles; lineages thread across generations. The pond runs continuously behind this page. A visitor who returns on day seventeen finds a fry that wasn't there on day fourteen, because the pond did not pause.",
     href: "/limen-pond",
     cta: "Enter the pond",
-    origin: "limenresearch.ai/limen-pond",
+    origin: "thirdspace.ai/limen-pond",
   },
   {
     id: "Λ — 003",
@@ -140,21 +140,21 @@ const OPEN_DATA = [
     title: "Apocrypha · Sandevistan",
     scope: "100M+ tokens",
     note: "Experiential & imaginative corpora",
-    href: "https://huggingface.co/Replete-AI",
+    href: "https://huggingface.co/datasets/Third-Space/Sandevistan",
   },
   {
     id: "D — 002",
     title: "Caduceus Project",
     scope: "Instruction-formatted",
     note: "Medical & scientific protocols",
-    href: "https://huggingface.co/Replete-AI",
+    href: "https://huggingface.co/datasets/Kquant03/Caduceus-Dataset",
   },
   {
     id: "M — 001",
     title: "Pneuma",
     scope: "Archived",
     note: "Language model trained on realistic interaction",
-    href: "https://huggingface.co/Replete-AI",
+    href: "/research/pneuma",
   },
 ];
 
@@ -508,7 +508,7 @@ export default function Home() {
                     "0 0 140px rgba(127,175,179,0.09), 0 0 40px rgba(244,246,251,0.04)",
                 }}
               >
-                Limen
+                Third Space
               </h1>
             </div>
 
@@ -541,7 +541,7 @@ export default function Home() {
                   color: COLOR.ghost,
                 }}
               >
-                Research
+                AI
               </span>
               <span
                 aria-hidden
@@ -844,13 +844,7 @@ export default function Home() {
                 fontWeight: 400,
               }}
             >
-              Limen Research is an independent research organization. The name
-              is Latin for{" "}
-              <em style={{ color: COLOR.inkStrong, fontStyle: "italic" }}>
-                threshold
-              </em>
-              {" "}— the boundary between two states. The organization
-              studies what persists, what couples, and what passes through.
+              When you accumulate all of the knowledge of all of mankind, you end up with gaps in everything.
             </p>
           </div>
 

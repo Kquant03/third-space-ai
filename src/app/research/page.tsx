@@ -6,7 +6,7 @@ import type { ResearchEntry } from "@/data/papers";
 export const metadata: Metadata = {
   title: "Research",
   description:
-    "The archive of Limen Research — papers, launches, and releases.",
+    "The archive of Third Space — papers, launches, and releases.",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -62,7 +62,7 @@ export default function Research() {
             color: COLOR.inkFaint,
           }}
         >
-          <div>Limen Research</div>
+          <div>Third Space</div>
           <div style={{ letterSpacing: "0.55em", color: COLOR.inkMuted }}>
             — The Archive —
           </div>
@@ -359,7 +359,7 @@ function ArchiveRow({ entry }: { entry: ResearchEntry }) {
           >
             <span style={{ color: COLOR.inkStrong }}>{entry.authors}</span>
             <span style={{ color: COLOR.inkGhost, padding: "0 10px" }}>·</span>
-            Limen Research
+            Third Space
           </div>
         )}
 

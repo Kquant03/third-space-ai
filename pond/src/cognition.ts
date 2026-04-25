@@ -382,7 +382,7 @@ async function callOpenRouter(
     headers: {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
-      "HTTP-Referer": "https://limenresearch.ai",
+      "HTTP-Referer": "https://thirdspace.ai",
       "X-Title": "Limen Pond",
     },
     body: JSON.stringify(body),

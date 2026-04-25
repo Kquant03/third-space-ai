@@ -14,6 +14,11 @@
 //  The `hyperseed` layout is the one most directly tied to the
 //  Dihypersphaerome research content — it demonstrates the paper's claim
 //  that 4D organism dynamics can seed a 3D ecosystem.
+//
+//  `seed` (optional) makes the `swarm` placement deterministic via a
+//  mulberry32 PRNG. Use this for reproducible paper figures; omit for
+//  the default non-deterministic behaviour. The other four ecosystems
+//  are deterministic anyway — `seed` is a no-op for them.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { N } from "./shaders";
@@ -32,8 +37,24 @@ export type EcosystemId =
   | "invasion"
   | "hyperseed";
 
-export function buildEcosystem(presetName: EcosystemId): Float32Array {
+// ─── Seeded RNG (mulberry32) ──────────────────────────────────────────────
+function makeRng(seed?: number): () => number {
+  if (seed === undefined) return Math.random;
+  let s = (seed >>> 0) || 1;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(s ^ (s >>> 15), s | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function buildEcosystem(
+  presetName: EcosystemId,
+  seed?: number,
+): Float32Array {
   const data = new Float32Array(N * N * 4);
+  const rng = makeRng(seed);
 
   const preySeed = scaleSeed(decodeRLE(ORBIUM_RLE), 13, 13);
   const predSeed = scaleSeed(decodeRLE(IGNIS_RLE), 13, 15);
@@ -52,8 +73,8 @@ export function buildEcosystem(presetName: EcosystemId): Float32Array {
     const predPts: Array<[number, number]> = [];
     let att = 0;
     while (preyPts.length < 8 && att < 300) {
-      const cx = 30 + Math.floor(Math.random() * (N - 60));
-      const cy = 30 + Math.floor(Math.random() * (N - 60));
+      const cx = 30 + Math.floor(rng() * (N - 60));
+      const cy = 30 + Math.floor(rng() * (N - 60));
       if (preyPts.every(([px, py]) => Math.hypot(cx - px, cy - py) > minD)) {
         preyPts.push([cx, cy]);
       }
@@ -61,8 +82,8 @@ export function buildEcosystem(presetName: EcosystemId): Float32Array {
     }
     att = 0;
     while (predPts.length < 3 && att < 200) {
-      const cx = 30 + Math.floor(Math.random() * (N - 60));
-      const cy = 30 + Math.floor(Math.random() * (N - 60));
+      const cx = 30 + Math.floor(rng() * (N - 60));
+      const cy = 30 + Math.floor(rng() * (N - 60));
       if (
         [...preyPts, ...predPts].every(
           ([px, py]) => Math.hypot(cx - px, cy - py) > minD,

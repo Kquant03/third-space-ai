@@ -4,7 +4,7 @@
 #  Limen Pond — Cloudflare Workers configuration
 #
 #  The pond lives in a single Durable Object, "Pond", keyed by name so that
-#  every visitor who opens limenresearch.ai is looking through a different
+#  every visitor who opens thirdspace.ai is looking through a different
 #  window at the same body of water. SQLite-backed storage for the koi,
 #  memory stream, events, and relationships. Workers Analytics Engine for
 #  Tier-1 (hot) observability. R2 for Tier-3 (cold) prompt-and-completion
@@ -84,4 +84,4 @@ vars = { POND_ID = "dev", COGNITION_ENABLED = "false" }
 name = "limen-pond"
 # Routes are set in the dashboard; we expose via a subdomain and the
 # Next.js app proxies WebSocket upgrades. No custom domain here — the
-# canonical surface is limenresearch.ai.
+# canonical surface is thirdspace.ai.

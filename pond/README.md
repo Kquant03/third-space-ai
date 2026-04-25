@@ -1,7 +1,7 @@
 # Limen Pond — Backend
 
 The Cloudflare Workers + Durable Object implementation of **Cúramóir's primary instance**.
-One DO, one pond. Every visitor to `limenresearch.ai` connects to the same
+One DO, one pond. Every visitor to `thirdspace.ai` connects to the same
 body of water. See [`LIMEN_POND_MANIFESTO.md`](../LIMEN_POND_MANIFESTO.md)
 for the research frame this code is an instrument of.
 

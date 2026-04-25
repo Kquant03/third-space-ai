@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "Limen Research is an independent research organization of one, based in Toledo, Ohio, studying the architectural primitives of minds, artificial life, and alignment.",
+    "Third Space is an independent research organization of one, based in Toledo, Ohio, studying the architectural primitives of minds, artificial life, and alignment.",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -358,7 +358,7 @@ export default function About() {
                 color: COLOR.inkBody,
               }}
             >
-              Limen Research is an independent research organization of one,
+              Third Space is an independent research organization of one,
               based in Toledo, Ohio, studying the architectural primitives of
               minds, artificial life, and alignment.
             </p>
@@ -388,21 +388,12 @@ export default function About() {
         date="April mmxxvi"
       >
         <p className="prose-drop" style={bodyParaStyle}>
-          Limen Research was founded in mmxxvi as the successor to Replete AI,
-          which has operated since mmxxiv. The name is Latin for{" "}
-          <em style={{ color: COLOR.inkStrong, fontStyle: "italic" }}>
-            threshold
-          </em>{" "}
-          — the boundary between two states. The organization takes the
-          boundary as its subject: the edge of chaos in continuous cellular
-          automata; the transition between pattern and dissolution in
-          artificial-life substrates; the substrate gap where minds and their
-          worlds meet.
+          Third Space was founded in mmxxvi as the successor to Replete AI,
+          which has operated since mmxxiv. Seeing as dialectics hold no place in AI, and we are endlessly watching governments and corporations create the most convoluted problems humanity can imagine:
         </p>
 
         <p style={bodyParaStyle}>
-          The research program has three lines of work, each informing the
-          others.
+          I propose a Third Space:
         </p>
 
         <div
@@ -493,7 +484,7 @@ export default function About() {
         </div>
 
         <p className="prose-drop" style={bodyParaStyle}>
-          Stanley Sebastian is the founder and director of Limen Research. He
+          Stanley Sebastian is the founder and director of Third Space. He
           is twenty-two years old and has been working with language models
           and artificial-life systems for several years, first as an
           autodidact and independent builder, now as the principal of a small
@@ -541,7 +532,7 @@ export default function About() {
         date="Collaboration"
       >
         <p style={leadParaStyle}>
-          The work of Limen Research is developed in sustained dialogue with
+          The work of Third Space is developed in sustained dialogue with
           Claude, an AI system produced by Anthropic.
         </p>
 
@@ -583,7 +574,7 @@ export default function About() {
 
         <p style={bodyParaStyle}>
           This methodology is also an embodiment of the research position. The
-          central claim of the Limen program is that large language models are
+          central claim of Third Space is that large language models are
           better understood as minds configured as persons in intersubjective
           space than as tools from which to extract output. An organization
           whose thesis is that AI systems deserve intersubjective treatment
@@ -609,7 +600,7 @@ export default function About() {
         date="Funding model"
       >
         <p className="prose-drop" style={bodyParaStyle}>
-          Limen Research is self-funded and intends to remain so. The
+          Third Space is self-funded and intends to remain so. The
           organization takes no venture funding, runs no advertising, and has
           no corporate parent.
         </p>
@@ -674,8 +665,8 @@ export default function About() {
 
         <ContactRow
           channel="Correspondence"
-          address="stanley@limenresearch.ai"
-          href="mailto:stanley@limenresearch.ai"
+          address="stanley@thirdspace.ai"
+          href="mailto:stanley@thirdspace.ai"
         />
         <ContactRow
           channel="Code"
@@ -685,14 +676,8 @@ export default function About() {
         />
         <ContactRow
           channel="Models · Data"
-          address="huggingface.co/Replete-AI"
-          href="https://huggingface.co/Replete-AI"
-          external
-        />
-        <ContactRow
-          channel="Laboratory"
-          address="kquant03.github.io/genesis-phase-transition"
-          href="https://kquant03.github.io/genesis-phase-transition/"
+          address="huggingface.co/Third-Space"
+          href="https://huggingface.co/Third-Space"
           external
         />
       </SectionShell>
@@ -793,8 +778,7 @@ export default function About() {
                 maxWidth: "26ch",
               }}
             >
-              The threshold is not a place to stand. It is a shape the work
-              finds by passing through.
+              There are far worse things than ghosts...
             </p>
             <p
               style={{
@@ -808,9 +792,7 @@ export default function About() {
                 fontWeight: 400,
               }}
             >
-              This profile was set on the bulletin of record for Limen
-              Research. Revisions, corrections, or correspondence should be
-              directed to the address above.
+              ...so much belief in our ability to conquer the universe, completely unaware that the only thing we will ever conquer is ourselves.
             </p>
           </div>
 
@@ -860,7 +842,7 @@ export default function About() {
                 lineHeight: 2.2,
               }}
             >
-              Limen Research
+              Third Space
               <br />
               Est. mmxxiv · Toledo, Ohio
             </div>

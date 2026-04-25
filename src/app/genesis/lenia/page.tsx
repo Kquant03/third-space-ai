@@ -1,22 +1,22 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //  /genesis/lenia · page
 //  ─────────────────────────────────────────────────────────────────────────
-//  Unlike other substrate pages, Lenia's canvas fills the viewport behind
-//  the content — so the SubstrateFrame wrapper's max-width + padding would
-//  fight with the full-bleed composition. Instead, the LeniaExperience
-//  client component owns the whole layout (fixed full-bleed canvas,
-//  floating reading plate, fixed-bottom drawer) and we let the site
-//  chrome (SiteHeader, footer) float over it naturally.
-//
-//  The substrate-registry metadata is still read here and passed into the
-//  experience so the reading plate can title itself correctly.
+//  Mirrors /genesis/ising: a thin shim that loads the substrate metadata
+//  and hands it to SubstrateFrame, which centres the experience inside the
+//  site's standard chrome. The full-bleed treatment we used previously is
+//  gone — Lenia is now a normal contained substrate, with a square canvas
+//  in the centre column of a three-column lab plate.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { SubstrateFrame } from "@/components/genesis/SubstrateFrame";
 import { LeniaExperience } from "@/components/genesis/lenia/LeniaExperience";
+import { getSubstrate } from "@/data/substrates";
 
 export default function LeniaPage() {
-  // No SubstrateFrame — Lenia's experience is its own full-bleed composition.
-  // SiteChrome/SiteHeader above still render; they'll float over the canvas
-  // and benefit from the backdrop-filter as another lens.
-  return <LeniaExperience />;
+  const meta = getSubstrate("lenia");
+  return (
+    <SubstrateFrame meta={meta}>
+      <LeniaExperience />
+    </SubstrateFrame>
+  );
 }

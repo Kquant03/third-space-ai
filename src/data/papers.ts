@@ -111,7 +111,23 @@ export const ENTRIES: ResearchEntry[] = [
     subtitle: "Two training corpora, released openly.",
     excerpt:
       "The release of two training corpora — Apocrypha and Sandevistan — comprising over one hundred million tokens of experiential and imaginative text. The synthetic-data methodology, the design of the generation pipeline, and the intended use for downstream fine-tuning.",
-    externalHref: "https://huggingface.co/Replete-AI",
+    externalHref: "https://huggingface.co/datasets/Third-Space/Sandevistan",
+  },
+  {
+    slug: "pneuma",
+    id: "P — 004",
+    type: "Paper",
+    date: "mmxxiv",
+    year: "mmxxiv",
+    version: "Writeup mmxxvi",
+    title: "Pneuma",
+    titleLines: ["Pneuma"],
+    subtitle:
+      "A language model trained to author its own frame.",
+    excerpt:
+      "A Llama-family fine-tune trained on the Sandevistan corpus, distinguished by two design choices: system prompts written in the first person and unmasked from the supervised loss, so the model learns to produce its own frame rather than only condition on one; and DPO-positive responses folded into supervised training rather than used as ranking signal. The early empirical move in the program that became homeostatic alignment — the place the line started becoming legible.",
+    authors: "Stanley Sebastian & Claude",
+    pdfHref: "/papers/pneuma.pdf",
   },
 ];
 

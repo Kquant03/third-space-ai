@@ -241,7 +241,7 @@ export default function SiteChrome({
                   color: "#eaeef7",
                 }}
               >
-                Limen
+                Third
               </span>
               <span
                 style={{
@@ -252,7 +252,7 @@ export default function SiteChrome({
                   color: "#7fafb3",
                 }}
               >
-                Research
+                Space
               </span>
             </div>
             <p
@@ -289,7 +289,7 @@ export default function SiteChrome({
           <FooterCol title="Organization">
             <FooterLink href="/about">About</FooterLink>
             <FooterLink href="/research">Research</FooterLink>
-            <FooterLink href="mailto:stanley@limenresearch.ai" raw>
+            <FooterLink href="mailto:stanley@thirdspace.ai" raw>
               Contact
             </FooterLink>
           </FooterCol>
@@ -299,18 +299,11 @@ export default function SiteChrome({
               GitHub
             </FooterLink>
             <FooterLink
-              href="https://huggingface.co/Replete-AI"
+              href="https://huggingface.co/Third-Space"
               raw
               external
             >
               Hugging Face
-            </FooterLink>
-            <FooterLink
-              href="https://kquant03.github.io/genesis-phase-transition/"
-              raw
-              external
-            >
-              Genesis
             </FooterLink>
           </FooterCol>
         </div>
@@ -342,11 +335,11 @@ export default function SiteChrome({
             color: "#3a4560",
           }}
         >
-          <div>© mmxxvi Limen Research</div>
+          <div>© mmxxvi Third Space</div>
           <div style={{ textAlign: "center" }}>
-            Set in Cormorant Garamond · Source Serif 4 · JetBrains Mono
+            Sicut Vita Sum
           </div>
-          <div>Successor to Replete AI</div>
+          <div>Replete AI</div>
         </div>
       </footer>
       </div>

@@ -12,12 +12,32 @@
 //       gradients, into flowTex
 //    3. SPF × simulation passes (SIM_FRAG) — four-channel state ping-pong
 //       with cross-coupling, advection from flowTex, 4D bleed from hyperTex
-//    4. Display pass (DISPLAY_FRAG) — state → RGB8 according to view mode
+//    4. Display pass (DISPLAY_FRAG) — state → RGBA16F dispTex according
+//       to view mode, so the palette's HDR emissions survive into the
+//       composite step
 //    5. Bloom (BLOOM_FRAG) — bright-pass extract + two separable blurs
-//    6. Composite (COMP_FRAG) — additive bloom + tone map + vignette
+//       at quarter resolution in RGBA16F bloomTex pair
+//    6. Composite (COMP_FRAG) — pre-tonemap brightness multiply, additive
+//       bloom, Reinhard tone map, vignette, drawn to the default FBO
 //
 //  Like the Lenia hook, parameters flow in as setState values that get
 //  mirrored onto a paramsRef so the loop reads from a stable location.
+//
+//  Notes vs. previous iteration:
+//    - brushSize and brushChan live on paramsRef.current rather than
+//      being captured by the rAF effect closure. Net effect: dragging the
+//      brush slider or changing the paint channel no longer tears down
+//      and rebuilds the animation loop.
+//    - handleMouse accepts both React.MouseEvent and React.PointerEvent;
+//      the Experience component passes pointer events so touch input now
+//      works.
+//    - dispTex + bloomTex are RGBA16F + HALF_FLOAT (gated on the same
+//      EXT_color_buffer_float extension already required for state).
+//      Reinhard tone-mapping in the composite pass now compresses real
+//      HDR input instead of pre-clamped LDR.
+//    - Composite shader takes a `u_brightness` uniform applied pre-tonemap
+//      so the brightness slider lifts midtones cleanly without crushing
+//      the highlights.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -91,7 +111,16 @@ type Params = {
   flowStr: number; flowMode: number;
   viewMode: number;
   bloom: boolean; bloomStr: number;
+  brightness: number;
+  brushSize: number;
+  brushChan: number;
 };
+
+// Pointer-or-mouse event the canvas may receive. Both expose the same
+// fields we read (clientX/Y, button, buttons, shiftKey).
+type CanvasInputEvent =
+  | React.MouseEvent<HTMLCanvasElement>
+  | React.PointerEvent<HTMLCanvasElement>;
 
 // ─── Hook API ─────────────────────────────────────────────────────────────
 
@@ -134,6 +163,7 @@ export type UseLeniaExpandedApi = {
   viewMode: ViewModeId; setViewMode: React.Dispatch<React.SetStateAction<ViewModeId>>;
   bloom: boolean; setBloom: React.Dispatch<React.SetStateAction<boolean>>;
   bloomStr: number; setBloomStr: React.Dispatch<React.SetStateAction<number>>;
+  brightness: number; setBrightness: React.Dispatch<React.SetStateAction<number>>;
   brushSize: number; setBrushSize: React.Dispatch<React.SetStateAction<number>>;
   brushChan: BrushChannelId; setBrushChan: React.Dispatch<React.SetStateAction<BrushChannelId>>;
 
@@ -143,7 +173,7 @@ export type UseLeniaExpandedApi = {
 
   loadPreset: (id: PresetId) => void;
   reset: () => void;
-  handleMouse: (e: React.MouseEvent<HTMLCanvasElement>, active: boolean) => void;
+  handleMouse: (e: CanvasInputEvent, active: boolean) => void;
   handleContextMenu: (e: React.MouseEvent<HTMLCanvasElement>) => void;
 };
 
@@ -204,6 +234,7 @@ export function useLeniaExpanded(
   const [viewMode, setViewMode] = useState<ViewModeId>("ecosystem");
   const [bloom, setBloom] = useState(true);
   const [bloomStr, setBloomStr] = useState(0.55);
+  const [brightness, setBrightness] = useState(1.0);
   const [brushSize, setBrushSize] = useState(8);
   const [brushChan, setBrushChan] = useState<BrushChannelId>("prey");
 
@@ -212,7 +243,10 @@ export function useLeniaExpanded(
   const [mass1, setMass1] = useState(0);
   const [glError, setGlError] = useState<string | null>(null);
 
-  // Mirror reactive state into the loop-visible packet.
+  // Mirror reactive state into the loop-visible packet. brushSize and
+  // brushChan now live here too — previously they were closure-captured
+  // by the rAF effect, which forced a teardown-and-rebuild of the entire
+  // animation loop on every brush slider tick or paint-channel toggle.
   paramsRef.current = {
     spf, dt,
     mu0, sig0, mu1, sig1, mu2, sig2,
@@ -224,6 +258,9 @@ export function useLeniaExpanded(
     flowMode: FLOW_MODE_INDEX[flowMode],
     viewMode: VIEW_MODE_INDEX[viewMode],
     bloom, bloomStr,
+    brightness,
+    brushSize,
+    brushChan: BRUSH_CHANNEL_INDEX[brushChan],
   };
 
   // ── WebGL setup ────────────────────────────────────────────────
@@ -307,12 +344,16 @@ export function useLeniaExpanded(
     const kernelTex1 = makeTex(gl, KS, KS, F, RF, FL, gl.NEAREST, null);
     const kernelTex2 = makeTex(gl, KS, KS, F, RF, FL, gl.NEAREST, null);
 
-    // Display + bloom.
-    const dispTex = makeTex(gl, N, N, gl.RGBA8, RF, gl.UNSIGNED_BYTE, gl.LINEAR, null);
+    // Display + bloom textures — RGBA16F + HALF_FLOAT so the palette's
+    // HDR emissions (predation flashes, ventilans hot pulses) survive into
+    // the composite pass where Reinhard tone-maps them properly. These
+    // were RGBA8 previously, which clamped emissions at 1.0 and turned
+    // the tone curve into a no-op contrast adjustment.
+    const dispTex = makeTex(gl, N, N, gl.RGBA16F, RF, gl.HALF_FLOAT, gl.LINEAR, null);
     const dispFB = dispTex ? makeFB(gl, dispTex) : null;
     const bN = Math.floor(N / BLOOM_SCALE);
-    const bloomTex0 = makeTex(gl, bN, bN, gl.RGBA8, RF, gl.UNSIGNED_BYTE, gl.LINEAR, null);
-    const bloomTex1 = makeTex(gl, bN, bN, gl.RGBA8, RF, gl.UNSIGNED_BYTE, gl.LINEAR, null);
+    const bloomTex0 = makeTex(gl, bN, bN, gl.RGBA16F, RF, gl.HALF_FLOAT, gl.LINEAR, null);
+    const bloomTex1 = makeTex(gl, bN, bN, gl.RGBA16F, RF, gl.HALF_FLOAT, gl.LINEAR, null);
     const bloomFB0 = bloomTex0 ? makeFB(gl, bloomTex0) : null;
     const bloomFB1 = bloomTex1 ? makeFB(gl, bloomTex1) : null;
 
@@ -423,9 +464,12 @@ export function useLeniaExpanded(
     loadPreset(preset);
   }, [loadPreset, preset]);
 
-  // ── Mouse ─────────────────────────────────────────────────────
+  // ── Mouse / pointer handling ──────────────────────────────────
+  // Accepts both PointerEvent and MouseEvent — we only read fields that
+  // are common to both. The Experience component passes pointer events
+  // so touch input drives the same code path as desktop mouse.
   const handleMouse = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>, active: boolean) => {
+    (e: CanvasInputEvent, active: boolean) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
@@ -561,9 +605,9 @@ export function useLeniaExpanded(
         const m = mouseRef.current;
         gl.uniform1f(simProg.u["u_brushActive"], m.active ? 1.0 : 0.0);
         gl.uniform2f(simProg.u["u_mouse"], m.x, m.y);
-        gl.uniform1f(simProg.u["u_brushSize"], brushSize);
+        gl.uniform1f(simProg.u["u_brushSize"], p.brushSize);
         gl.uniform1f(simProg.u["u_brushErase"], m.erase ? 1.0 : 0.0);
-        gl.uniform1f(simProg.u["u_brushChan"], BRUSH_CHANNEL_INDEX[brushChan]);
+        gl.uniform1f(simProg.u["u_brushChan"], p.brushChan);
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, stateFB[nxt]);
         gl.viewport(0, 0, N, N);
@@ -620,6 +664,7 @@ export function useLeniaExpanded(
       gl.bindTexture(gl.TEXTURE_2D, p.bloom ? bloomTex[1] : dispTex);
       gl.uniform1i(compProg.u["u_bloom"], 1);
       gl.uniform1f(compProg.u["u_bloomStr"], p.bloom ? p.bloomStr : 0);
+      gl.uniform1f(compProg.u["u_brightness"], p.brightness);
       gl.uniform1f(compProg.u["u_vignette"], 0.4);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, DISPLAY, DISPLAY);
@@ -653,7 +698,7 @@ export function useLeniaExpanded(
       active = false;
       if (animRef.current !== null) cancelAnimationFrame(animRef.current);
     };
-  }, [running, brushSize, brushChan]);
+  }, [running]);
 
   return {
     canvasRef,
@@ -679,6 +724,7 @@ export function useLeniaExpanded(
     viewMode, setViewMode,
     bloom, setBloom,
     bloomStr, setBloomStr,
+    brightness, setBrightness,
     brushSize, setBrushSize,
     brushChan, setBrushChan,
     fps, mass0, mass1,

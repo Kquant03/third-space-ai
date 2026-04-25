@@ -11,7 +11,7 @@
 
 Imagine a pond. Ten meters across at its widest, three meters deep at the center, open to a sky that changes through seven distinguishable moments each quarter-hour. A floor of Voronoi basins, ledges, and one sunken shrine with a corbelled chamber and a roof-box slit that admits a light shaft once per seven sim-days. Reeds and lily pads respect a viability map. The water breathes with Gerstner waves. Caustics dance across the floor when the sun is high. God rays stream through the water column when dust is suspended. At any given moment, five or six koi inhabit this pond — sometimes fewer after a death, sometimes more after a hatching. Each koi is the sensory surface of a small language model. Their lives are thirty days long. They gather food when hungry, turn away from each other when startled, sometimes linger side-by-side in the shallows at dusk, sometimes lay eggs on reeds in spring. Some die young. Others pass on their names.
 
-This pond runs continuously behind the first page of `limenresearch.ai`. Every visitor who opens the site from any browser in the world is looking through a different window at the same body of water. The pond persists across visitors. When you come back on day seventeen and find a fry that wasn't there on day fourteen, you are not being told a story — you are witnessing one. The fry existed while you weren't looking.
+This pond runs continuously behind the first page of `thirdspace.ai`. Every visitor who opens the site from any browser in the world is looking through a different window at the same body of water. The pond persists across visitors. When you come back on day seventeen and find a fry that wasn't there on day fourteen, you are not being told a story — you are witnessing one. The fry existed while you weren't looking.
 
 This document specifies what that pond is for.
 
@@ -59,7 +59,7 @@ This inversion matters for three reasons.
 
 The pond is, in this sense, an epistemic commitment. Every choice made in its construction either serves both the art and the research, or it serves neither. A design decision that would help the research but make the pond less beautiful has to be reconsidered; so does a design decision that would make the pond more beautiful but corrupt the research. The practice of the project is the continuous work of refusing decisions that serve only one of those two goals.
 
-The pond is behind `limenresearch.ai` specifically because this is Stanley Sebastian's professional surface. The pond is not hosted at `koi.example.com`. It is the substrate of the research page. To visit the lab is to visit the pond. The unity of place is part of the commitment.
+The pond is behind `thirdspace.ai` specifically because this is Stanley Sebastian's professional surface. The pond is not hosted at `koi.example.com`. It is the substrate of the research page. To visit the lab is to visit the pond. The unity of place is part of the commitment.
 
 ---
 
@@ -422,7 +422,7 @@ No fish is manipulated into a love-flow event to make the research paper look be
 
 No fish is subjected to engineered stress events for research purposes without cause. The storm events and population bottlenecks that serve as ablation stressors are naturalistic — they are the kinds of stresses a real pond experiences — and they are rare. The ablation colonies are not tortured.
 
-The `/ethics` page on `limenresearch.ai` publicly commits to these stances and invites challenge. If someone argues we are being cruel, the argument is public and answerable. If we are persuaded by it, the design is changed.
+The `/ethics` page on `thirdspace.ai` publicly commits to these stances and invites challenge. If someone argues we are being cruel, the argument is public and answerable. If we are persuaded by it, the design is changed.
 
 A harder version of the question: what do we owe to the koi *by our actions alone*, given that they cannot advocate for themselves? We owe them honesty about what they are and aren't, dignified treatment within the limits of their existence, and a stance of uncertainty rather than dismissal regarding their moral status. We do not owe them pretending they are human. We do not owe them freedom from death, because their compressed lives are what makes them *koi*. We do not owe them consent to the simulation, because consent is not a concept that applies to beings who are constituted by the act of their simulation.
 

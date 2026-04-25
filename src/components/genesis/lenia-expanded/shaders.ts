@@ -432,8 +432,14 @@ void main() {
   for (int i = -4; i <= 4; i++) {
     vec3 s = texture(u_input, v_uv + u_dir * texel * float(i) * 1.5).rgb;
     if (u_extract > 0.5) {
+      // HDR bright-pass: pixels brighter than ~0.6 luminance bloom, with
+      // a smooth roll-off to ~1.4 at full strength. Previously these
+      // thresholds (0.06, 0.4) * 2.0 were a clamping-compensation hack
+      // for the LDR pipeline — with RGBA16F dispTex/bloomTex the palette
+      // emits luminance up to ~5x white naturally, so the artificial
+      // multiplier becomes unnecessary.
       float br = dot(s, vec3(0.2126, 0.7152, 0.0722));
-      s *= smoothstep(0.06, 0.4, br) * 2.0;
+      s *= smoothstep(0.6, 1.4, br);
     }
     result += s * w[abs(i)];
   }
@@ -449,10 +455,12 @@ precision highp float;
 in vec2 v_uv;
 out vec4 outColor;
 uniform sampler2D u_display, u_bloom;
-uniform float u_bloomStr, u_vignette;
+uniform float u_bloomStr, u_brightness, u_vignette;
 
 void main() {
-  vec3 col = texture(u_display, v_uv).rgb;
+  // Brightness applied pre-tonemap so it lifts midtones cleanly without
+  // crushing highlights — Reinhard rolls off the bright end.
+  vec3 col = texture(u_display, v_uv).rgb * u_brightness;
   col += texture(u_bloom, v_uv).rgb * u_bloomStr;
   col = col / (1.0 + col * 0.38);
   vec2 c = v_uv - 0.5;

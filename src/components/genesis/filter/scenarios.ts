@@ -3,8 +3,8 @@
 //  ─────────────────────────────────────────────────────────────────────────
 //  Static configuration: the four scenarios (home-system → galactic), the
 //  three strategies (monolithic / naïve fission / architected fission), and
-//  the visibility flags that drive what the phase plot shows at each beat
-//  of the Tier 1 scrollytelling.
+//  the visibility flags that drive what the phase plot shows at each of
+//  the twelve beats of the v14 redesign.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { LY, AU } from "./physics";
@@ -16,17 +16,17 @@ export type ScenarioId = "home" | "solar" | "local" | "galactic";
 export type Scenario = {
   id: ScenarioId;
   label: string;
-  sub: string;              // τ + target, single line
+  sub: string;
   tau_yr: number;
   L_target_ly: number;
-  note: string;             // longer sentence shown under the active plot
+  note: string;
 };
 
 export const SCENARIOS: Record<ScenarioId, Scenario> = {
   home: {
     id: "home",
     label: "Home-system agent",
-    sub: "τ = 1 day · target = 100 AU",
+    sub: "τ = 1 day · L = 100 AU",
     tau_yr: 1 / 365.25,
     L_target_ly: (100 * AU) / LY,
     note: "A civilization coordinating its home system. Fully inside the envelope.",
@@ -34,7 +34,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
   solar: {
     id: "solar",
     label: "Solar neighbourhood",
-    sub: "τ = 10 yr · target = Proxima (4.2 ly)",
+    sub: "τ = 10 yr · L = 4.2 ly (Proxima)",
     tau_yr: 10,
     L_target_ly: 4.2,
     note: "Reaching the nearest star requires response times of ~decade. Just barely agent-scale.",
@@ -42,7 +42,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
   local: {
     id: "local",
     label: "Local cluster",
-    sub: "τ = 100 yr · target = 100 ly",
+    sub: "τ = 100 yr · L = 100 ly",
     tau_yr: 100,
     L_target_ly: 100,
     note: "Multi-century response. Approaching the upper edge of agent-plausible responsiveness.",
@@ -50,10 +50,10 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
   galactic: {
     id: "galactic",
     label: "Galactic (ambitious)",
-    sub: "τ = 10 yr · target = 100 kly",
+    sub: "τ = 10 yr · L = 100 kly",
     tau_yr: 10,
     L_target_ly: 1e5,
-    note: "The grabby scenario: demand both agent-timescale responsiveness AND galactic reach. Watch where it lands.",
+    note: "The grabby scenario: agent-timescale responsiveness AND galactic reach. Watch where it lands.",
   },
 };
 
@@ -98,29 +98,94 @@ export const STRATEGY_LIST: Strategy[] = [
   STRATEGIES.architected,
 ];
 
-// ─── Scrollytelling beats ─────────────────────────────────────────────────
-// What the sticky phase plot shows at each beat of the Tier 1 derivation.
-// Each flag toggles a visual layer; the renderer in PhasePlot interprets
-// them and cross-fades between states as the reader scrolls.
+// ─── Beats ────────────────────────────────────────────────────────────────
 
-export type BeatVisibility = {
+export type BeatMeta = {
+  id: number;
+  label: string;
+  kicker: string;
+  title: string;
+};
+
+export const BEATS: BeatMeta[] = [
+  { id: 0,  label: "Stakes",            kicker: "0",   title: "What this paper claims" },
+  { id: 1,  label: "Cold open",         kicker: "1",   title: "Imagine a civilization" },
+  { id: 2,  label: "Signaling tooth",   kicker: "2",   title: "The first wall · light" },
+  { id: 3,  label: "Energetic tooth",   kicker: "3",   title: "The second wall · heat" },
+  { id: 4,  label: "Sivak–Crooks",      kicker: "3.5", title: "The price of moving fast" },
+  { id: 5,  label: "You draw it",       kicker: "4",   title: "Predict the envelope" },
+  { id: 6,  label: "The cusp",          kicker: "5",   title: "τ* — where two worlds meet" },
+  { id: 7,  label: "Four scenarios",    kicker: "6",   title: "Same wall, different reach" },
+  { id: 8,  label: "Strategies",        kicker: "7—8", title: "Three ways to try; three breaches" },
+  { id: 9,  label: "Fission dilemma",   kicker: "8.5", title: "The Chinese-Room moment" },
+  { id: 10, label: "Loopholes",         kicker: "9",   title: "Where this could fail" },
+  { id: 11, label: "Coherence Depth",   kicker: "10",  title: "What to look for instead" },
+];
+
+// ─── Beat plot state ──────────────────────────────────────────────────────
+// What the sticky PhasePlot shows at each beat. The renderer in
+// PhasePlot.tsx reads this and cross-fades layers as the reader scrolls.
+
+export type PlotState = {
   axes: boolean;
   agentBand: boolean;
-  infeasible: boolean;
   L_R: boolean;
   L_E: boolean;
   envelope: boolean;
+  infeasible: boolean;
   tauStar: boolean;
-  L_R_label?: boolean;
-  L_E_label?: boolean;
+  prediction: boolean;
+  predictionLocked: boolean;
+  smallMultiples: boolean;
+  overlay: boolean;
+  trajectory: "monolithic" | "naive" | "architected" | null;
+  fissionMode: "branch" | null;
+  scenarioMarks: boolean;
 };
 
-export const BEAT_VISIBILITY: Record<number, BeatVisibility> = {
-  0: { axes: true, agentBand: false, infeasible: false, L_R: false, L_E: false, envelope: false, tauStar: false },
-  1: { axes: true, agentBand: false, infeasible: false, L_R: false, L_E: false, envelope: false, tauStar: false },
-  2: { axes: true, agentBand: true,  infeasible: false, L_R: false, L_E: true,  envelope: false, tauStar: false, L_E_label: true },
-  3: { axes: true, agentBand: true,  infeasible: false, L_R: true,  L_E: true,  envelope: false, tauStar: false, L_R_label: true, L_E_label: true },
-  4: { axes: true, agentBand: true,  infeasible: false, L_R: true,  L_E: true,  envelope: true,  tauStar: true },
-  5: { axes: true, agentBand: true,  infeasible: true,  L_R: true,  L_E: true,  envelope: true,  tauStar: true },
-  6: { axes: true, agentBand: true,  infeasible: true,  L_R: true,  L_E: true,  envelope: true,  tauStar: true },
+const baseHidden: PlotState = {
+  axes: false, agentBand: false,
+  L_R: false, L_E: false, envelope: false,
+  infeasible: false, tauStar: false,
+  prediction: false, predictionLocked: false,
+  smallMultiples: false, overlay: false,
+  trajectory: null, fissionMode: null,
+  scenarioMarks: false,
 };
+
+export const PLOT_STATE: Record<number, PlotState> = {
+  // 0 · Stakes — no plot (hero)
+  0:  { ...baseHidden },
+  // 1 · Cold open — empty axes; the cold-open widget is in the left column
+  1:  { ...baseHidden, axes: true },
+  // 2 · Signaling tooth — L_R alone
+  2:  { ...baseHidden, axes: true, agentBand: true, L_R: true },
+  // 3 · Energetic tooth — L_R + L_E together
+  3:  { ...baseHidden, axes: true, agentBand: true, L_R: true, L_E: true },
+  // 4 · Sivak–Crooks — both teeth still visible; bead explorable in left column
+  4:  { ...baseHidden, axes: true, agentBand: true, L_R: true, L_E: true },
+  // 5 · You-Draw-It — both teeth + the reader's prediction curve
+  5:  { ...baseHidden, axes: true, agentBand: true, L_R: true, L_E: true, prediction: true },
+  // 6 · Cusp reveal — envelope + τ* + locked prediction (so reader sees the gap)
+  6:  { ...baseHidden, axes: true, agentBand: true, L_R: true, L_E: true,
+        envelope: true, infeasible: true, tauStar: true,
+        prediction: true, predictionLocked: true },
+  // 7 · Small multiples — 2×2 of envelopes with scenario targets
+  7:  { ...baseHidden, axes: true, agentBand: true, envelope: true, infeasible: true,
+        smallMultiples: true },
+  // 8 · Strategies — naïve fission trajectory (daughter breach is the pedagogy)
+  8:  { ...baseHidden, axes: true, agentBand: true, envelope: true, infeasible: true,
+        trajectory: "naive" },
+  // 9 · Fission dilemma — architected with D channel revealed
+  9:  { ...baseHidden, axes: true, agentBand: true, envelope: true, infeasible: true,
+        trajectory: "architected", fissionMode: "branch" },
+  // 10 · Loopholes — envelope + parameter overlay sweep + scenario marks
+  10: { ...baseHidden, axes: true, agentBand: true, envelope: true, infeasible: true,
+        overlay: true, scenarioMarks: true },
+  // 11 · Coherence Depth — envelope persists as the silent context
+  11: { ...baseHidden, axes: true, agentBand: true, envelope: true, infeasible: true },
+};
+
+export function plotStateForBeat(beatId: number): PlotState {
+  return PLOT_STATE[Math.max(0, Math.min(11, beatId))];
+}

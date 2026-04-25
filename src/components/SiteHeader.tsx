@@ -252,7 +252,7 @@ export default function SiteHeader() {
                   transition: "text-shadow 0.5s ease",
                 }}
               >
-                Limen
+                Third
               </span>
               <span
                 className="masthead-research"
@@ -267,7 +267,7 @@ export default function SiteHeader() {
                   lineHeight: 1,
                 }}
               >
-                Research
+                Space
               </span>
             </Link>
 
@@ -416,7 +416,7 @@ export default function SiteHeader() {
                 lineHeight: 1,
               }}
             >
-              Limen
+              Third
             </span>
             <span
               style={{
@@ -429,7 +429,7 @@ export default function SiteHeader() {
                 lineHeight: 1,
               }}
             >
-              Research
+              Space
             </span>
           </Link>
 

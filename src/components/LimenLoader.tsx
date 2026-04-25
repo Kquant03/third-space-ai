@@ -333,7 +333,7 @@ export default function LimenLoader() {
                         "text-shadow 1.2s ease",
                     }}
                   >
-                    Limen
+                    Third Space
                   </h1>
                 </div>
 
@@ -376,7 +376,7 @@ export default function LimenLoader() {
                       color: COLOR.ghost,
                     }}
                   >
-                    Research
+                    AI
                   </span>
                   <span
                     style={{
