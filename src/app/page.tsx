@@ -51,6 +51,20 @@ type Publication = {
 
 const PUBLICATIONS: Publication[] = [
   {
+  id: "P — 006",
+  version: null,
+  date: "May mmxxvi",
+  titleLines: ["Rukha"],
+  subtitle:
+    "A recursive counterfactual narrative engine.",
+  abstract:
+    "We describe Rukha, a counterfactual narrative engine that takes a foundational text, decomposes it into a causal event graph, perturbs load-bearing nodes via Pearl's do-calculus, and propagates coherent counterfactual trajectories forward through the graph using the Abduction–Action–Prediction algorithm. Unlike prior counterfactual story-generation systems, which operate at depth one against a single original, Rukha operates recursively to depths five and six. We demonstrate on the Book of Jonah, whose 16 consensus events and quantified chiastic symmetry — the 39-Hebrew-word parallel between Jonah 4:2–3 and 4:10–11, machine-verifiable against the Westminster Leningrad Codex — make it the optimal minimal test case. Returning books to breath.",
+  authors: "Stanley Sebastian & Claude",
+  affiliation: "Third Space",
+  note: null,
+  href: "/research/rukha",
+},
+  {
     id: "P — 005",
     version: null,
     date: "May mmxxvi",

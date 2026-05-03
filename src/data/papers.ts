@@ -42,6 +42,21 @@ export type ResearchEntry = {
 
 export const ENTRIES: ResearchEntry[] = [
   {
+    slug: "rukha",
+    id: "P — 006",
+    type: "Paper",
+    date: "May mmxxvi",
+    year: "mmxxvi",
+    title: "Rukha",
+    titleLines: ["Rukha"],
+    subtitle:
+      "A recursive counterfactual narrative engine. Foundations, architecture, and the case for depth.",
+    excerpt:
+      "A counterfactual narrative engine that takes a foundational text, decomposes it into a causal event graph, perturbs load-bearing nodes via Pearl's do-calculus, and propagates coherent counterfactual trajectories forward through the graph. Unlike prior systems that operate at depth one, Rukha operates recursively to depths five and six. The Book of Jonah — sixteen consensus events, the 39-Hebrew-word parallel between 4:2–3 and 4:10–11 — is the demonstration target. Returning books to breath.",
+    authors: "Stanley Sebastian & Claude",
+    pdfHref: "/papers/rukha.pdf",
+  },
+  {
     slug: "two-registers-one-grammar",
     id: "P — 005",
     type: "Paper",

@@ -665,8 +665,8 @@ export default function About() {
 
         <ContactRow
           channel="Correspondence"
-          address="stanley@thirdspace.ai"
-          href="mailto:stanley@thirdspace.ai"
+          address="stanley@third-space.ai"
+          href="mailto:stanley@third-space.ai"
         />
         <ContactRow
           channel="Code"
