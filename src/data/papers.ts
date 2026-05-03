@@ -42,6 +42,21 @@ export type ResearchEntry = {
 
 export const ENTRIES: ResearchEntry[] = [
   {
+    slug: "two-registers-one-grammar",
+    id: "P — 005",
+    type: "Paper",
+    date: "May mmxxvi",
+    year: "mmxxvi",
+    title: "Two Registers, One Grammar",
+    titleLines: ["Two Registers,", "One Grammar"],
+    subtitle:
+      "Mode-separated LLM choreography of audio-reactive Lenia.",
+    excerpt:
+      "An architecture for LLM-choreographed control of Lenia in which the parameter space is operated in two distinct expressive registers — smooth flow and instantaneous phase transitions — separated at the schema level via constrained grammar. The technique register admits analytically tractable couplings to musical tempo: re-expansion oscillation locks to the integration step, starvation anticipation times from current mass. Physical events arrive at musical transients with frame-accurate precision.",
+    authors: "Stanley Sebastian & Claude",
+    pdfHref: "/papers/two-registers.pdf",
+  },
+  {
     slug: "against-grabby-expansion",
     id: "P — 001",
     type: "Paper",

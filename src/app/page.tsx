@@ -37,9 +37,39 @@ type Publication = {
   affiliation: string;
   note: string | null;
   href: string;
+  /** Optional cross-reference to a paired platform — when the paper
+   *  is the architecture document for a system in §II, this shows
+   *  a small "Companion to {ref}" line and links to the platform's
+   *  anchor on the same page. */
+  companion?: {
+    id: string;
+    title: string;
+    href: string;
+    relation: string;
+  };
 };
 
 const PUBLICATIONS: Publication[] = [
+  {
+    id: "P — 005",
+    version: null,
+    date: "May mmxxvi",
+    titleLines: ["Two Registers,", "One Grammar"],
+    subtitle:
+      "Mode-separated LLM choreography of audio-reactive Lenia.",
+    abstract:
+      "We describe an architecture for LLM-choreographed control of Lenia, a continuous cellular automaton, where the parameter space is operated in two distinct expressive registers — smooth flow and instantaneous phase transitions. The boundary between them is enforced at the schema level via constrained grammar, so the controller cannot emit undefined intermediate states even in principle. The technique register admits analytically tractable couplings to musical tempo: re-expansion oscillation locks to the integration step, starvation anticipation times from current mass. Physical events arrive at musical transients with frame-accurate precision — and a more general claim follows: when an LLM controls an emergent dynamical system with natural mode boundaries, those boundaries deserve grammar-level protection rather than learned compliance.",
+    authors: "Stanley Sebastian & Claude",
+    affiliation: "Third Space",
+    note: null,
+    href: "/research/two-registers-one-grammar",
+    companion: {
+      id: "Λ — 003",
+      title: "GhoulJamz",
+      href: "#platform-ghouljamz",
+      relation: "The architecture this paper describes runs as",
+    },
+  },
   {
     id: "P — 001",
     version: "Revision xi",
@@ -93,6 +123,15 @@ type Platform = {
   href: string | null;
   cta: string | null;
   origin: string | null;
+  /** Optional cross-reference to a paired publication — when the
+   *  platform's architecture is documented in §I, this shows a small
+   *  "Architecture: {ref}" line and links to the paper's reader. */
+  companion?: {
+    id: string;
+    title: string;
+    href: string;
+    relation: string;
+  };
 };
 
 const PLATFORMS: Platform[] = [
@@ -122,15 +161,21 @@ const PLATFORMS: Platform[] = [
   },
   {
     id: "Λ — 003",
-    status: "Forthcoming · May mmxxvi",
+    status: "Architecture shipped · System forthcoming",
     live: false,
     title: "GhoulJamz",
-    subtitle: "Audio-reactive artificial life",
+    subtitle: "Audio-reactive artificial life — the system Two Registers describes.",
     body:
-      "Ghost organisms whose physics respond to music. A fine-tuned Gemma 4 model choreographs Lenia parameters from musical meaning; the soundtrack becomes the substrate.",
+      "Ghost organisms whose physics respond to music. A fine-tuned Gemma 4 model choreographs Lenia parameters from musical meaning; the soundtrack becomes the substrate. The system operates in two registers — smooth flow during sustained sections, instantaneous phase transitions at musical transients — separated at the grammar level so the controller cannot blur the boundary even in principle. The architecture is fully documented; the system itself runs in May mmxxvi alongside the open-source release.",
     href: null,
     cta: null,
     origin: null,
+    companion: {
+      id: "P — 005",
+      title: "Two Registers, One Grammar",
+      href: "/research/two-registers-one-grammar",
+      relation: "Architecture documented in",
+    },
   },
 ];
 
@@ -155,6 +200,44 @@ const OPEN_DATA = [
     scope: "Archived",
     note: "Language model trained on realistic interaction",
     href: "/research/pneuma",
+  },
+];
+
+type OpenCall = {
+  id: string;
+  type: "Hackathon";
+  status: string;
+  title: string;
+  tagline: string;
+  brief: string[];
+  closer: string;
+  briefHref: string;
+  briefLabel: string;
+  ctaHref: string;
+  ctaLabel: string;
+  ctaSuffix: string;
+};
+
+const OPEN_CALLS: OpenCall[] = [
+  {
+    id: "H — 001",
+    type: "Hackathon",
+    status: "Active · May mmxxvi",
+    title: "Coherence Filter",
+    tagline:
+      "An open hackathon. Compute for whoever delivers the framework that lets open communities defend themselves.",
+    brief: [
+      "The Third Space Discord, today, scores roughly 25 against an internal coherence metric — the fraction of members whose participation reads as authentically engaged rather than automated, opportunistic, or extractive. The honest target sits in the 50s for the kind of community that belongs at this address. That delta is the rubric.",
+      "Submissions: any framework — heuristic, behavioral, ML, multi-stage, hybrid — that demonstrably separates genuine community participation from bot, scammer, and extractive signal. The data corpus runs deep: Third Space's full Discord history, plus records from other open communities willing to share theirs.",
+      "Prize: compute, comparable to the results delivered. Stronger frameworks unlock more compute. The ceiling is high enough that a winning submission may exceed what Third Space currently maintains for its own work.",
+    ],
+    closer:
+      "Run independently. The window extends six months on entries that warrant it. Let's see how open source can truly defend itself.",
+    briefHref: "/hackathon",
+    briefLabel: "Read the full brief",
+    ctaHref: "https://discord.gg/udpZgwQMd8",
+    ctaLabel: "Join the Discord",
+    ctaSuffix: "discord · third-space.ai",
   },
 ];
 
@@ -400,6 +483,310 @@ function Ornament() {
   );
 }
 
+// ─── OpenCallSection ─────────────────────────────────────────────────
+//  Mounted between the hero and §I. Hidden when OPEN_CALLS is empty,
+//  so when this hackathon resolves, removing the entry makes the
+//  section vanish — no other page edits required.
+//
+//  Visual grammar matches the hero composition: lantern rules above
+//  and below (the same accent gradient as TaperedRule), a frosted
+//  reading-plate carrying the brief, two CTAs in the same family as
+//  HeroCTA but lighter (the dispatch is current-moment, not the page
+//  signature). The pulsing ghost-cyan dot in the status row repeats
+//  the platform "live" indicator — same vocabulary, different meaning.
+
+function OpenCallSection() {
+  if (OPEN_CALLS.length === 0) return null;
+  const call = OPEN_CALLS[0];
+
+  return (
+    <section style={{ maxWidth: 1280, margin: "0 auto", padding: "0 40px" }}>
+      <TaperedRule accent />
+
+      {/* Status header band */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: 24,
+          paddingTop: 56,
+          marginBottom: 48,
+          fontFamily: FONT.mono,
+          fontSize: 10,
+          letterSpacing: "0.42em",
+          textTransform: "uppercase",
+          color: COLOR.inkFaint,
+        }}
+      >
+        <span>Dispatch · {call.type}</span>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 12,
+            color: COLOR.ghost,
+          }}
+        >
+          <span
+            aria-hidden
+            className="dispatch-pulse"
+            style={{
+              display: "inline-block",
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: COLOR.ghost,
+              boxShadow: `0 0 14px ${COLOR.ghost}`,
+            }}
+          />
+          {call.status}
+        </span>
+      </div>
+
+      {/* The plated dispatch card */}
+      <article
+        className="reading-plate"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(180px, 1fr) 4fr",
+          gap: "clamp(24px, 4vw, 72px)",
+          padding: "clamp(48px, 5.5vw, 80px) clamp(32px, 4vw, 60px)",
+        }}
+      >
+        <aside
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 22,
+            paddingTop: 10,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontFamily: FONT.mono,
+                fontSize: 10,
+                letterSpacing: "0.32em",
+                textTransform: "uppercase",
+                color: COLOR.inkMuted,
+              }}
+            >
+              {call.id}
+            </div>
+            <div
+              style={{
+                marginTop: 4,
+                fontFamily: FONT.mono,
+                fontSize: 9,
+                letterSpacing: "0.3em",
+                textTransform: "uppercase",
+                color: COLOR.inkFaint,
+              }}
+            >
+              {call.type}
+            </div>
+          </div>
+          <div
+            style={{
+              fontFamily: FONT.display,
+              fontStyle: "italic",
+              fontWeight: 300,
+              fontSize: 17,
+              color: COLOR.inkFaint,
+              lineHeight: 1.4,
+              maxWidth: "14ch",
+            }}
+          >
+            Run independently by Third Space.
+          </div>
+        </aside>
+
+        <div>
+          <h3
+            className="dispatch-title"
+            style={{
+              margin: 0,
+              fontFamily: FONT.display,
+              fontStyle: "italic",
+              fontWeight: 300,
+              fontSize: "clamp(56px, 7vw, 112px)",
+              lineHeight: 0.92,
+              letterSpacing: "-0.028em",
+              color: COLOR.ink,
+            }}
+          >
+            {call.title}
+          </h3>
+
+          <p
+            style={{
+              marginTop: 26,
+              marginBottom: 0,
+              fontFamily: FONT.display,
+              fontStyle: "italic",
+              fontWeight: 300,
+              fontSize: "clamp(18px, 1.6vw, 24px)",
+              lineHeight: 1.42,
+              color: COLOR.inkBody,
+              maxWidth: "44ch",
+              letterSpacing: "-0.005em",
+            }}
+          >
+            {call.tagline}
+          </p>
+
+          {/* Brief — parallel to "Abstract" in publications */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              marginTop: 44,
+              marginBottom: 22,
+            }}
+          >
+            <span
+              style={{
+                display: "block",
+                width: 34,
+                height: 1,
+                background: "rgba(255,255,255,0.15)",
+              }}
+            />
+            <span
+              style={{
+                fontFamily: FONT.mono,
+                fontSize: 9,
+                letterSpacing: "0.45em",
+                textTransform: "uppercase",
+                color: COLOR.inkFaint,
+              }}
+            >
+              Brief
+            </span>
+          </div>
+
+          {call.brief.map((para, i) => (
+            <p
+              key={i}
+              style={{
+                margin: i === 0 ? 0 : "20px 0 0",
+                fontFamily: FONT.body,
+                fontSize: 15,
+                lineHeight: 1.76,
+                color: COLOR.inkBody,
+                maxWidth: "68ch",
+                fontWeight: 400,
+              }}
+            >
+              {para}
+            </p>
+          ))}
+
+          <p
+            style={{
+              margin: "32px 0 0",
+              fontFamily: FONT.display,
+              fontStyle: "italic",
+              fontWeight: 300,
+              fontSize: 19,
+              lineHeight: 1.5,
+              color: COLOR.inkMuted,
+              maxWidth: "60ch",
+              letterSpacing: "-0.005em",
+            }}
+          >
+            {call.closer}
+          </p>
+
+          {/* CTAs — Read full brief (primary, ghost) + Join Discord (secondary) */}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 24,
+              marginTop: 44,
+            }}
+          >
+            <Link
+              href={call.briefHref}
+              className="platform-cta"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 14,
+                paddingBottom: 6,
+                fontFamily: FONT.mono,
+                fontSize: 11,
+                letterSpacing: "0.32em",
+                textTransform: "uppercase",
+                color: COLOR.ghost,
+                borderBottom: `1px solid ${COLOR.ghost}50`,
+                textDecoration: "none",
+                transition: "color 0.3s ease, border-color 0.3s ease",
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  display: "block",
+                  width: 24,
+                  height: 1,
+                  background: COLOR.ghost,
+                }}
+              />
+              <span>{call.briefLabel}</span>
+              <span aria-hidden>→</span>
+            </Link>
+
+            <a
+              href={call.ctaHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="dispatch-secondary"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 12,
+                paddingBottom: 6,
+                fontFamily: FONT.mono,
+                fontSize: 10,
+                letterSpacing: "0.32em",
+                textTransform: "uppercase",
+                color: COLOR.inkMuted,
+                borderBottom: `1px solid ${COLOR.inkGhost}`,
+                textDecoration: "none",
+                transition: "color 0.3s ease, border-color 0.3s ease",
+              }}
+            >
+              <span>{call.ctaLabel}</span>
+              <span aria-hidden>↗</span>
+            </a>
+
+            <span
+              style={{
+                fontFamily: FONT.mono,
+                fontSize: 9,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: COLOR.inkGhost,
+              }}
+            >
+              {call.ctaSuffix}
+            </span>
+          </div>
+        </div>
+      </article>
+
+      <div style={{ marginTop: 56 }}>
+        <TaperedRule accent />
+      </div>
+    </section>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PAGE
 // ═══════════════════════════════════════════════════════════════════════════
@@ -435,7 +822,7 @@ export default function Home() {
               color: COLOR.inkFaint,
             }}
           >
-            <div>April · mmxxvi</div>
+            <div>May · mmxxvi</div>
             <div style={{ letterSpacing: "0.55em", color: COLOR.inkMuted }}>
               — Annual Bulletin · Vol. i —
             </div>
@@ -648,7 +1035,7 @@ export default function Home() {
             >
               <div>№ 001 / mmxxvi</div>
               <div style={{ textAlign: "center", color: COLOR.inkFaint }}>
-                ↓ &nbsp; I. Publications &nbsp;·&nbsp; II. Platforms &nbsp;·&nbsp; III. Open Data
+                ↓ &nbsp; <Link href="/hackathon" className="hero-toc-link" style={{ color: COLOR.ghost, textDecoration: "none" }}>● Dispatch</Link> &nbsp;·&nbsp; I. Publications &nbsp;·&nbsp; II. Platforms &nbsp;·&nbsp; III. Open Data
               </div>
               <div style={{ textAlign: "right" }}>Annual</div>
             </div>
@@ -656,13 +1043,21 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ══════════════════════════════════════════════════════════════════
+           DISPATCH — open call ribbon
+           Sits between hero and §I. Bracketed by lantern rules so it
+           reads as ephemeral / current-moment content rather than as
+           a numbered archival section.
+         ══════════════════════════════════════════════════════════════════ */}
+      <OpenCallSection />
+
       <Ornament />
 
       {/* ══════════════════════════════════════════════════════════════════
            § I — PUBLICATIONS
          ══════════════════════════════════════════════════════════════════ */}
       <section style={{ maxWidth: 1280, margin: "0 auto", padding: "72px 40px 96px" }}>
-        <SectionMark roman="I" label="Publications" index="01 / 03" />
+        <SectionMark roman="I" label="Publications" index="01 / 04" />
         <div>
           {PUBLICATIONS.map((pub) => (
             <PublicationEntry key={pub.id} pub={pub} />
@@ -986,6 +1381,16 @@ export default function Home() {
         .data-row:hover .data-arrow { color: ${COLOR.ghost}; }
         .data-row:hover { background: rgba(255,255,255,0.015); }
         .colophon-link:hover { color: ${COLOR.ghost}; }
+        .companion-link:hover { color: ${COLOR.ink} !important; border-color: ${COLOR.ghost} !important; }
+        .dispatch-secondary:hover { color: ${COLOR.inkStrong}; border-color: ${COLOR.ghost}; }
+        .hero-toc-link:hover { color: ${COLOR.ink} !important; }
+        @keyframes dispatch-pulse {
+          0%, 100% { opacity: 0.55; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.15); }
+        }
+        .dispatch-pulse {
+          animation: dispatch-pulse 2.4s ease-in-out infinite;
+        }
         .abstract::first-letter {
           float: left;
           font-family: ${FONT.display};
@@ -1112,6 +1517,67 @@ function PublicationEntry({ pub }: { pub: Publication }) {
         >
           {pub.subtitle}
         </p>
+        {pub.companion && (
+          <div
+            style={{
+              marginTop: 28,
+              padding: "14px 0 14px 22px",
+              borderLeft: `1px solid ${COLOR.ghost}38`,
+              maxWidth: "52ch",
+            }}
+          >
+            <div
+              style={{
+                fontFamily: FONT.mono,
+                fontSize: 9,
+                letterSpacing: "0.42em",
+                textTransform: "uppercase",
+                color: COLOR.inkFaint,
+                marginBottom: 8,
+              }}
+            >
+              ⇄ Companion
+            </div>
+            <div
+              style={{
+                fontFamily: FONT.body,
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: COLOR.inkMuted,
+              }}
+            >
+              {pub.companion.relation}{" "}
+              <Link
+                href={pub.companion.href}
+                className="companion-link"
+                style={{
+                  color: COLOR.ghost,
+                  textDecoration: "none",
+                  borderBottom: `1px solid ${COLOR.ghost}40`,
+                  fontFamily: FONT.display,
+                  fontStyle: "italic",
+                  fontSize: 16,
+                  paddingBottom: 1,
+                  transition: "color 0.3s ease, border-color 0.3s ease",
+                }}
+              >
+                {pub.companion.title}
+              </Link>{" "}
+              <span
+                style={{
+                  fontFamily: FONT.mono,
+                  fontSize: 9,
+                  letterSpacing: "0.32em",
+                  textTransform: "uppercase",
+                  color: COLOR.inkGhost,
+                  marginLeft: 6,
+                }}
+              >
+                {pub.companion.id}
+              </span>
+            </div>
+          </div>
+        )}
         <div
           style={{
             display: "flex",
@@ -1188,24 +1654,48 @@ function PublicationEntry({ pub }: { pub: Publication }) {
           </div>
         )}
         {/* Read PDF — genuine call to action, keeps the accent */}
-       
-     <Link
-           href={pub.href}
-           className="pub-read"
-           style={{ /* unchanged */ }}
-         >
-           <span aria-hidden style={{ /* unchanged */ }} />
-           <span>Read PDF</span>
-           <span aria-hidden>→</span>
-     </Link>
+        <Link
+          href={pub.href}
+          className="pub-read"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 14,
+            marginTop: 36,
+            paddingBottom: 6,
+            fontFamily: FONT.mono,
+            fontSize: 11,
+            letterSpacing: "0.32em",
+            textTransform: "uppercase",
+            color: COLOR.ghost,
+            borderBottom: `1px solid ${COLOR.ghost}50`,
+            textDecoration: "none",
+            transition: "color 0.3s ease, border-color 0.3s ease",
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              display: "block",
+              width: 24,
+              height: 1,
+              background: COLOR.ghost,
+            }}
+          />
+          <span>Read PDF</span>
+          <span aria-hidden>→</span>
+        </Link>
       </div>
     </article>
   );
 }
 
 function PlatformEntry({ p }: { p: Platform }) {
+  const anchorId = `platform-${p.title.toLowerCase().replace(/\s+/g, "-")}`;
+
   const inner = (
     <div
+      id={anchorId}
       className="platform-entry reading-plate"
       style={{
         display: "grid",
@@ -1213,6 +1703,7 @@ function PlatformEntry({ p }: { p: Platform }) {
         gap: "clamp(24px, 4vw, 72px)",
         padding: "clamp(48px, 5.5vw, 80px) clamp(32px, 4vw, 60px)",
         marginBottom: 32,
+        scrollMarginTop: 120,
       }}
     >
       <aside
@@ -1308,6 +1799,67 @@ function PlatformEntry({ p }: { p: Platform }) {
         >
           {p.subtitle}
         </p>
+        {p.companion && (
+          <div
+            style={{
+              marginTop: 26,
+              padding: "14px 0 14px 22px",
+              borderLeft: `1px solid ${COLOR.ghost}38`,
+              maxWidth: "52ch",
+            }}
+          >
+            <div
+              style={{
+                fontFamily: FONT.mono,
+                fontSize: 9,
+                letterSpacing: "0.42em",
+                textTransform: "uppercase",
+                color: COLOR.inkFaint,
+                marginBottom: 8,
+              }}
+            >
+              ⇄ Companion
+            </div>
+            <div
+              style={{
+                fontFamily: FONT.body,
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: COLOR.inkMuted,
+              }}
+            >
+              {p.companion.relation}{" "}
+              <Link
+                href={p.companion.href}
+                className="companion-link"
+                style={{
+                  color: COLOR.ghost,
+                  textDecoration: "none",
+                  borderBottom: `1px solid ${COLOR.ghost}40`,
+                  fontFamily: FONT.display,
+                  fontStyle: "italic",
+                  fontSize: 16,
+                  paddingBottom: 1,
+                  transition: "color 0.3s ease, border-color 0.3s ease",
+                }}
+              >
+                {p.companion.title}
+              </Link>{" "}
+              <span
+                style={{
+                  fontFamily: FONT.mono,
+                  fontSize: 9,
+                  letterSpacing: "0.32em",
+                  textTransform: "uppercase",
+                  color: COLOR.inkGhost,
+                  marginLeft: 6,
+                }}
+              >
+                {p.companion.id}
+              </span>
+            </div>
+          </div>
+        )}
         <p
           style={{
             marginTop: 36,
