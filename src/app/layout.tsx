@@ -9,6 +9,8 @@ import LivingSubstrate from "@/components/LivingSubstrate";
 import SiteChrome from "@/components/SiteChrome";
 import LimenLoader from "@/components/LimenLoader";
 import PondDiagnostic from "@/components/PondDiagnostic";
+import SiteAudio from "@/components/SiteAudio";
+import { MiniPlayer } from "@/components/AudioControl";
 
 const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
@@ -88,6 +90,17 @@ export default function RootLayout({
         <LivingSubstrate />
 
         <PondDiagnostic />
+
+        {/* Audio engine — Consequences of Infinity. Sits at layout root so
+            playback persists uninterrupted across every navigation, like
+            the LivingSubstrate. The visible interface (AudioControl) lives
+            in SiteHeader; this component is purely the engine. */}
+        <SiteAudio />
+
+        {/* Now-playing mini-player — viewport-fixed bottom-right. Visible
+            whenever audio is loading, ready, or playing, hidden when the
+            full programme drawer is open. */}
+        <MiniPlayer />
 
         <div
           className="fixed inset-0 z-[1] pointer-events-none"

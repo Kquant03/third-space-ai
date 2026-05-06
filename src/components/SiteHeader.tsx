@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import AudioControl from "@/components/AudioControl";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Tokens — Lantern palette
@@ -459,13 +460,15 @@ export default function SiteHeader() {
             })}
           </nav>
 
-          {/* RIGHT — compact edition stamp (absolutely positioned) */}
+          {/* RIGHT — compact edition stamp (absolutely positioned).
+              Shifted left of right:40 to make room for the always-visible
+              AudioControl fermata below. */}
           <div
             className="compact-edition"
             aria-hidden={!compact || undefined}
             style={{
               position: "absolute",
-              right: 40,
+              right: 84,
               top: "50%",
               opacity: compact ? 1 : 0,
               filter: compact ? "blur(0px)" : "blur(6px)",
@@ -505,6 +508,23 @@ export default function SiteHeader() {
                 flex: "0 0 auto",
               }}
             />
+          </div>
+
+          {/* RIGHT — fermata audio trigger (always visible).
+              Toggles the bottom-right MiniPlayer's expanded state and
+              gently breathes when the player has been dismissed, so
+              users always have a way back to the listening programme. */}
+          <div
+            style={{
+              position: "absolute",
+              right: 40,
+              top: "50%",
+              transform: "translateY(-50%)",
+              display: "inline-flex",
+              alignItems: "center",
+            }}
+          >
+            <AudioControl compact={compact} />
           </div>
         </div>
 

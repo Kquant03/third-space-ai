@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import PDFReader from "@/components/PDFReaderClient";
+import PaperBindingTrigger from "@/components/PaperBindingTrigger";
 import { getEntry, getPapers } from "@/data/papers";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -49,6 +50,13 @@ export default async function PaperReader({ params }: Props) {
 
   return (
     <>
+      {/* Paper binding: if any track has boundPaper === slug, switch
+          to it on entry — only if audio is already playing. The reader
+          who has chosen to listen gets the right music; the reader who
+          has chosen silence is not ambushed. Sticky at entry — the
+          user is in control until they navigate to another bound paper. */}
+      <PaperBindingTrigger slug={slug} />
+
       {/* ─── Return link ─────────────────────────────────── */}
       <nav
         style={{
