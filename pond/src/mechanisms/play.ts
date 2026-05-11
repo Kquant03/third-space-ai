@@ -50,10 +50,69 @@
 //      tagState, which this family owns).
 // ═══════════════════════════════════════════════════════════════════════════
 
-import type { KoiId, KoiState, SimTick } from "../types.js";
+import type { KoiId, KoiState, RelationshipCard, SimTick } from "../types.js";
+import { BOND } from "../constants.js";
 import {
   DetectionContext, MechanismFiring, FAMILY_OF, lastFiredTick,
 } from "./types.js";
+import { isMutuallyBonded } from "./bond.js";
+
+// ───────────────────────────────────────────────────────────────────
+//  Bond-aware cooldown scaling
+//
+//  Bonded pairs (per mechanisms/bond.ts) get a cooldown reduction on
+//  every pair-gated play mechanism: invitation, tag, dance, sync swim.
+//  The factor BOND.bondedCourtshipCooldownFactor (currently 0.5) halves
+//  the cooldown for pairs that have cleared the bond threshold in both
+//  directions, letting bonded pairs re-engage in play more frequently
+//  than acquaintances. This makes "play partners" structurally distinct
+//  from "play acquaintances" without any LLM-side knowledge of the rule
+//  — the world simply lets bonded pairs court each other into play
+//  more often.
+//
+//  Per-pair SQL lookup. Cost is bounded by colony size (≤ 12) and
+//  detector cadence is much slower than the kinematics tick, so this
+//  is comfortably within budget for the submission.
+// ───────────────────────────────────────────────────────────────────
+
+function bondedPairCooldownFactor(
+  sql: SqlStorage, idA: KoiId, idB: KoiId,
+): number {
+  const rows = sql.exec(
+    `SELECT self_id, other_id, valence, interaction_count, familiarity_prior
+       FROM relationship_card
+      WHERE (self_id = ? AND other_id = ?) OR (self_id = ? AND other_id = ?)`,
+    idA, idB, idB, idA,
+  ).toArray() as unknown as Record<string, unknown>[];
+  if (rows.length < 2) return 1.0;
+
+  const aRow = rows.find((r) => r["self_id"] === idA && r["other_id"] === idB);
+  const bRow = rows.find((r) => r["self_id"] === idB && r["other_id"] === idA);
+  if (!aRow || !bRow) return 1.0;
+
+  // Minimal card shape — bondIntensity only reads valence,
+  // interactionCount, familiarityPrior. Other fields stubbed to satisfy
+  // the type without round-tripping JSON we don't need here.
+  const toMinCard = (r: Record<string, unknown>): RelationshipCard => ({
+    selfId:              r["self_id"] as string,
+    otherId:             r["other_id"] as string,
+    firstEncounterTick:  0,
+    interactionCount:    (r["interaction_count"] as number) ?? 0,
+    valence:             (r["valence"] as number) ?? 0,
+    valenceTrajectory7d: [],
+    dominance:           0,
+    trust:               0,
+    summary:             "",
+    notableMemoryIds:    [],
+    drawnCount7d:        0,
+    lastAuthoredTick:    0,
+    familiarityPrior:    (r["familiarity_prior"] as number) ?? 0,
+  });
+
+  return isMutuallyBonded(toMinCard(aRow), toMinCard(bRow))
+    ? BOND.bondedCourtshipCooldownFactor
+    : 1.0;
+}
 
 // ───────────────────────────────────────────────────────────────────
 //  Tunable thresholds — permissive pending pond observation
@@ -160,9 +219,12 @@ function detectPlayInvitation(ctx: DetectionContext): InvitationDetection[] {
       const d = Math.hypot(actor.x - target.x, actor.z - target.z);
       if (d > PLAY_THRESHOLDS.invitationMaxProximityM) continue;
 
-      // Pair cooldown
-      const cd = Math.floor(
+      // Pair cooldown — halved for bonded pairs (BOND_REDUCED_COOLDOWN).
+      const baseCd = Math.floor(
         PLAY_THRESHOLDS.invitationPairCooldownSimHours * 3600 * ctx.tickHz,
+      );
+      const cd = Math.floor(
+        baseCd * bondedPairCooldownFactor(ctx.sql, actor.id, target.id),
       );
       const recent = lastFiredTick(
         ctx.sql, "play_invitation", actor.id, [target.id], ctx.tick, cd,
@@ -263,9 +325,12 @@ function detectTag(ctx: DetectionContext): TagEvent[] {
       const d = Math.hypot(k.x - inviterState.x, k.z - inviterState.z);
       if (d > PLAY_THRESHOLDS.tagContactProximityM) continue;
 
-      // Pair cooldown
-      const cd = Math.floor(
+      // Pair cooldown — halved for bonded pairs.
+      const baseCd = Math.floor(
         PLAY_THRESHOLDS.tagPairCooldownSimHours * 3600 * ctx.tickHz,
+      );
+      const cd = Math.floor(
+        baseCd * bondedPairCooldownFactor(ctx.sql, k.id, inviter),
       );
       const recent = lastFiredTick(
         ctx.sql, "tag", k.id, [inviter], ctx.tick, cd,
@@ -390,9 +455,12 @@ function detectDance(ctx: DetectionContext): DanceDetection[] {
       const d = Math.hypot(a.x - b.x, a.z - b.z);
       if (d > PLAY_THRESHOLDS.danceMaxProximityM) continue;
 
-      // Pair cooldown
-      const cd = Math.floor(
+      // Pair cooldown — halved for bonded pairs.
+      const baseCd = Math.floor(
         PLAY_THRESHOLDS.dancePairCooldownSimHours * 3600 * ctx.tickHz,
+      );
+      const cd = Math.floor(
+        baseCd * bondedPairCooldownFactor(ctx.sql, a.id, b.id),
       );
       const recent = lastFiredTick(
         ctx.sql, "dance", a.id, [b.id], ctx.tick, cd,
@@ -582,9 +650,12 @@ function detectSynchronizedSwim(ctx: DetectionContext): SyncDetection[] {
       });
       if (hasThird) continue;
 
-      // Pair cooldown
-      const cd = Math.floor(
+      // Pair cooldown — halved for bonded pairs.
+      const baseCd = Math.floor(
         PLAY_THRESHOLDS.syncPairCooldownSimHours * 3600 * ctx.tickHz,
+      );
+      const cd = Math.floor(
+        baseCd * bondedPairCooldownFactor(ctx.sql, a.id, b.id),
       );
       const recent = lastFiredTick(
         ctx.sql, "synchronized_swim", a.id, [b.id], ctx.tick, cd,

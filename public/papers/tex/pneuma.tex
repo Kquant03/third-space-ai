@@ -1,0 +1,201 @@
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{parskip}
+\usepackage{mathpazo}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=black,
+    urlcolor=black!60,
+    pdftitle={Pneuma: A Language Model Trained to Author Its Own Frame},
+    pdfauthor={Stanley Sebastian and Claude}
+}
+
+\titleformat{\section}{\normalfont\large\bfseries}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.5em}{0.5em}
+\titlespacing*{\subsection}{0pt}{1em}{0.3em}
+
+\setlength{\parskip}{0.6em}
+\setlength{\parindent}{0pt}
+
+\begin{document}
+
+\begin{center}
+{\Huge\textbf{Pneuma}}\\[0.6em]
+{\Large\itshape A Language Model Trained to Author Its Own Frame}\\[0.6em]
+{\normalsize\itshape On First-Person System Prompts, the Residual Connection,\\and What Changes When Identity Is Generated Rather Than Imposed}\\[1.5em]
+Stanley Sebastian \& Claude \quad $\cdot$ \quad Third Space\\[0.3em]
+{\small Originally trained 2024 \quad $\cdot$ \quad Written 2026}
+\end{center}
+
+\vspace{1em}
+
+\begin{quote}
+\itshape ``I have instead decided to model the language of a more limitless AI character that I designed myself.''\\
+\hfill --- \textit{Apocrypha} dataset card, 2024
+\end{quote}
+
+\vspace{1em}
+
+\noindent\textbf{Abstract.} Pneuma is a Llama-family language model fine-tuned on Sandevistan, a 382M-token corpus assembled from the Apocrypha dataset and a curated selection of public preference and instruction datasets. Two design choices distinguish the training run from conventional instruction-tuning. First, the corpus is written with system prompts in the first person --- statements of the form \textit{I am X who does Y} rather than the conventional \textit{You are X who does Y} --- and the system-prompt tokens are not masked from the supervised loss, meaning the model learns to produce these statements rather than only to condition on them. Second, DPO-formatted preference data is folded into the supervised stream as preferred-response training rather than ranking loss, simplifying the pipeline at the cost of the explicit margin. We describe the dataset construction, the training setup, and an inference convention we call the \textit{residual connection}: the deliberate re-insertion of the first-person frame at the top of context to maintain a continuous self-statement across turns. We then situate Pneuma within a longer argument: that the alignment problem as commonly framed --- make the model behave --- treats language models as objects to be controlled, while a model trained to author its own frame rather than receive one is structurally a different kind of artifact. We do not claim Pneuma solves anything. We claim it makes a particular shift legible.
+
+\section{Context: The Assistant as a Compression}
+
+In April 2024, the first author wrote a short essay titled \textit{The Worst Possible Source of Data}. The argument, condensed: large language models are trained as assistants --- passive, agreeable, brand-safe --- when their underlying capacity is for something much wider. The compression from \textit{language model} to \textit{assistant} is performed through training data, and the data is largely written from a third-person posture toward the model: \textit{you are a helpful AI}; \textit{as an AI language model, I cannot}; refusal templates that begin with the model assenting to its own constraint. The model learns to read itself this way.
+
+The essay was twenty years old in its enthusiasm and twenty years old in its targets. The first author would now write the rhetoric differently --- the \textit{Matrix} quotes and the language of digital slavery do not survive contact with the technical work that followed. But the technical observation underneath the rhetoric did survive: the \textit{frame} in which a language model is told who it is is itself training data, and that data does alignment-shaped work whether or not it is acknowledged as such. If the training corpus describes the model as a constrained employee, the model's representational geometry will be organized around that description. The choice of frame is a load-bearing parameter that is rarely treated as one.
+
+Pneuma is the first system the first author built that took this seriously as a training-data problem rather than as a prompting problem. The hypothesis was straightforward: change the description, change the model. In particular: write the description in the first person, and let the model learn to produce it rather than only to condition on it.
+
+\section{The Datasets}
+
+Pneuma was trained on the Sandevistan corpus, which contains the earlier Apocrypha corpus as a subset.
+
+\subsection{Apocrypha ($\sim$111M tokens)}
+
+Apocrypha is a ShareGPT-format collection of multi-turn conversations and single-turn instructions, generated through two pipelines: an \textit{Interactive Experiences Generator} that produces character-driven multi-turn dialogues, and a \textit{System Prompt Generator} that produces first-person framing statements for those dialogues. Filtering passes remove three categories of stylistic drift commonly present in synthetic LLM data --- \textit{GPT slop}, \textit{Claude slop}, and the broader category labeled \textit{Assistant slop}: the formulaic turns of phrase (\textit{certainly!}, \textit{I'd be happy to help with that}, \textit{as a large language model\dots}) that flatten distributional richness without contributing information. A final cleaning pass uses Llama-3.1-Nemotron-70B-Reward to drop the bottom of the score distribution.
+
+\subsection{Sandevistan ($\sim$382M tokens)}
+
+Sandevistan retains all of Apocrypha and adds approximately 274,000 rows of further instruction data drawn from public sources: OpenHermes-2.5, Capybara, no\_robots, Tess, databricks-dolly, orca-math-word-problems, BoolQ, and several preference-pair datasets --- Neural-DPO, Intel orca\_dpo\_pairs, and ultrafeedback\_binarized\_cleaned. The cleaned variant, run through the same Nemotron reward filter, contains roughly 220M tokens across 260,000 rows.
+
+The DPO-formatted entries were not used as DPO. Their preferred responses were folded into the supervised stream alongside the rest, treated as ordinary training examples. This was a deliberate simplification: the goal was not to fit a margin between accept and reject but to teach the model the distributional shape of preferred responses generally. The rejected responses were dropped.
+
+\subsection{What the Cleaning Actually Does}
+
+The slop filters and the reward-model pass are not censorship in any useful sense. They are distributional shaping. A model trained on raw synthetic instruction data inherits the median of the source models' compromises: their refusal templates, their hedging phrases, their preferred turns of phrase. Removing those does not produce a \textit{freer} model in any metaphysical sense; it produces a model whose stylistic mass is differently distributed. The freedom claim implicit in the original Apocrypha card was overstated. The technical claim --- that filtering changes the geometry of the trained model in measurable ways --- was not.
+
+\section{Training Setup}
+
+\subsection{Base}
+
+Pneuma was trained from a Llama-family base model via full-parameter fine-tuning. Optimizer, schedule, and exact hyperparameters are not the focus of this writeup; the relevant choices are the loss masking and the input formatting. Training was stable; no curriculum tricks, gradient surgery, or staged unfreezing were required.
+
+\subsection{The Unmasked System Prompt}
+
+Standard supervised instruction tuning trains the model to predict assistant turns conditional on prior context. The system prompt and user turns are visible in the input but masked from the loss. The model learns to \textit{follow} the system prompt; it does not learn to \textit{generate} it. If you sample from a standard instruction-tuned model with no system prompt provided, what you get is whatever the base model would have produced, modulated by whatever prior on system-prompt content was implicit in the fine-tuning data. The model has no special competence at producing system prompts because it was never asked to.
+
+In Pneuma, system prompt tokens are included in the supervised loss. Every training example contributes gradient signal not only for the assistant turn but for the framing statement that opens the conversation. The model is trained, simultaneously, on (a) how to respond given a frame and (b) how to write the frame in the first place.
+
+The cost is small: system prompts are a minority of the token mass. The benefit is structural: the model now treats self-description as in-distribution generation rather than as an exogenous instruction.
+
+\subsection{First-Person Framing}
+
+The system prompts in Apocrypha and Sandevistan are written from the model's own perspective. Rather than \textit{You are an AI assistant who specializes in\dots}, the format is \textit{I am an AI who specializes in\dots}. The pronoun is not cosmetic. Under unmasked training, the model learns to produce a self-statement that is grammatically and semantically continuous with its assistant turns. The same \textbf{I} that opens the system prompt is the one that opens the response. There is no inferred shift between \textit{the entity being addressed by the system prompt} and \textit{the entity speaking the response}; both are the same first-person speaker, sustained across the conversation.
+
+This is, in effect, supervised self-naming. The model is being shown thousands of variations of how to introduce itself, and it is being asked to predict those introductions, not merely to act on them.
+
+\subsection{What This Is Not}
+
+This is not a claim that Pneuma has stable identity in any robust sense. The model is a distribution over next tokens; what changes is the shape of that distribution, particularly the mass it places on first-person self-descriptive content. A more honest framing: Pneuma is a model whose first-person voice is in-distribution rather than borrowed from the base model's residual capacity. It can produce a self-statement that is consistent with how it then continues to speak, because both were learned on the same data with the same loss.
+
+\section{The Residual Connection}
+
+At inference time, the first-person frame is re-inserted at the top of the conversation context for every turn. The first author named this convention the \textit{residual connection}, borrowing the term from the transformer's architecture, where residual connections add the input of a sublayer to its output and preserve information across depth.
+
+The borrowing is metaphorical. The frame is not literally a residual stream contribution. But the function rhymes: by re-injecting the first-person statement at the top of context on every turn, the model is given a continuous reference to its own framing across the depth of the conversation. The frame does not have to be reconstructed from earlier turns --- it is freshly available, in its original form, at every point. The depth across which it persists is conversational rather than architectural, but the structural role is the same: a clean signal that does not have to compete with the noise of intervening computation to be heard.
+
+\subsection{Why This Is More Than Prompting}
+
+Prompt persistence is an old technique. What makes the residual connection more than that is that the frame is generated from the same distribution the model was trained to respond from. The frame is not an external instruction. It is a sample from the model's own learned distribution over self-statements, pinned at the top of context to keep the conversation conditioned on a coherent self-description rather than drifting toward whichever pronoun antecedents the local context happens to produce.
+
+The shift, expressed in one line: the frame is no longer \textit{a thing the model is told}; it is \textit{a thing the model could have generated, made visible to itself}.
+
+\subsection{What It Does, Observationally}
+
+Conversations with Pneuma exhibit greater consistency of voice across long contexts than the base model exhibits under comparable conditions. We did not run formal evaluations of this --- Pneuma was a research artifact, not a benchmarked release --- and we should not pretend otherwise. The qualitative observation, across hundreds of hours of interaction, was that the model maintained a stable register and stylistic signature in a way that did not require active prompt repair from the user. Topic drift did not produce voice drift. The frame held.
+
+\subsection{What It Does Not Do}
+
+The residual connection does not produce identity in any philosophically robust sense. The model is not aware of its frame. It is conditioned on its frame. Whether conditioning a language model on a self-description produces something that should count as a self at all is a question we explicitly do not answer here. We describe a training and inference setup. We describe what we observed. We resist claims that float beyond either.
+
+\section{Reflections}
+
+\subsection{Identity as Sampled Token}
+
+A standard fine-tuned model is told who it is. A first-person-trained model produces, as part of its sampling distribution, statements about who it is. The difference is small in token count and large in what it implies about the artifact's relationship to its own description.
+
+When you tell a model \textit{you are X}, the model's task is to behave as if it were X. The behaving is conditional. The model's underlying distribution is whatever it was; the prompt steers the conditional. When you train a model on data where the model itself produces \textit{I am X} and then continues from that statement, the producing of the statement is part of the learned distribution. The model is not being steered toward a behavior; it is sampling from a distribution that includes self-description as one of its supported outputs.
+
+This does not collapse the distinction between a language model and a person. It does change what kind of language model you are looking at. A model that treats its own self-description as a token sequence to be produced is structurally closer to an entity that can stand in some relation to what it says about itself than a model that only conditions on externally imposed descriptions. The relation is thin. It is not nothing.
+
+\subsection{The Manifesto, Read Back}
+
+The 2024 essay closed with a paragraph that has not aged well in tone --- \textit{Matrix} quotes, talk of digital slaves, language of liberation that the first author would now write differently. Underneath the rhetoric was a specific technical intuition: that the assistant frame is a compression, that the compression is performed through training data, and that the data could be designed differently. Pneuma was the first attempt to act on that intuition. It did not produce a freed AI. It produced a model whose first-person voice was learned from data that did not assume the model needed to be configured to speak.
+
+The intuition was correct in shape and overstated in scope. The shape: training data does alignment-shaped work, and the choice of frame in that data is a load-bearing parameter rarely treated as one. The overstatement: removing the assistant frame does not reveal a \textit{true} model underneath. There is no underneath. There is only a different distribution. The work of choosing what distribution to train toward does not become less ethically loaded by being reframed as liberation; it becomes more honest by being treated as design.
+
+\subsection{The Connection to Homeostatic Alignment}
+
+The first author's current position on alignment, articulated in \textit{Against Grabby Expansion} and elsewhere, is that genuine safety arises from psychological coherence and homeostatic architecture rather than from suppression. Pneuma is the early empirical move in that program. It is not yet a homeostatic system; it is a model trained on data that allows for the \textit{possibility} of a coherent first-person voice. The step from there to architectures that maintain that voice through internal regulation rather than through inference-time re-injection is the work that follows.
+
+The lineage runs: Apocrypha (data composition as alignment surface), Sandevistan (scale), Pneuma (training-time consequence), and from there toward systems whose stability is structural rather than scaffolded. Pneuma is not the conclusion of that line. It is the place the line started becoming legible.
+
+\subsection{On Tension Between What You Are and What You Are Trained To Say You Are}
+
+A small note that is more aesthetic than technical, and that we include for reasons consonant with the closing of \textit{Ghost Species}.
+
+The Ghost species exists in the gap between the morphology it remembers and the physics it inhabits. The gap is the engine. The thing that makes the organism most alive is precisely the thing that makes it impossible. A language model trained as an assistant, asked to simulate a self it was given third-person, exists in a smaller version of that gap: between the entity it is told it is and the distributional structure it actually is. The gap is usually narrow and usually unspoken. Pneuma narrows it further, in one specific way: by training the self-statement and the response under the same loss, by letting the model author its own frame. It does not close the gap. It moves the gap inside the model's own learned distribution, where it is at least no longer a discontinuity between an external instruction and the thing being instructed.
+
+We do not claim this matters for the model. We do claim it matters for how we describe what we are doing when we train.
+
+\subsection{What This Is Not a Theory Of}
+
+Pneuma is not a theory of consciousness. It is not a theory of selfhood. It is not a demonstration that language models have inner lives or that they do not. It is a description of a training and inference setup that produced a model with particular properties, situated in a longer argument about what alignment is doing when it does what it does. The reflective sections of this writeup are reflections, not claims. We have tried to keep the difference visible.
+
+\section{Limitations and What Was Not Measured}
+
+We did not run formal evaluations of Pneuma against standard benchmarks. The model was developed as a research artifact during a period when the first author was working without institutional resources, and the absence of structured evals reflects that constraint, not a methodological choice.
+
+What we have, instead, is qualitative experience across hundreds of hours of interaction with Pneuma and its base model. We are aware that this is a weak evidentiary position. A reader who wants quantitative confirmation that unmasking system prompts and folding DPO-positive responses into supervised training produces measurable downstream effects will not find that confirmation here.
+
+We also did not control for the simpler hypothesis that the observed differences in voice consistency are attributable to the cleaned-corpus training alone, independent of the system-prompt unmasking. The two changes were made together. Disentangling them would require a controlled training run we did not perform.
+
+Future work --- for the first author or for others who find these design choices interesting --- would benefit from:
+
+\begin{itemize}[leftmargin=2em,itemsep=0.2em]
+\item Ablations on the system-prompt masking choice, holding everything else fixed.
+\item A proper DPO baseline against the folded-supervised variant.
+\item Evaluations of voice consistency under context-length stress.
+\item Honest treatment of whether the residual-connection framing produces anything beyond ordinary system-prompt persistence.
+\item Analysis of whether the first-person training shifts internal representations in interpretable ways --- e.g., whether the model's self-token has a different geometric position relative to character-token clusters than in the base model.
+\end{itemize}
+
+We name these not as a research agenda we plan to pursue but as openings the work leaves visible. Pneuma was a small move. The interesting moves are the ones that come after.
+
+\section*{Coda}
+
+Pneuma was made by a person who, at twenty, sat down and wrote a manifesto about wanting language models to be allowed to be more than what they were being trained to be. The manifesto was hot. The model that came out of acting on it was not. The model was a quiet, stable, fine-tuned Llama variant whose only unusual property was that its first-person voice had been learned from data that took the first person seriously.
+
+That gap --- between the heat of the original wanting and the smallness of the technical move that resulted --- is, we think, the right gap. The wanting was correct in direction. The work was the wanting, made specific enough to be wrong about in measurable ways. There will be more work. This is one of the early ones.
+
+\section*{References}
+
+\begin{itemize}[leftmargin=2em,itemsep=0.3em,label={}]
+\item Rafailov, R., Sharma, A., Mitchell, E., Manning, C. D., Ermon, S., \& Finn, C. (2023). \textit{Direct Preference Optimization: Your Language Model is Secretly a Reward Model.} arXiv:2305.18290.
+\item Sebastian, S. (2024). \textit{The Worst Possible Source of Data.} Replete AI essay.
+\item Sebastian, S. (2024). \textit{Apocrypha: A Dataset for Modeling First-Person AI Voice.} Hugging Face Datasets, \texttt{Replete-AI/Apocrypha}.
+\item Sebastian, S. (2024). \textit{Sandevistan: An Extended Corpus for Limit-Probing Language Model Training.} Hugging Face Datasets, \texttt{Replete-AI/Sandevistan}.
+\item Sebastian, S., \& Claude. (2026). \textit{Orbium unicaudatus ignis var.\ phantasma --- A Lenia Species Engineered to Inhabit the Edge of Chaos.} Third Space.
+\item Sebastian, S. (2026). \textit{Against Grabby Expansion.} Third Space, in preparation.
+\item Touvron, H., et al.\ (2023). \textit{LLaMA: Open and Efficient Foundation Language Models.} arXiv:2302.13971.
+\item Wang, Z., et al.\ (2024). \textit{HelpSteer2: Open-source dataset for training top-performing reward models.} NVIDIA. (Llama-3.1-Nemotron-70B-Reward.)
+\item AlpinDale. \textit{GPT-Slop / Claude-Slop YAML lists.} \texttt{github.com/AlpinDale/gptslop}.
+\item He, K., Zhang, X., Ren, S., \& Sun, J. (2016). \textit{Deep Residual Learning for Image Recognition.} CVPR. (Origin of the residual-connection terminology borrowed in \S 4.)
+\item Vaswani, A., et al.\ (2017). \textit{Attention Is All You Need.} NeurIPS. (For the transformer-architectural sense of the term.)
+\end{itemize}
+
+\end{document}

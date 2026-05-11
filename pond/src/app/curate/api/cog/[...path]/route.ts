@@ -10,7 +10,7 @@
 //  phone once.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
 const WORKER_URL = process.env.POND_WORKER_URL ?? "http://localhost:8787";
 const SHARED_SECRET = process.env.POND_SHARED_SECRET ?? "";

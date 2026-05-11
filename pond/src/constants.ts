@@ -11,191 +11,76 @@
 // ───────────────────────────────────────────────────────────────────────
 //  Pond geometry (§ III, § XI)
 //
-//  The pond is a gourd-shaped basin: two joined rounded lobes connected
-//  by a narrowed waist. This shape is CANONICAL and must match the
-//  client shader's pondSDF exactly — the client and server geometry
-//  are co-authoritative, and any drift between them produces fish-on-
-//  land glitches.
+//  The canonical SDF and helpers live in ./pondGeometry.ts (worker
+//  side, sibling to this file). The Next.js client has a mirror at
+//  lib/pondGeometry.ts that adds CAM re-exports from pondCamera and
+//  emits the GLSL strings the WebGL shader inlines. The two SDF
+//  implementations are kept byte-identical until the monorepo grows
+//  a shared package reachable from both sides.
 //
-//  Canonical form (in pond-meters, centered near origin):
-//    Large basin:  center (-1.0, 0.0),  radius 3.5
-//    Small basin:  center (+1.8, 0.4),  radius 2.2
-//    Smooth union: k = 0.9 (controls waist softness)
-//
-//  Max extent: approximately x ∈ [-4.5, +4.0], z ∈ [-3.5, +3.5].
-//  Bounding circle: radius ≈ 5.0 (preserved for back-compat).
+//  Background on why this matters: the kinematic boundary the server
+//  steers fish inside must match the painted boundary the client
+//  shader renders. When they drifted out of sync, fish appeared to
+//  swim through walls. One source of truth per side, kept in lockstep.
 // ───────────────────────────────────────────────────────────────────────
 
-export const POND = {
-  /** Bounding radius in meters. The gourd fits comfortably inside a
-   *  circle of this radius. Retained for back-compat with any code
-   *  that wants a coarse pond-scale number. Prefer pondSDF() for any
-   *  actual containment check. (§ III) */
-  radius: 5.0,
-
-  /** Maximum depth at the deep centroid of the larger basin. (§ III) */
-  maxDepth: 3.0,
-
-  /** Shelf band — the shallow perimeter where eggs are laid. In the
-   *  gourd, "shelf" is the annular region just inside the rim:
-   *     pondSDF(x,z) ∈ [shelfSdfMin, shelfSdfMax]
-   *  This replaces the old radius-based shelfRadiusMin/Max. The values
-   *  reproduce the same 0.2–1.8m-wide annulus as before, but now
-   *  respect the gourd's asymmetry. */
-  shelfSdfMin: -1.8,   // inner edge — 1.8m in from wall
-  shelfSdfMax: -0.2,   // outer edge — 0.2m in from wall (just submerged)
-
-  /** Legacy radial shelf bounds. Kept so old callers don't break, but
-   *  containment should use shelfSdfMin/Max via onShelf(). */
-  shelfRadiusMin: 3.2,
-  shelfRadiusMax: 4.8,
-
-  /** Typical swim depth for adults; they rarely hug the surface or
-   *  the floor. */
-  adultSwimDepth: -1.2,
-
-  /** Shrine center. In gourd coordinates this sits at the waist,
-   *  near the junction of the two basins. Matches shader's
-   *  shrineCenter = (0.2, -0.2) in top-down pondXZ. (§ XI) */
-  shrine: { x: 0.2, y: -2.4, z: -0.2 },
-
-  /** Gourd geometry — exposed so callers can do their own SDF math
-   *  without going through the helpers. Do not modify at runtime. */
-  gourd: {
-    basinA: { cx: -1.0, cz: 0.0, r: 3.5 },
-    basinB: { cx:  1.8, cz: 0.4, r: 2.2 },
-    k: 0.9,
-  },
-} as const;
-
-// ───────────────────────────────────────────────────────────────────────
-//  Pond geometry helpers
-//
-//  THE SINGLE SOURCE OF TRUTH for "is this point inside the pond?"
-//  Must match the shader's pondSDF exactly. Any geometry change here
-//  requires a matching change in LivingSubstrate.tsx's pondSDF.
-// ───────────────────────────────────────────────────────────────────────
-
-/** Signed distance to the pond boundary in top-down pond-XZ meters.
- *  Negative inside, positive outside. Zero at the rim. */
-export function pondSDF(x: number, z: number): number {
-  const a = POND.gourd.basinA;
-  const b = POND.gourd.basinB;
-  const k = POND.gourd.k;
-  const dA = Math.hypot(x - a.cx, z - a.cz) - a.r;
-  const dB = Math.hypot(x - b.cx, z - b.cz) - b.r;
-  const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (dB - dA) / k));
-  return dA * (1 - h) + dB * h - k * h * (1 - h);
-}
-
-/** Numerical gradient of pondSDF (outward normal, un-normalized). */
-export function pondSDFGradient(
-  x: number,
-  z: number,
-  eps = 0.05,
-): { gx: number; gz: number } {
-  const gx = (pondSDF(x + eps, z) - pondSDF(x - eps, z)) / (2 * eps);
-  const gz = (pondSDF(x, z + eps) - pondSDF(x, z - eps)) / (2 * eps);
-  return { gx, gz };
-}
-
-/** True if (x, z) is strictly inside the pond, with a small margin.
- *  Margin defaults to 0.12m — the same value the client uses for its
- *  nose-point contact physics, so server and client agree on "inside". */
-export function isInsidePond(x: number, z: number, margin = 0.12): boolean {
-  return pondSDF(x, z) < -margin;
-}
-
-/** True if (x, z) is on the egg-laying shelf annulus. */
-export function onShelf(x: number, z: number): boolean {
-  const s = pondSDF(x, z);
-  return s >= POND.shelfSdfMin && s <= POND.shelfSdfMax;
-}
-
-/** Project a point to the nearest interior point at least `margin`
- *  meters from the pond rim. If already inside at that margin,
- *  returns the point unchanged. Uses the SDF gradient as the
- *  outward normal. */
-export function clampToPond(
-  x: number,
-  z: number,
-  margin = 0.12,
-): { x: number; z: number } {
-  const s = pondSDF(x, z);
-  if (s < -margin) return { x, z };
-  const { gx, gz } = pondSDFGradient(x, z);
-  const gmag = Math.hypot(gx, gz) + 1e-6;
-  const nx = gx / gmag;
-  const nz = gz / gmag;
-  // Push inward by exactly the penetration depth plus margin
-  const pushIn = s + margin;
-  return { x: x - nx * pushIn, z: z - nz * pushIn };
-}
-
-/** Water depth at (x, z). Max at the deep centroid, 0.2 at the rim. */
-export function waterDepthAt(x: number, z: number): number {
-  const s = pondSDF(x, z);
-  if (s >= 0) return 0;
-  // Map sdf in [-3.5, 0] → depth in [3.0, 0.2]
-  const t = Math.max(0, Math.min(1, -s / 3.5));
-  return 0.2 + t * (3.0 - 0.2);
-}
-
-/** Sample a uniformly-distributed random point inside the pond.
- *  Rejection sampling on the gourd bounding box. Converges fast
- *  (gourd fills ~70% of its bounding box). */
-export function samplePointInPond(
-  rand: () => number,
-  margin = 0.15,
-): { x: number; z: number } {
-  // Bounding box of the gourd, with the basins' extents
-  const bbMinX = -4.6, bbMaxX = 4.1;
-  const bbMinZ = -3.6, bbMaxZ = 3.6;
-  for (let i = 0; i < 64; i++) {
-    const x = bbMinX + rand() * (bbMaxX - bbMinX);
-    const z = bbMinZ + rand() * (bbMaxZ - bbMinZ);
-    if (pondSDF(x, z) < -margin) return { x, z };
-  }
-  // Fallback — center of larger basin, always inside.
-  return { x: POND.gourd.basinA.cx, z: POND.gourd.basinA.cz };
-}
-
-/** Sample a random point on the egg-laying shelf. */
-export function samplePointOnShelf(
-  rand: () => number,
-): { x: number; z: number } {
-  const bbMinX = -4.6, bbMaxX = 4.1;
-  const bbMinZ = -3.6, bbMaxZ = 3.6;
-  for (let i = 0; i < 128; i++) {
-    const x = bbMinX + rand() * (bbMaxX - bbMinX);
-    const z = bbMinZ + rand() * (bbMaxZ - bbMinZ);
-    if (onShelf(x, z)) return { x, z };
-  }
-  // Fallback — just inside shelf outer edge in the larger basin.
-  return { x: POND.gourd.basinA.cx - 3.0, z: POND.gourd.basinA.cz };
-}
+export {
+  POND, GOURD,
+  pondSDF, pondSDFGradient,
+  isInsidePond, onShelf, clampToPond, waterDepthAt,
+  samplePointInPond, samplePointOnShelf,
+} from "./pondGeometry.js";
 
 // ───────────────────────────────────────────────────────────────────────
 //  Simulation tick (§ V, § XVII)
+//
+//  Tempo per Final Vision (May 2026): a sim-day stretches 6–8 real
+//  hours so a founder pair's first reproduction lands at real-day 5–7.
+//  Founders live longer than later generations; subsequent generations
+//  live longer per individual and reproduce less. The pond is paced
+//  for contemplation, not for performance.
 // ───────────────────────────────────────────────────────────────────────
 
 export const SIM = {
-  /** Tick rate in Hz. Kinematics run every tick; cognition is sparser. */
-  tickHz: 2,
-  /** Derived: ms between ticks. */
-  tickIntervalMs: 500,
-  /** WebSocket snapshot/tick broadcast rate. */
-  broadcastHz: 2,
-  /** A simulated day compresses ~45 real minutes; a life is 30 sim-days. (§ VII) */
-  realSecondsPerSimDay: 45 * 60,
-  /** A full life at the compressed rate: ~22.5 real hours. */
-  realSecondsPerLife: 30 * 45 * 60,
-  /** Seasons cycle every 7 sim-days; one real cycle is ~5.25 real hours. */
-  realSecondsPerSeason: 7 * 45 * 60,
+  /** Tick rate in Hz. Kinematics run every tick; cognition is sparser
+   *  and runs in seconds-based cadence (see COGNITION_INTERVAL_S),
+   *  converted to ticks at use site via `Math.floor(intervalS * tickHz)`.
+   *  Bumped from 2 Hz to 30 Hz May 2026 — at dt=33ms the kinematic
+   *  integrator takes small enough steps that motion looks continuous
+   *  without client-side interpolation. Pair with the async-cognition
+   *  refactor in pond-do.ts so a 1-3s LLM call no longer freezes the
+   *  tick loop. */
+  tickHz: 30,
+  /** Derived: ms between ticks. Keep in sync with tickHz (1000/tickHz,
+   *  rounded down — 33ms gives 30.3 Hz actual, ~1% drift, acceptable). */
+  tickIntervalMs: 33,
+  /** WebSocket snapshot/tick broadcast rate. **Decoupled from tickHz**:
+   *  the server runs physics at 30 Hz internally for smooth integration,
+   *  but broadcasts are gated to 5 Hz at the alarmBody → broadcastTick
+   *  call site (every (tickHz / broadcastHz) ticks). The client's
+   *  critically-damped spring integrator in `usePond.ts::stepKinematics`
+   *  smooths between broadcasts at render rate (60fps) — 5 Hz broadcasts
+   *  with local interpolation gives visually-continuous motion without
+   *  saturating the client's JS main thread on JSON.parse and React
+   *  reconciliation.
+   *
+   *  Earlier set to 30 (coupled to tickHz). Caused client CPU to pin at
+   *  100% on the visuals, frame rate dropped, fish appeared stationary
+   *  and small. May 2026 fix: drop to 5 with broadcast-tick modulo gate. */
+  broadcastHz: 5,
+  /** A simulated day stretches 6 real hours. Tunable upward to 8 if the
+   *  pace feels too quick. (§ VII / Final Vision) */
+  realSecondsPerSimDay: 6 * 3600,
+  /** Founders live ~30 sim-days. At 6h per sim-day this is ~7.5 real
+   *  days of pond life. Subsequent generations are tuned longer per
+   *  individual; lifespanByKoi distribution handles the variance. */
+  realSecondsPerLife: 30 * 6 * 3600,
+  /** Seasons cycle every 7 sim-days; one real cycle is ~42 real hours. */
+  realSecondsPerSeason: 7 * 6 * 3600,
 } as const;
 
 // ───────────────────────────────────────────────────────────────────────
-//  Lifecycle (§ VII)
+//  Lifecycle (§ VII / Final Vision)
 // ───────────────────────────────────────────────────────────────────────
 
 export const LIFE = {
@@ -211,20 +96,16 @@ export const LIFE = {
   },
   /** Ordered list for advancement checks. */
   order: ["egg", "fry", "juvenile", "adolescent", "adult", "elder", "dying"] as const,
-  /** ~1-in-100 fry are rolled legendary. (§ VII) */
-  legendaryRate: 0.01,
-  /** Variance on lifespan: a fish may die earlier from stress or live past 30.
-   *  Widened from 1.8 to 2.4 sim-days (April 2026 tuning) so the pond
-   *  has a healthier spread of natural death ages — some fish make it to
-   *  34-36, which stabilizes the running population. (§ VII: "A fish that
-   *  lives for thirty-eight days is genuinely rare.") */
+  /** Legendary tier was retired in May 2026 cleanup; the rate is kept
+   *  at 0 so any code still reading it produces non-legendary fish. */
+  legendaryRate: 0.0,
+  /** Lifespan variance. Founders live longer than later generations
+   *  per Final Vision; that's handled in lifespanByKoi assignment, not
+   *  by a global tweak here. This std-dev sets the colony-wide spread. */
   longTailDeathStdDevDays: 2.4,
-  /** Sparse-is-sacred: target birth rate at 5-6 koi steady state. Lowered
-   *  from 1.0 to 0.5 births per sim-week (April 2026 tuning) to match the
-   *  tightened mutual-drawn-to gate. One birth per ~10-14 sim-days is
-   *  still inside the manifesto envelope of "roughly one birth per 7-10
-   *  sim-days" (§ X) and errs toward sparser — births matter more when
-   *  rarer. */
+  /** Target steady-state birth rate at density-gate population. Tuned
+   *  toward "5–6 children across founders' lives, then later
+   *  generations less frequent." */
   targetBirthsPerSimWeek: 0.5,
 } as const;
 
@@ -263,9 +144,31 @@ export const REFLECTION = {
 // ───────────────────────────────────────────────────────────────────────
 //  Model tier cascade (§ V, § XVII)
 //
-//  Primary → fallbacks. OpenRouter will route to the next alias when the
-//  primary rate-limits or errors. Exact model IDs (never aliases) are
-//  logged into the event envelope — § XV research hygiene.
+//  Cognition is tiered by life stage. Per the architecture document
+//  (third-space.ai/limen-pond): Gemma 4 26B A4B is the workhorse for
+//  young and adult cognition — its small active footprint (4B per
+//  token in a 26B-class MoE) makes the open-weights commitment
+//  operationally tractable on operator hardware. Haiku 4.5 takes
+//  elder cognition, where context spans the full 6k window and the
+//  register is wider but cheaper than Sonnet's. Sonnet 4.5 is reserved
+//  for dying — the hardest register, where reduced temperature (0.4)
+//  preserves voice stability through the final reflection.
+//
+//  The pond-specific Gemma 4 E4B fine-tune trained on Apocrypha,
+//  Sandevistan, and the pond's accumulated event logs is the
+//  immediate next move; it will replace 26B A4B in the young and
+//  adult slots, collapsing the inference profile further once the
+//  mechanism schema is internalized as learned prior rather than
+//  runtime structured-output overhead.
+//
+//  Fallbacks are graceful-degradation routes, not equivalents:
+//  if Gemma is unavailable Haiku takes the load, with the operator
+//  paying per-token instead of per-watt. The cascade falls through
+//  in order; if all routes exhaust, the cognition cycle is dropped
+//  rather than completed unsafely.
+//
+//  Exact model IDs (never aliases) are logged into every event
+//  envelope per § XV research hygiene.
 // ───────────────────────────────────────────────────────────────────────
 
 export interface ModelTier {
@@ -280,99 +183,86 @@ export interface ModelTier {
 }
 
 export const MODEL_TIERS: Record<string, ModelTier> = {
-  // Fry and juvenile are pre-verbal — they cognize, but their utterances
-  // should be minimal and their intent vocabulary a subset. Small Gemma
-  // is the target here. For now, use gemma-3-4b-it which is cheap,
-  // produces clean fragment register, and will eventually be replaced
-  // with the fine-tuned Gemma-4-E2B student trained on pond data.
-  fry: {
-    stage: "fry",
-    primary: "google/gemma-3-4b-it",
-    fallbacks: ["google/gemma-3n-e4b-it"],
-    temperature: 0.7,
-    contextTokens: 500,
-    maxOutputTokens: 120,
-    approxUsdPerMTokIn: 0.02,
-    approxUsdPerMTokOut: 0.04,
-  },
-  juvenile: {
-    stage: "juvenile",
-    primary: "google/gemma-3-4b-it",
-    fallbacks: ["google/gemma-3n-e4b-it"],
-    temperature: 0.7,
-    contextTokens: 1500,
-    maxOutputTokens: 160,
-    approxUsdPerMTokIn: 0.02,
-    approxUsdPerMTokOut: 0.04,
-  },
-  // Adolescent and adult run the workhorse. Gemma-4-26B-A4B proved 100%
-  // register compliance across 10k synthetic contexts in the April 2026
-  // sweep. This is the slot the fine-tuned Gemma-4-E4B will eventually
-  // occupy. Haiku fallback catches the rare outright model outage.
-  adolescent: {
-    stage: "adolescent",
+  // Young beings — fry, juvenile, adolescent. Pre-verbal-ish; low
+  // utterance density and a subset of the intent vocabulary. Gemma 4
+  // 26B A4B at modest context, modest temperature; Haiku 4.5 catches
+  // the cascade if Gemma is unavailable.
+  young: {
+    stage: "young",
     primary: "google/gemma-4-26b-a4b-it",
-    fallbacks: ["anthropic/claude-haiku-4.5"],
-    temperature: 0.75,
+    fallbacks: [
+      "anthropic/claude-haiku-4.5",
+      "anthropic/claude-3-5-haiku-latest",
+    ],
+    temperature: 0.7,
     contextTokens: 2000,
-    maxOutputTokens: 180,
+    maxOutputTokens: 200,
     approxUsdPerMTokIn: 0.10,
-    approxUsdPerMTokOut: 0.40,
+    approxUsdPerMTokOut: 0.30,
   },
+
+  // Adult — the workhorse. Most cognition cycles run here. Gemma 4
+  // 26B A4B at full context, slightly warmer temperature for the
+  // wider behavioral vocabulary adults exercise. The eventual
+  // pond-specific E4B fine-tune lands in this slot.
   adult: {
     stage: "adult",
     primary: "google/gemma-4-26b-a4b-it",
-    fallbacks: ["anthropic/claude-haiku-4.5"],
+    fallbacks: [
+      "anthropic/claude-haiku-4.5",
+      "anthropic/claude-3-5-haiku-latest",
+    ],
     temperature: 0.75,
-    contextTokens: 3000,
+    contextTokens: 4000,
     maxOutputTokens: 220,
     approxUsdPerMTokIn: 0.10,
-    approxUsdPerMTokOut: 0.40,
+    approxUsdPerMTokOut: 0.30,
   },
-  // Elders deserve more depth — more context, richer relational memory,
-  // more careful utterance. Haiku is primary; dense Gemma-4-31B as
-  // fallback for situational reach when the elder's context is complex.
+
+  // Elder — context spans the relational history. Haiku 4.5 primary
+  // (the wider context costs less than Sonnet and the register is
+  // not yet at its hardest); Gemma 4 31B Dense as fallback for
+  // situational reach when an elder's relational context spans the
+  // full 6k-token window.
   elder: {
     stage: "elder",
     primary: "anthropic/claude-haiku-4.5",
-    fallbacks: ["google/gemma-4-31b-it"],
-    temperature: 0.7,
+    fallbacks: [
+      "google/gemma-4-31b-it",
+      "anthropic/claude-3-5-haiku-latest",
+    ],
+    temperature: 0.5,
     contextTokens: 6000,
     maxOutputTokens: 280,
     approxUsdPerMTokIn: 1.00,
     approxUsdPerMTokOut: 5.00,
   },
-  // Dying koi get Sonnet. This is the register's hardest moment — a
-  // fish whose entire relational graph is about to be mourned. Reduced
-  // temperature per § VII so the voice doesn't drift under stress.
-  // Haiku as fallback preserves warmth if Sonnet is unavailable.
+
+  // Dying — the hardest register. Sonnet 4.5 at reduced temperature
+  // (0.4) per the voice-stability constraint so a dying being's
+  // final utterances do not drift under register stress. Haiku as
+  // fallback preserves warmth if Sonnet is unavailable, but the
+  // budget is set assuming Sonnet runs.
   dying: {
     stage: "dying",
-    primary: "anthropic/claude-sonnet-4.5",
+    primary: "anthropic/claude-sonnet-4-5",
     fallbacks: ["anthropic/claude-haiku-4.5"],
     temperature: 0.4,
     contextTokens: 6000,
-    maxOutputTokens: 200,
+    maxOutputTokens: 280,
     approxUsdPerMTokIn: 3.00,
     approxUsdPerMTokOut: 15.00,
   },
-  // Legendary — 1 in 100 koi. Haiku is genuinely enough; the sweep
-  // showed it hits full register with situational reach ("shelf holds
-  // us both", "warm days past. moving away now."). Opus reserved for
-  // later edge-case carve-outs (e.g. a dying legendary elder's twilight
-  // reflection on a 500-interaction bond). We can add a "canon" tier
-  // when we want it; for now Haiku.
-  legendary: {
-    stage: "legendary",
-    primary: "anthropic/claude-haiku-4.5",
-    fallbacks: ["anthropic/claude-3.5-haiku"],
-    temperature: 0.75,
-    contextTokens: 8000,
-    maxOutputTokens: 320,
-    approxUsdPerMTokIn: 1.00,
-    approxUsdPerMTokOut: 5.00,
-  },
 };
+
+/** Map a being's life-stage to the tier slot that serves it. */
+export function tierForStage(stage: string): string {
+  if (stage === "dying") return "dying";
+  if (stage === "elder") return "elder";
+  if (stage === "egg" || stage === "fry" ||
+      stage === "juvenile" || stage === "adolescent") return "young";
+  return "adult";
+}
 
 // ───────────────────────────────────────────────────────────────────────
 //  Affect — PAD decay half-lives in hours (§ VIII)
@@ -566,26 +456,62 @@ export const MEMORY = {
 } as const;
 
 // ───────────────────────────────────────────────────────────────────────
-//  Drawn-to reproduction condition (§ X)
+//  Bond intensity — the new reproduction trigger (Final Vision)
+//
+//  Replaces the 3-of-7 mutual drawn-to scan. Bond intensity is a
+//  scalar in [0, 1] derived from the relationship_card row:
+//
+//    intensity = clamp(
+//        0.5 * valence
+//      + 0.2 * tanh(interaction_count / 30)
+//      + 0.2 * recent_witnessing_density
+//      + 0.1 * familiarity_prior
+//      , 0, 1)
+//
+//  Founders are seeded above threshold (0.6); later generations
+//  accumulate intensity through proximity, witnessing, and survived
+//  events together. Reproduction-eligible pair: both adult-stage,
+//  density below gate, intensity ≥ threshold, neither in cooldown.
+//
+//  See bondIntensity() in mechanisms/bond.ts for the canonical
+//  computation. Constants here only set the numeric thresholds.
+// ───────────────────────────────────────────────────────────────────────
+
+export const BOND = {
+  /** Reproduction-eligible threshold. Founders seed at 0.60; tuning
+   *  this upward makes later generations work harder to bond. */
+  reproductionThreshold: 0.55,
+  /** Bonded pair cooldown reduction factor on play_invitation, dance,
+   *  synchronized_swim. Bonded pairs run courtship more readily. */
+  bondedCourtshipCooldownFactor: 0.5,
+  /** Cooldown after a spawning before either parent can be in another
+   *  reproduction-eligible pair. Sim-days. */
+  postSpawningCooldownDays: 14,
+  /** Density gate. Reproduction halts when alive being count meets
+   *  this. (Final Vision: ~12.) */
+  populationGate: 12,
+  /** Founder bond seed value, applied symmetrically at world start
+   *  to Shiki's card-toward-Kokutou and vice versa. */
+  founderSeedValence: 0.6,
+} as const;
+
+// ───────────────────────────────────────────────────────────────────────
+//  Drawn-to reproduction condition (§ X) — DEPRECATED
+//
+//  Kept here for compile-stability while reproduction.ts is rewritten
+//  against BOND above. After the rewrite this block goes.
 // ───────────────────────────────────────────────────────────────────────
 
 export const DRAWN_TO = {
-  /** Reproduction fires when both fish have drawn_to → each other on
-   * at least this many of the last 7 sim-days. Raised from 3 to 4
-   * (April 2026 tuning) so pairs have to sustain mutual preference
-   * more consistently before reproduction permission fires. */
+  /** @deprecated use BOND.reproductionThreshold */
   minDaysOfMutualInLast7: 4,
+  /** @deprecated */
   windowDays: 7,
-  /** Cooldown in sim-days after a spawning for either participant.
-   * Doubled from 7 to 14 sim-days (April 2026 tuning) so the same
-   * pair can't spawn again within half a lifetime. Combined with the
-   * tighter minDaysOfMutualInLast7 and the reduced egg count weights,
-   * the steady-state birth rate lands near one per 10-14 sim-days. */
+  /** @deprecated use BOND.postSpawningCooldownDays */
   cooldownDays: 14,
-  /** Reflection prompt runs at lower temperature than routine cognition. */
+  /** @deprecated */
   temperature: 0.3,
-  /** The weekly solitude-bias audit triggers if more than this fraction of
-   * adult-adult pairs show mutual drawn_to reflections in a week. */
+  /** @deprecated */
   solitudeAuditPairThreshold: 0.5,
 } as const;
 
@@ -634,22 +560,24 @@ export const WS = {
 } as const;
 
 // ───────────────────────────────────────────────────────────────────────
-//  Budget tiers (§ XVII)
+//  Budget posture (§ XVII)
 //
-//  Graceful degradation bands. Each percentage is "budget remaining as
-//  fraction of the monthly allotment." Tier transitions are themselves
-//  logged as in-world events, so the site's narrative coherence persists.
+//  Simplified from the four-band cascade in earlier iterations. The
+//  vision sets monthly cost ceiling at $100 across the full tier
+//  ladder. Below the meditation floor (no key, exhausted budget, or
+//  upstream LLM outage), cognition short-circuits to the cached
+//  fallback and meditation-mode intent picker — physics keeps
+//  ticking, beings keep swimming, no LLM calls fire.
+//
+//  The earlier graduated degradation (healthy/watchful/austerity) was
+//  paper-grade hygiene that the launch demo doesn't need; it can come
+//  back as separate, well-tested code if the cap actually starts
+//  getting tight in practice.
 // ───────────────────────────────────────────────────────────────────────
 
 export const BUDGET = {
   monthlyUsd: 100,
-  /** Above 60%: normal operation. */
-  healthyFloor: 0.60,
-  /** 30-60%: reflection frequency halved, adults may drop a tier. */
-  watchfulFloor: 0.30,
-  /** 10-30%: all on cheapest viable; reflections every 3 days; no legendary. */
-  austerityFloor: 0.10,
-  /** Below 10%: meditation mode. 90% cached utterances. */
+  /** Below 0% remaining → meditation mode. */
   meditationFloor: 0.00,
 } as const;
 

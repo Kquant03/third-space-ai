@@ -17,14 +17,12 @@ export interface Vec3 {
   z: number;
 }
 
-// Pond is a cylindrical-ish basin ~20m diameter, ~3m deep.
-// Coordinates in meters, centered at origin, y is up.
-export const POND = {
-  radius: 10.0,
-  depth: 3.0,
-  surfaceY: 0.0,     // water surface
-  floorY: -3.0,      // pond floor
-} as const;
+// Note: pond geometry (gourd shape, basin SDF, camera) lives in
+// `lib/pondGeometry.ts` for the client and `pond/src/constants.ts`
+// for the worker. There is intentionally no POND constant exported
+// here — earlier revisions had a cylindrical POND that has been
+// retired with the gourd adoption. Import POND from the appropriate
+// platform's constants instead.
 
 // ───────────────────────────────────────────────────────────────────
 //  Life stage
@@ -32,28 +30,20 @@ export const POND = {
 
 export type Stage = "egg" | "fry" | "juvenile" | "adolescent" | "adult" | "elder" | "dying" | "dead";
 
-export type ModelTier = "fry" | "juvenile" | "adult" | "elder" | "legendary";
-
-export interface StageSpec {
-  stage: Stage;
-  tier: ModelTier;
-  // How many ticks (at 2Hz) this stage lasts, on average.
-  // 30 real days = 30*86400*2 = 5_184_000 ticks.
-  duration_ticks: number;
-  cognition_interval_ticks: number;  // avg cadence for LLM calls
-}
-
-// Stage schedule in ticks (2 Hz). Numbers compress the 30-day lifecycle.
-// Fry & juvenile cognize more often because their lives are eventful (first-of-everything).
-export const STAGE_SCHEDULE: StageSpec[] = [
-  { stage: "egg",        tier: "fry",       duration_ticks: 172_800,   cognition_interval_ticks: 0     }, // 1 day, no cognition
-  { stage: "fry",        tier: "fry",       duration_ticks: 172_800,   cognition_interval_ticks: 60    }, // 30s
-  { stage: "juvenile",   tier: "juvenile",  duration_ticks: 345_600,   cognition_interval_ticks: 240   }, // 2 min
-  { stage: "adolescent", tier: "juvenile",  duration_ticks: 691_200,   cognition_interval_ticks: 240   }, // 2 min
-  { stage: "adult",      tier: "adult",     duration_ticks: 1_900_800, cognition_interval_ticks: 240   }, // 2 min
-  { stage: "elder",      tier: "elder",     duration_ticks: 864_000,   cognition_interval_ticks: 600   }, // 5 min
-  { stage: "dying",      tier: "elder",     duration_ticks: 172_800,   cognition_interval_ticks: 1200  }, // 10 min
-];
+// Note: stage durations and cognition cadences live in seconds in
+// `pond/src/constants.ts` (LIFE.realSecondsPerStage, COGNITION_INTERVAL_S),
+// converted to ticks at use site via `Math.floor(seconds * SIM.tickHz)`.
+// This keeps tick rate freely tunable without recalibrating tables.
+// Earlier revisions had a STAGE_SCHEDULE table calibrated in raw ticks
+// at 2 Hz; that is now retired.
+//
+// Model-tier configuration (which OpenRouter / Anthropic model serves
+// each life stage) lives in `MODEL_TIERS` in `pond/src/constants.ts`,
+// keyed by tier slot ("young" | "adult" | "elder" | "dying"). The
+// stage-to-tier mapping is `tierForStage(stage)`. The earlier
+// string-union `ModelTier` ("fry" | "juvenile" | "adult" | "elder" |
+// "legendary") is retired; the live `ModelTier` is the structured
+// interface in constants.ts.
 
 // ───────────────────────────────────────────────────────────────────
 //  Koi state (authoritative; lives in SQLite)
@@ -89,8 +79,6 @@ export interface KoiState {
 
   // Cognition scheduling
   next_cognition_tick: number;
-  cognition_interval_ticks: number;
-  model_tier: ModelTier;
 
   // Visual
   color: string;                   // hex or koi color code (kohaku, shusui, etc.)
@@ -282,13 +270,6 @@ export type LoveMechanism =
   | "dance"
   | "synchronized_swim"
   | "shared_curiosity"
-  // Teaching family
-  | "mentorship"
-  | "mentor_mentee_inversion"
-  | "imitation_learning"
-  | "skill_transfer"
-  | "story_propagation"
-  | "vocabulary_drift"
   // Gift family
   | "gift"
   | "pass_it_forward"
@@ -297,6 +278,12 @@ export type LoveMechanism =
   | "shared_food"
   | "memory_gifting"
   // Ritual family
+  // NOTE: this enum should be kept in sync with the canonical mechanism
+  // type in `pond/src/mechanisms/types.ts`. The earlier teaching family
+  // (mentorship, mentor_mentee_inversion, imitation_learning,
+  // skill_transfer, story_propagation, vocabulary_drift) was cut in the
+  // May 2026 cleanup pass. The ritual entries below may need further
+  // trimming against mechanisms/types.ts — TODO cross-check.
   | "greeting"
   | "farewell"
   | "solstice_attendance"

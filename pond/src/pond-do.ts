@@ -28,7 +28,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 
-import { SIM, LIFE, POND, HUNGER, FOOD } from "./constants.js";
+import { SIM, LIFE, POND, HUNGER } from "./constants.js";
 import { applySchema } from "./schema.js";
 import { Rng } from "./rng.js";
 import type {
@@ -45,11 +45,10 @@ import {
 } from "./koi.js";
 import {
   stepNutrition, nearestFood, makeVisitorPellet,
-  type FoodConsumption,
 } from "./nutrition.js";
-import { composeName, collectObservations } from "./naming.js";
+import { composeName, collectObservations, authoredName } from "./naming.js";
 import {
-  detectMutualPairs, filterEligible, grantPermission,
+  detectBondedPairs, detectMutualPairs, filterEligible, grantPermission,
   loadActivePermissions, consumePermission, isCoPresentForSpawning,
   pickEggCount, placeEggs, findWitnesses,
 } from "./reproduction.js";
@@ -58,6 +57,7 @@ import {
   type MechanismFiring, type DetectionContext,
 } from "./mechanisms/index.js";
 import { FAMILY_OF } from "./mechanisms/types.js";
+import { bondIntensity } from "./mechanisms/bond.js";
 import { pushHeading, applyTagEvent } from "./mechanisms/play.js";
 import {
   ARTIFACT_LIMITS, createFoundMaterial, createNameTile,
@@ -104,6 +104,14 @@ export interface Env {
   COGNITION_ENABLED: string;
   MONTHLY_BUDGET_USD: string;
   OPENROUTER_API_KEY?: string;
+  /** Optional dev-only secret. When set, food messages with a matching
+   *  devKey bypass visitor rate limiting, and dev_feed_all messages are
+   *  accepted. Used during development to keep founder koi alive
+   *  without going through the visitor payment flow. */
+  DEV_FEED_KEY?: string;
+  /** Debug flag — when "true", cognition logs each call's raw utterance
+   *  pre-classifier. Used for triaging utterance frequency. */
+  DEBUG_RAW_UTTERANCES?: string;
   SHARED_SECRET: string;
 }
 
@@ -139,6 +147,20 @@ export class Pond extends DurableObject<Env> {
    *  protection lives at the Cloudflare edge (Turnstile, per-IP limits,
    *  § XVIII). */
   private visitorFoodTimestamps = new Map<string, number[]>();
+
+  /** Koi IDs whose cognition request is currently in-flight (fire-and-
+   *  forget against OpenRouter / Anthropic). The async refactor decouples
+   *  cognition from the tick handler — the LLM call no longer awaits
+   *  inside alarmBody, so a single 1–3s response no longer freezes
+   *  physics. We track in-flight IDs to avoid re-dispatching while a
+   *  prior request is still resolving; the koi keeps its current intent
+   *  (which may be a feed_approach, a play_invitation, etc.) until the
+   *  new response lands and overwrites it. In-memory only — if the DO
+   *  hibernates mid-flight the in-flight promise is dropped on wake,
+   *  which is correct: the alarm will simply re-dispatch on the next
+   *  tick, and the prior request's response (if it ever lands) will be
+   *  ignored because the koi's nextCognitionTick has been advanced. */
+  private cognitionInFlight = new Set<string>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -610,14 +632,28 @@ export class Pond extends DurableObject<Env> {
         // last 60 real-seconds, we silently discard. (Silent rather
         // than erroring because a casual clicker shouldn't get an
         // error modal; they just see no pellet appear.)
+        //
+        // Dev-key bypass: if devKey is set and matches DEV_FEED_KEY
+        // env, we skip the rate-limit check. Used for keeping the
+        // founder koi alive during development without going through
+        // the visitor flow. The key is checked server-side; clients
+        // sending wrong/missing keys fall through to the normal
+        // rate-limited path.
         const now = Date.now();
-        const window = 60_000;   // 60 sec
-        const maxPerWindow = 3;
-        const recent = (this.visitorFoodTimestamps.get(visitorHash) ?? [])
-          .filter((t) => now - t < window);
-        if (recent.length >= maxPerWindow) break;
-        recent.push(now);
-        this.visitorFoodTimestamps.set(visitorHash, recent);
+        const isDev =
+          typeof parsed.data.devKey === "string" &&
+          this.env.DEV_FEED_KEY !== undefined &&
+          parsed.data.devKey === this.env.DEV_FEED_KEY;
+
+        if (!isDev) {
+          const window = 60_000;   // 60 sec
+          const maxPerWindow = 3;
+          const recent = (this.visitorFoodTimestamps.get(visitorHash) ?? [])
+            .filter((t) => now - t < window);
+          if (recent.length >= maxPerWindow) break;
+          recent.push(now);
+          this.visitorFoodTimestamps.set(visitorHash, recent);
+        }
 
         // Create the pellet and push it into the hot food list.
         // Will be persisted on next tick by persistFood() and
@@ -628,6 +664,8 @@ export class Pond extends DurableObject<Env> {
         this.hot.food.push(pellet);
 
         // Update visitor_session counter for research analytics.
+        // Dev feeds count as visitor feeds for the analytics — they
+        // came through the same code path.
         this.sql.exec(
           `UPDATE visitor_session SET food_count = food_count + 1,
              last_seen_ms = ? WHERE hash = ?`,
@@ -643,12 +681,48 @@ export class Pond extends DurableObject<Env> {
             payload: {
               x: pellet.x, z: pellet.z,
               food_id: pellet.id,
+              dev: isDev || undefined,
             },
           },
         );
         this.applyAmbientToNearby(pellet.x, pellet.z, {
           kind: "visitor_fed",
         });
+        break;
+      }
+
+      case "dev_feed_all": {
+        // Drop one pellet at every alive koi's current position. Auth
+        // gate is the dev key; any mismatch silently drops the message.
+        // Used to revive a starving pond during development — Kokutou
+        // and Shiki survive while their author iterates on the rest of
+        // the system.
+        if (
+          this.env.DEV_FEED_KEY === undefined ||
+          parsed.data.devKey !== this.env.DEV_FEED_KEY
+        ) {
+          break;
+        }
+        const alive = this.hot.koi.filter(
+          (k) => k.stage !== "dead" && k.stage !== "dying" && k.stage !== "egg",
+        );
+        const now = Date.now();
+        for (const k of alive) {
+          const pellet = makeVisitorPellet(k.x, k.z, this.hot.tick);
+          this.hot.food.push(pellet);
+        }
+        await emit(this.sql, this.env.AE_EVENTS,
+          { pondId: this.pondId, configHash: this.configHash },
+          {
+            tick: this.hot.tick,
+            actor: "system",
+            type: "dev_feed_all",
+            payload: {
+              pellet_count: alive.length,
+              ms: now,
+            },
+          },
+        );
         break;
       }
 
@@ -801,52 +875,61 @@ export class Pond extends DurableObject<Env> {
     }
 
     for (const k of this.hot.koi) {
-      if (newTick >= k.nextCognitionTick) {
-        let used = "meditation";
-        if (cognitionOn) {
-          try {
-            await this.runKoiCognition(k, newTick);
-            used = "llm";
-          } catch (err) {
-            await this.logCognitionFailure(k, newTick, err);
-            k.intent = pickMeditationIntent(
-              k, this.hot.koi, this.hot.world, newTick, rng,
-              permittedMateByKoi.get(k.id),
-            );
-          }
-        } else {
-          k.intent = pickMeditationIntent(
-            k, this.hot.koi, this.hot.world, newTick, rng,
-            permittedMateByKoi.get(k.id),
-          );
-        }
+      if (newTick < k.nextCognitionTick) continue;
+      if (this.cognitionInFlight.has(k.id)) continue;
 
-        // Hunger override — if the fish is preoccupied with hunger and
-        // there's nearby food, redirect intent to feed_approach with
-        // that food as target. This overrides both meditation-mode
-        // picks and LLM picks: a starving fish cannot be distracted by
-        // shoaling or play. The intent.target carries the food position
-        // so kinematics steers toward it. Cognition's other outputs
-        // (utterance, mechanism) are preserved if present — a hungry
-        // fish can still speak about what it sees.
-        if (k.hunger > HUNGER.preoccupationThreshold &&
-            k.stage !== "egg" && k.stage !== "dying") {
-          const food = nearestFood(k, this.hot.food, 6.0);
-          if (food) {
-            k.intent = {
-              ...k.intent,
-              kind: "feed_approach",
-              target: { x: food.x, y: food.y, z: food.z },
-              targetId: undefined,   // target is a position, not a koi
-              atTick: newTick,
-            };
-          }
-        }
+      const intervalS = COGNITION_INTERVAL_S[k.stage] ?? 120;
+      // Optimistically advance nextCognitionTick BEFORE dispatch so we
+      // don't re-fire on the next tick while the request is in-flight.
+      // If cognition fails the .catch handler still respects this; the
+      // koi just rests at meditation intent until the next interval.
+      k.nextCognitionTick = newTick + Math.floor(intervalS * SIM.tickHz);
 
-        void used;
-        const intervalS = COGNITION_INTERVAL_S[k.stage] ?? 120;
-        k.nextCognitionTick = newTick + Math.floor(intervalS * SIM.tickHz);
+      if (!cognitionOn) {
+        // Synchronous meditation path — cheap, no LLM call, runs in-tick.
+        k.intent = pickMeditationIntent(
+          k, this.hot.koi, this.hot.world, newTick, rng,
+          permittedMateByKoi.get(k.id),
+        );
+        this.applyHungerOverride(k, newTick);
+        continue;
       }
+
+      // Async cognition path. The promise resolution writes the new
+      // intent (inside runKoiCognition → applyCognitionResponse), or
+      // falls back to meditation on failure. The koi keeps its current
+      // intent until the response lands. Physics keeps running. Other
+      // koi keep ticking. The pond does not freeze.
+      this.cognitionInFlight.add(k.id);
+      const dispatchTick = newTick;
+      const matePartner = permittedMateByKoi.get(k.id);
+
+      void this.runKoiCognition(k, dispatchTick)
+        .then(() => {
+          // applyCognitionResponse already wrote k.intent inside
+          // runKoiCognition. Apply the hunger override now in case the
+          // LLM-picked intent isn't food-aligned and the koi is hungry.
+          this.applyHungerOverride(k, dispatchTick);
+        })
+        .catch(async (err) => {
+          try { await this.logCognitionFailure(k, dispatchTick, err); }
+          catch { /* swallow logging errors so finally still runs */ }
+          // Fall through to meditation if the koi is still alive in
+          // the hot set. Use a local rng seeded from current rngState
+          // so we don't disturb the alarm's main rng stream — it has
+          // long since moved on.
+          if (k.stage !== "dead" && this.hot.koi.includes(k)) {
+            const fallbackRng = new Rng((this.hot.rngState ^ k.id.length) >>> 0);
+            k.intent = pickMeditationIntent(
+              k, this.hot.koi, this.hot.world, dispatchTick,
+              fallbackRng, matePartner,
+            );
+            this.applyHungerOverride(k, dispatchTick);
+          }
+        })
+        .finally(() => {
+          this.cognitionInFlight.delete(k.id);
+        });
     }
 
     // 5a. Reproduction detection (§ X) — runs once per sim-day at
@@ -857,13 +940,16 @@ export class Pond extends DurableObject<Env> {
       (t) => (t as { kind?: string }).kind === "day_advanced",
     );
     if (crossedIntoNewDay && this.hot.world.season === "spring") {
-      const detected = detectMutualPairs(this.sql, this.hot.world.simDay);
+      const detected = detectBondedPairs(this.sql, this.hot.koi);
       const eligible = filterEligible(
         this.sql, detected, this.hot.world, this.hot.koi, newTick,
       );
       for (const pair of eligible) {
         grantPermission(this.sql, pair, newTick);
-        // Mutual drawn-to appraisal on both fish (§ VIII)
+        // Bond-consolidated appraisal on both fish (§ VIII). Same PAD
+        // delta as the prior "mutual_drawn_to" appraisal — the
+        // architectural shift is in detection, not in how the koi
+        // experiences the moment when reproduction permission lands.
         for (const id of [pair.aId, pair.bId]) {
           const k = this.hot.koi.find((x) => x.id === id);
           if (k) k.pad = applyDelta(k.pad, appraise({ kind: "mutual_drawn_to" }, "self"));
@@ -877,7 +963,8 @@ export class Pond extends DurableObject<Env> {
             mechanism: "parallel_presence",
             payload: {
               pair_key: pair.pairKey,
-              mutual_days: pair.mutualDays,
+              bond_intensity_ab: pair.bondIntensityAB,
+              bond_intensity_ba: pair.bondIntensityBA,
               season: this.hot.world.season,
             },
           },
@@ -974,7 +1061,32 @@ export class Pond extends DurableObject<Env> {
     for (const f of fryHatches) {
       const hourAtHatch = this.hot.world.tDay * 24;
       const obs = collectObservations(f, this.hot.koi, hourAtHatch);
-      f.name = composeName(f.id, f.color, obs);
+
+      // Read lineage BEFORE naming so the parent-authored naming
+      // path can see who the parents are. The same row drives the
+      // kin-imprinting card seeding further below.
+      const lineageRow = this.sql.exec(
+        `SELECT parent_a_id, parent_b_id FROM koi_lineage WHERE koi_id = ?`,
+        f.id,
+      ).toArray()[0];
+      const parentA = (lineageRow?.["parent_a_id"] as string | null) ?? null;
+      const parentB = (lineageRow?.["parent_b_id"] as string | null) ?? null;
+
+      // Name. authoredName tries the parent-authored path first (LLM
+      // call from the higher-bond parent, conditioned on bond-biased
+      // co-parent memory retrieval) and falls back to the
+      // deterministic composer on any failure. Always returns a name.
+      if (parentA) {
+        f.name = await authoredName(
+          this.env, this.sql, f,
+          { a: parentA, b: parentB },
+          obs, newTick, SIM.tickHz,
+        );
+      } else {
+        // Orphan-shaped (no recorded lineage) — deterministic only.
+        f.name = composeName(f.id, f.color, obs);
+      }
+
       if (!this.lifespanByKoi.has(f.id)) {
         this.lifespanByKoi.set(f.id, drawLifespan(new Rng(hashCode(f.id))));
       }
@@ -991,16 +1103,10 @@ export class Pond extends DurableObject<Env> {
       // available. The fry doesn't know these are its parents; it just
       // finds some fish more known than others without knowing why.
       // That is what koi biology does.
-      const lineageRow = this.sql.exec(
-        `SELECT parent_a_id, parent_b_id FROM koi_lineage WHERE koi_id = ?`,
-        f.id,
-      ).toArray()[0];
       if (lineageRow) {
         const parentIds: string[] = [];
-        const pa = lineageRow["parent_a_id"] as string | null;
-        const pb = lineageRow["parent_b_id"] as string | null;
-        if (pa) parentIds.push(pa);
-        if (pb && pb !== pa) parentIds.push(pb);
+        if (parentA) parentIds.push(parentA);
+        if (parentB && parentB !== parentA) parentIds.push(parentB);
 
         for (const parentId of parentIds) {
           // Only seed if the parent is still in the pond — if both
@@ -1121,8 +1227,17 @@ export class Pond extends DurableObject<Env> {
     for (const k of this.hot.koi) this.updateKoiRow(k);
     this.persistFood();
 
-    // 9. Broadcast tick frame to WS clients
-    this.broadcastTick(newTick, nowMs);
+    // 9. Broadcast tick frame to WS clients — gated to broadcastHz, not
+    //    tickHz. Physics steps at SIM.tickHz (smooth integration); the
+    //    wire only sees one frame per (tickHz/broadcastHz) ticks. Client
+    //    smooths between snapshots via spring kinematics at render rate.
+    //    Saturating the wire at full tick rate pins client CPU at 100%
+    //    and visually freezes the pond — see SIM.broadcastHz for the
+    //    full reasoning.
+    const broadcastEvery = Math.max(1, Math.round(SIM.tickHz / SIM.broadcastHz));
+    if (newTick % broadcastEvery === 0) {
+      this.broadcastTick(newTick, nowMs);
+    }
 
     // 10. Reschedule handled by the outer alarm() wrapper in its finally
     //     block — guarantees physics keeps running even if any step
@@ -1191,6 +1306,32 @@ export class Pond extends DurableObject<Env> {
   }
 
   // ─────────────────────────────────────────────────────────────────
+  //  Hunger override — if the fish is preoccupied with hunger and
+  //  there's nearby food, redirect intent to feed_approach with that
+  //  food as the target. Overrides both meditation-mode picks and
+  //  LLM picks: a starving fish cannot be distracted by shoaling or
+  //  play. The intent.target carries the food position so kinematics
+  //  steers toward it; cognition's other outputs (utterance,
+  //  mechanism) are preserved if present — a hungry fish can still
+  //  speak about what it sees. Called from both the sync meditation
+  //  path and the async cognition resolution path.
+  // ─────────────────────────────────────────────────────────────────
+
+  private applyHungerOverride(k: KoiState, atTick: SimTick): void {
+    if (k.hunger <= HUNGER.preoccupationThreshold) return;
+    if (k.stage === "egg" || k.stage === "dying") return;
+    const food = nearestFood(k, this.hot.food, 6.0);
+    if (!food) return;
+    k.intent = {
+      ...k.intent,
+      kind: "feed_approach",
+      target: { x: food.x, y: food.y, z: food.z },
+      targetId: undefined,   // target is a position, not a koi
+      atTick,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────
   //  Cognition (§ V) — only called when COGNITION_ENABLED=true and
   //  OPENROUTER_API_KEY is set. Any throw falls through to meditation.
   // ─────────────────────────────────────────────────────────────────
@@ -1209,7 +1350,27 @@ export class Pond extends DurableObject<Env> {
 
     const qEmbedding = await embed(this.env.AI as never, situation);
 
-    // 2. Retrieve memories via Park-style scoring.
+    // 2. Load all relationship cards for self (every recorded
+    //    relationship, not filtered to visible). The orientation
+    //    block in cognition.ts uses these for bond-ranked partner
+    //    awareness — including bonded partners who are elsewhere in
+    //    the pond. They also feed the bondedPartners set used to
+    //    bias memory retrieval below.
+    const cards: RelationshipCard[] = this.loadAllCardsFor(k.id);
+
+    // 3. Derive the bonded-partner set for memory bias. Any partner
+    //    whose bond intensity clears the threshold gets their shared
+    //    memories surfaced preferentially. Threshold tuned to "notable
+    //    presence" tier — bonded enough to matter, not just any
+    //    background acquaintance.
+    const BOND_BIAS_THRESHOLD = 0.4;
+    const bondedPartners = new Set<KoiId>(
+      cards
+        .filter((c) => bondIntensity(c) >= BOND_BIAS_THRESHOLD)
+        .map((c) => c.otherId),
+    );
+
+    // 4. Retrieve memories via Park-style scoring, with bond bias.
     const memories: MemoryRow[] = retrieveMemories(this.sql, {
       koiId: k.id,
       stage: k.stage,
@@ -1217,21 +1378,19 @@ export class Pond extends DurableObject<Env> {
       nowTick: newTick,
       tickHz: SIM.tickHz,
       visibleKoi: visible.map((o) => o.id),
+      bondedPartners,
     });
 
-    // 3. Load relationship cards for visible others.
-    const cards: RelationshipCard[] = this.loadCards(k.id, visible.map((o) => o.id));
-
-    // 4. Load currently-valid beliefs.
+    // 5. Load currently-valid beliefs.
     const beliefs: MemoryRow[] = this.loadValidBeliefs(k.id);
 
-    // 5. Determine whether this is the twilight reflection slot.
+    // 6. Determine whether this is the twilight reflection slot.
     const tDay = this.hot.world.tDay;
     const isTwilight =
       tDay > 0.86 && tDay < 0.92 &&
       newTick - k.lastTwilightTick > Math.floor(SIM.tickHz * 3600 * 12);
 
-    // 6. Call cognition.
+    // 7. Call cognition.
     const result = await runCognition(this.env, {
       self: k,
       visible,
@@ -1950,7 +2109,25 @@ export class Pond extends DurableObject<Env> {
         WHERE self_id = ? AND other_id IN (${placeholders})`,
       selfId, ...otherIds,
     ).toArray();
-    return rows.map((r) => ({
+    return rows.map((r) => this.rowToRelationshipCard(r));
+  }
+
+  /** Load every relationship card authored by selfId, regardless of
+   *  whether the other is currently visible. Used by cognition.ts to
+   *  surface bond-ranked partner orientation (including bonded
+   *  partners across the pond) and to derive the bondedPartners set
+   *  for memory retrieval bias. Cost is bounded by colony size
+   *  (≤ ~12 cards per koi) so this is cheap. */
+  private loadAllCardsFor(selfId: string): RelationshipCard[] {
+    const rows = this.sql.exec(
+      `SELECT * FROM relationship_card WHERE self_id = ?`,
+      selfId,
+    ).toArray();
+    return rows.map((r) => this.rowToRelationshipCard(r));
+  }
+
+  private rowToRelationshipCard(r: Record<string, unknown>): RelationshipCard {
+    return {
       selfId: r["self_id"] as string,
       otherId: r["other_id"] as string,
       firstEncounterTick: r["first_encounter_tick"] as number,
@@ -1964,7 +2141,7 @@ export class Pond extends DurableObject<Env> {
       drawnCount7d: r["drawn_count_7d"] as number,
       lastAuthoredTick: r["last_authored_tick"] as number,
       familiarityPrior: (r["familiarity_prior"] as number | undefined) ?? 0,
-    }));
+    };
   }
 
   /** Load a koi's stored genetics from the koi row. Falls back to the

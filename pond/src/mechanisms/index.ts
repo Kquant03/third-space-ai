@@ -20,7 +20,7 @@ import {
 } from "./types.js";
 import { runWitnessingDetectors } from "./witnessing.js";
 import {
-  runRepairDetectors, validateApology, validateForgiveness,
+  validateApology, validateForgiveness,
   isClaimValidated, logRupture,
 } from "./repair.js";
 import { runGiftFamily } from "./gift.js";
@@ -30,16 +30,19 @@ import { runPlayFamily } from "./play.js";
 export const DETECTOR_INTERVAL_TICKS = 30;  // 15 sim-seconds at 2 Hz
 
 /** Runs every state-based detector across all families. The returned
- *  firings must be applied (PAD + cards + event) by the caller. */
+ *  firings must be applied (PAD + cards + event) by the caller.
+ *
+ *  Repair has no state-based detectors at the moment — both wired
+ *  repair mechanisms (apology, forgiveness) are claim-based and route
+ *  through validateClaim() instead. The teaching family is post-launch
+ *  work and is intentionally absent from the runtime. */
 export function runStateDetectors(
   ctx: DetectionContext,
 ): MechanismFiring[] {
   return [
     ...runWitnessingDetectors(ctx),
-    ...runRepairDetectors(ctx),
     ...runGiftFamily(ctx),
     ...runPlayFamily(ctx),
-    // Teaching, ritual — not yet wired
   ];
 }
 

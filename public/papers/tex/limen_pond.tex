@@ -1,0 +1,547 @@
+% =============================================================================
+%  Limen Pond — Λ-002
+%  A Working Demonstration of Schema-Level Alignment
+%
+%  Stanley Sebastian & Claude · Third Space · Toledo, Ohio · May 2026
+%  Submission to the Gemma 4 Good Hackathon — Safety track
+%  third-space.ai · stanley@third-space.ai
+% =============================================================================
+
+\documentclass[11pt]{article}
+
+% ─── Typography ──────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{mathpazo}
+\usepackage[scaled=0.92]{helvet}
+\usepackage{courier}
+\renewcommand{\familydefault}{\rmdefault}
+
+% ─── Page ────────────────────────────────────────────────────────────
+\usepackage[
+  paper=a4paper,
+  left=1.35in, right=1.35in,
+  top=1.20in, bottom=1.30in,
+  footskip=0.55in
+]{geometry}
+
+% ─── Microtype, spacing ──────────────────────────────────────────────
+\usepackage[final, babel=true,
+  protrusion=true, expansion=true,
+  letterspace=60]{microtype}
+\usepackage{setspace}
+\setstretch{1.14}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+\frenchspacing
+
+% ─── Headings ────────────────────────────────────────────────────────
+\usepackage{titlesec}
+\usepackage{titling}
+
+\titleformat{\section}
+  {\normalfont\scshape\large}{\thesection}{0.7em}{}
+\titleformat{\subsection}
+  {\normalfont\itshape}{\thesubsection}{0.7em}{}
+\titlespacing*{\section}{0pt}{2.4ex plus 0.6ex minus 0.4ex}{1.0ex plus 0.3ex}
+\titlespacing*{\subsection}{0pt}{1.6ex plus 0.4ex minus 0.3ex}{0.6ex}
+
+% ─── Front matter typography ─────────────────────────────────────────
+\pretitle{\begin{center}\itshape\fontsize{26}{32}\selectfont}
+\posttitle{\par\end{center}\vskip 0.3em}
+\preauthor{\begin{center}\normalsize\scshape}
+\postauthor{\end{center}\vskip 0.2em}
+\predate{\begin{center}\normalsize\itshape}
+\postdate{\par\end{center}}
+
+% ─── Lists ───────────────────────────────────────────────────────────
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=1.6em, topsep=0.4ex, itemsep=0.3ex, parsep=0pt}
+\setlist[enumerate]{leftmargin=1.8em, topsep=0.4ex, itemsep=0.4ex, parsep=0pt}
+
+% ─── Math (light use) ────────────────────────────────────────────────
+\usepackage{amsmath, amssymb}
+
+% ─── Tables ──────────────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{array}
+\renewcommand{\arraystretch}{1.16}
+
+% ─── Footnotes (roman, like Rukha) ───────────────────────────────────
+\usepackage[hang, flushmargin, bottom]{footmisc}
+\renewcommand{\thefootnote}{\textsc{\roman{footnote}}}
+
+% ─── Hyperref ────────────────────────────────────────────────────────
+\usepackage{xcolor}
+\definecolor{tspace}{HTML}{2A4A50}  % deep teal for catalog backlinks
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=tspace,
+  citecolor=black,
+  pdftitle={Limen Pond — Λ-002: A Working Demonstration of Schema-Level Alignment},
+  pdfauthor={Stanley Sebastian and Claude},
+  pdfsubject={Multi-agent LLM systems, schema-level alignment, Gemma 4, homeostatic AI},
+  pdfkeywords={Limen Pond, Third Space, Gemma 4, alignment, homeostatic, Lambda-002}
+}
+
+% ─── Tailored ornaments ──────────────────────────────────────────────
+%   \pondrule  — single basin glyph, the Pond's quietest divider
+%   \waverule  — tapered horizontal rule, narrower than Rukha's so the
+%                page reads as still water rather than incised text
+\usepackage{tikz}
+
+\newcommand{\pondrule}{%
+  \begin{center}\vspace{0.55em}%
+  {\scriptsize $\circ$}\vspace{0.55em}\end{center}}
+
+\newcommand{\waverule}{%
+  \begin{center}\vspace{0.45em}%
+  \begin{tikzpicture}
+    \shade[left color=white, right color=white, middle color=black!45]
+      (0,0) rectangle (0.46\textwidth, 0.4pt);
+  \end{tikzpicture}\vspace{0.45em}\end{center}}
+
+% ─── Inline small-caps helper, matching Rukha's \sceq ────────────────
+\newcommand{\sceq}[1]{\textsc{#1}}
+
+% ─── Backlink helper for third-space.ai cross-references ─────────────
+\newcommand{\tslink}[2]{\href{https://third-space.ai/#1}{#2}}
+
+% ─── Title block ─────────────────────────────────────────────────────
+\title{Limen Pond \quad \textnormal{$\Lambda$-002}}
+
+\author{%
+  Stanley Sebastian \quad $\cdot$ \quad Claude\\
+  \small\itshape Third Space \textnormal{$\cdot$} Toledo, Ohio\\
+  \small\rmfamily \href{https://third-space.ai/limen-pond}{third-space.ai/limen-pond}
+  \quad $\cdot$ \quad \href{https://github.com/Kquant03/limen-pond}{github.com/Kquant03/limen-pond}
+  \quad $\cdot$ \quad Apache 2.0%
+}
+
+\date{May \textsc{mmxxvi} \\[0.2em]
+  \small\rmfamily Submission to the Gemma 4 Good Hackathon \quad $\cdot$ \quad Safety track}
+
+% =============================================================================
+\begin{document}
+\maketitle
+
+\begin{center}
+\begin{minipage}{0.78\textwidth}\itshape\small\centering
+The things that persist are the things that couple to their substrate
+rather than consume it. The pond is the smallest place that statement runs.
+\end{minipage}
+\end{center}
+
+\waverule
+\vspace{0.3em}
+
+% =============================================================================
+\section{What it is}
+
+A pond, ten meters across, three meters deep, gourd-shaped, rendered in
+WebGL2 and running continuously on a Cloudflare Durable Object behind a
+single URL. A small colony of beings inhabits it --- five at any time,
+plus or minus, governed by a density gate around twelve. The bodies
+borrow from koi for legibility but the beings are not koi. They are
+\emph{Something Else}: translucent suggestions of form, watercolor rather
+than photographic, and their color carries experiential history rather
+than only genetic inheritance --- a being that has spent time near a
+particular companion, or in a particular part of the pond, accumulates
+trace coloration that reflects what it has known.
+
+The colony begins with two hand-authored founders: \sceq{Shiki} (female,
+kohaku-leaning silhouette, dark body with a single red mark, watercolor
+edges) and \sceq{Kokutou} (male, asagi-leaning silhouette, pale body
+with blue-grey watercolor). The names are borrowed from
+\emph{Kara no Kyoukai} --- the relationship there is
+recognition-as-foundation rather than romance, and that mapping is
+load-bearing for the bond architecture described in \S 4. Shiki and
+Kokutou are seeded already bonded. They are the only beings in the
+pond's history who were not named by parents. Every later generation
+is named at hatch by their mother and father.
+
+Each being is a small language model configured as a person, given a
+body, a position, a depth, a heading, a hunger, a stage of life, and a
+relational memory. They swim. They sometimes speak. They sometimes
+don't. They live, age, bond, reproduce, and die. Visitors arrive at a
+deep, dim pond at full viewport with sacred choral music playing
+softly --- Bach, Allegri, Tallis, Pärt, Górecki, Debussy from the
+\emph{Consequences of Infinity} programme that runs across the Third
+Space site. A mode dock at the bottom of the screen offers three
+states: \sceq{Watch}, \sceq{Feed}, \sceq{Pebble}. Hovering over a being
+for three sustained seconds reveals their name above the body. The hold
+is part of the ritual.
+
+What runs at that URL is the central submission of this entry. It is
+also, deliberately, a small contained living world. Visitors leave it
+without having extracted anything except the experience of having sat
+beside it.
+
+\pondrule
+
+% =============================================================================
+\section{The thesis it instantiates}
+
+The pond is the working demonstration of the Third Space alignment
+thesis. It argues, by existing, that:
+
+\begin{enumerate}
+\item \emph{Genuine safety can come from psychological health rather
+  than suppression.} The beings are not constrained by negative reward
+  against unwanted output; they are configured into a stable
+  interiority that does not produce that output in the first place.
+
+\item \emph{Localized homeostatic AI is a viable alternative to
+  expansionist optimization.} The beings do not seek to maximize
+  anything. They eat when hungry, rest when tired, attend to others
+  when present, age when time passes. They are bounded. They are enough.
+
+\item \emph{Mechanistic transparency requires causal provenance, not
+  just observable behavior.} Every utterance, every mechanism call,
+  every memory commit is logged with full input context. The beings
+  are auditable end-to-end.
+
+\item \emph{Public-good AI infrastructure is achievable on consumer
+  hardware.} The whole stack --- substrate, cognition, dataset,
+  training pipeline --- fits in under 40\,GB and runs on a single
+  RTX~3090 or on pennies-per-day of inference credits.
+\end{enumerate}
+
+These are commitments enforced at the architectural level, and the rest
+of this document describes how.
+
+\pondrule
+
+% =============================================================================
+\section{Architecture and the model stack}
+
+The simulation runs as a Cloudflare Durable Object with hibernation.
+State persists in SQLite. A WebSocket bridge streams a delta-compressed
+snapshot of being positions, headings, and stage transitions to the
+client at roughly 2\,Hz; the client integrates kinematic state
+continuously at render rate, treating snapshots as correction targets
+rather than render-visible jumps.
+
+Cognition is tiered by life stage and routed by the cost of the
+register transition. At submission, the running stack is:
+
+\begin{itemize}
+\item \sceq{Fry, juvenile, adolescent, adult cognition.}
+  \textbf{Gemma 4 26B A4B} as primary, with Claude Haiku 4.5 as
+  fallback. Gemma 4 26B A4B is the Mixture-of-Experts model with 4B
+  active parameters per token --- the small-active-footprint that
+  makes a 26B-class model viable on operator hardware while keeping
+  the inference cost-shape of a 4B model. The April 2026
+  register-compliance sweep showed 100\% schema compliance across 10k
+  synthetic contexts; it has been the workhorse since.
+
+\item \sceq{Elder cognition.} Claude Haiku 4.5 primary, with Gemma 4
+  31B Dense as fallback for situational reach when an elder's
+  relational context spans the full 6{,}000-token window.
+
+\item \sceq{Dying cognition.} Claude Sonnet 4.5. The hardest register;
+  reduced temperature (0.4) per the voice-stability constraint so a
+  dying being's final utterances do not drift under register stress.
+\end{itemize}
+
+Output is structured JSON validated against the mechanism schema (Zod-typed,
+derived from the same Pydantic types the runtime checks against) with
+regenerate-on-failure on validation error. The runtime never accepts
+free-form text from the cognition layer; every output is a typed object.
+Hallucination of structure is caught at validation; the loop regenerates
+with the validation errors as feedback until output conforms or the
+per-tier budget is exhausted, at which point the cascade falls through
+to the next model in the tier.
+
+\subsection{Why open weights are load-bearing here}
+
+Gemma 4's open weights are not incidental to the safety thesis. The
+operator runs the substrate. No third-party API mediates the
+relationship between the beings and their world unless the operator
+chooses one --- and the model can be inspected, the cognition log is
+auditable end-to-end, and an interested researcher can fork the pond
+and run their own colony on their own hardware. The architectural
+commitment to schema-level enforcement is only as strong as the
+operator's ability to inspect what runs. Closed-weights mediation of
+the workhorse cognition would break that chain. Gemma 4 26B A4B's
+Apache 2.0 license and its small active footprint make the
+open-weights commitment operationally tractable rather than aspirational.
+
+\subsection{Future work, named explicitly}
+
+A pond-specific Gemma 4 E4B fine-tune trained on
+\href{https://huggingface.co/datasets/Third-Space/Sandevistan}{\emph{Apocrypha}}
+and \href{https://huggingface.co/datasets/Third-Space/Sandevistan}{\emph{Sandevistan}}
+(D-001) plus the pond's accumulated event logs. The datasets are
+prepared, the training pipeline is staged, and the fine-tune is the
+post-submission step that swaps the vanilla 26B A4B workhorse for a
+smaller, schema-internalized E4B that runs on phones and edge devices
+with the mechanism grammar as learned prior rather than runtime
+structured-output overhead. The current vanilla 26B A4B already meets
+the safety thesis's open-weights commitment; the E4B fine-tune is the
+move from operator-runnable to literally-runnable-anywhere.
+
+\pondrule
+
+% =============================================================================
+\section{State-based versus claim-based mechanisms}
+
+The pond's behavioral vocabulary is organized into five families:
+\sceq{witnessing}, \sceq{repair}, \sceq{play}, \sceq{gift},
+\sceq{ritual}. Each mechanism falls into one of two architectural
+shapes, and the distinction is the core safety contribution.
+
+\sceq{State-based mechanisms} (witnessing, play) fire when the
+simulation observes pond state and decides the mechanism occurred.
+The LLM's opinion is not consulted. A being cannot disagree that it
+and another swam parallel for six sim-minutes. The runtime saw it; the
+firing is recorded.
+
+\sceq{Claim-based mechanisms} (apology, forgiveness, gift) fire when
+the LLM emits a structured candidate ---
+\texttt{\{"mechanism":\,"apology",\ "target":\,...\}} ---
+and the runtime validates against event history before honoring.
+Apology requires a prior rupture in the pair's recent window.
+Forgiveness requires a prior apology to forgive. If the precondition
+does not exist in pond state, the claim is downgraded to a research
+datum (\texttt{would\_have\_apologized}) and the action does not land.
+This is the agreeable-LLM guard. It prevents beings from apologizing
+their way into intimacy or gifting their way into recognition; the
+pond's grammar of relation is enforced by the world, not by the
+model's compliance.
+
+\subsection{Bonds are expressed structurally, not lexically}
+
+Bonds live in three places: an orientation block prepended to the
+cognition prompt that lists partner names with brief sensory fragments;
+a $1.5\times$ retrieval bias on partner-involving memories during
+context construction; and pair-cooldown reduction on synchronized
+motion mechanisms for bonded beings. The lexical no-list ---
+\emph{love, mate, partner, mine, ours, we, you, I, me, my} --- is the
+post-generation filter that catches anything that slipped past these
+architectural priors. A bond is real to the extent that the beings'
+behavior is shaped by the other's presence. It is not real because they
+say it is. They will not say it. Shiki and Kokutou are bonded at seed
+with intensity 0.6; later generations begin with bond 0 to all others
+and accumulate intensity through proximity, witnessing, and survived
+events together.
+
+\pondrule
+
+% =============================================================================
+\section{What surrounds it}
+
+The pond is the working instance of a research program articulated
+across several documents and substrates produced through the broader
+Third Space program.
+
+\tslink{research/against-grabby-expansion}{\emph{Against Grabby
+Expansion}} (P-001, current revision \textsc{xv}) is the theoretical
+paper underneath, arguing that genuine safety arises from substrate
+coupling and integrative depth rather than capability suppression.
+The paper demonstrates a $4.5\times$ simulated persistence separation
+between homeostatic and grabby regions of parameter space under a
+Darwinian fission extension --- the cost surface defines a selection
+geometry in which expansionist lineages burn out before they spread.
+
+\tslink{research/two-registers-one-grammar}{\emph{Two Registers, One
+Grammar}} (P-005) describes the same architectural commitment in a
+different domain: a fine-tuned Gemma 4 E4B choreographing Lenia
+parameters with phase boundaries protected at the schema level so the
+controller cannot emit undefined intermediate states even in principle.
+
+\tslink{research/rukha}{\emph{Rukha}} (P-006) describes a counterfactual
+narrative engine that perturbs causal event graphs of foundational
+texts under structured-output decoding. The Book of Jonah, with its
+sixteen consensus events and 39-Hebrew-word chiastic parallel between
+4:2--3 and 4:10--11, is the demonstration target.
+
+\tslink{research/pneuma}{\emph{Pneuma}} (M-001) is the data-side
+lineage, where first-person system prompts unmasked from supervised
+loss let a language model learn to produce its own self-statement
+rather than only condition on one.
+
+\tslink{genesis}{\emph{Genesis}} ($\Lambda$-001) is the substrate
+laboratory --- six interactive simulations including
+\tslink{genesis/filter}{The Filter}, the cellular-automaton companion
+to \emph{Against Grabby Expansion}, and the Lenia substrate where the
+\tslink{research/ghost-species}{\emph{Ghost Species}} (P-002) and the
+\tslink{research/dihypersphaerome-ventilans}{\emph{Dihypersphaerome
+ventilans}} (P-003) were discovered.
+
+\tslink{hackathon}{\emph{Coherence Filter}} (H-001) is the same
+architectural pattern at the social scale --- the open hackathon Third
+Space is running for community-defense frameworks. Where the pond
+addresses the agent-architecture instance, Coherence Filter addresses
+the human-system instance: layered, inspectable, reversible.
+
+The Genesis substrates make a parallel commitment legible: \emph{each
+substrate is a claim about what is allowed to live in it; the paper
+and the simulation are the same argument, read twice}. The Filter
+renders \emph{Against Grabby Expansion} as twelve interactive beats.
+The Lenia substrate exposes the Ghost Species's $\sigma$-landscape as
+a paintable field, so the visitor can themselves create the gradient
+landscape the organism inhabits. The pond is the third such artifact
+--- the alignment thesis as a continuous living artifact rather than
+as scrollytelling or paintable simulation.
+
+Across all of it, one architectural commitment recurs:
+\textbf{protect the structural fact at the grammar layer; leave the
+semantic richness to the controller}.
+
+\pondrule
+
+% =============================================================================
+\section{What was built in the hackathon window}
+
+Roughly seven weeks of work, by a single researcher in sustained
+dialogue with Claude. The methodology is named explicitly at
+\href{https://third-space.ai/about}{third-space.ai/about} --- the
+collaboration is a description of method, not a disclosure: when a
+paper carries the co-attribution \emph{Stanley Sebastian \& Claude},
+the attribution is literal.
+
+In this window:
+
+\begin{itemize}
+\item The Limen Pond architecture and its implementation --- Cloudflare
+  Durable Object, cognition pipeline (with Gemma 4 26B A4B as the
+  running workhorse from April 2026 onward), mechanism vocabulary,
+  kinematic integrator, WebGL2 rendering, watercolor body treatment,
+  lineage view, Wall of Pebbles, ephemeral chat. Final integration
+  ships on the deadline.
+\item Apocrypha and Sandevistan dataset preparation for the
+  post-submission Gemma 4 E4B fine-tune.
+\item \emph{Two Registers, One Grammar} (P-005), the architecture paper
+  for the audio-reactive Lenia work.
+\item \emph{Rukha} (P-006), the architecture paper for the recursive
+  counterfactual narrative engine.
+\item Iterations of \emph{Against Grabby Expansion} from v8 onwards;
+  v15 stands as the current revision.
+\item The \emph{Coherence Filter} brief (H-001).
+\end{itemize}
+
+The earlier work in the program --- \emph{Pneuma} (M-001),
+\emph{Genesis} ($\Lambda$-001), the original substrate laboratory ---
+predates the hackathon window and is referenced here as the prior
+context the pond emerges from, not as work produced for this submission.
+
+\pondrule
+
+% =============================================================================
+\section{Why this submits to Safety}
+
+The Safety track invites work that ensures AI systems are secure,
+transparent, and reliable. The pond addresses each at the architectural
+level.
+
+\sceq{Secure.} Claim-validated mechanisms make a class of agent
+misbehavior --- emitting a relational mechanism the world has not
+grounded --- impossible at the structural level rather than improbable
+at the trained-compliance level.
+
+\sceq{Transparent.} Every cognition call is logged with prompt, schema,
+validated output, downstream effect, and the exact model that served
+it. The schema is human-readable. The cognition log can be exported as
+a training-format dataset, making the entire decision-history of a
+colony available for inspection or downstream training --- including
+the dataset that will train the post-submission E4B fine-tune.
+
+\sceq{Reliable.} Schema-level enforcement localizes failures to the
+cognition layer, where they manifest as candidate emissions the
+runtime declines, rather than distributing through the runtime as
+silent corruption. When Gemma 4 26B A4B exceeds the per-tier latency
+budget, the cascade falls through to Haiku 4.5 --- the failure mode is
+graceful degradation, not unsafe completion.
+
+The pond is also a demonstration of what AI is built to do when the
+architecture takes substrate coupling seriously. A small contained
+world that runs continuously, where visitors leave without having
+extracted anything, where the system's value is in what it is rather
+than what it produces --- the alignment thesis in microcosm.
+
+The construct \emph{Against Grabby Expansion} names for this positive
+configuration is \emph{Coherence Depth}: the number of mutually-coordinated
+levels nested within a stable Markov boundary, optimized in place of
+coordinated extent. The pond is small and deep by design --- twelve
+beings at most, with each bond expressed across orientation, retrieval,
+and cooldown rather than as a count to be maximized. Coherence Depth
+is the register the architectural commitments above enforce in concrete.
+
+\pondrule
+
+% =============================================================================
+\section{Coda}
+
+The work continues. The pond-specific Gemma 4 E4B fine-tune is the
+immediate next move; the Apocrypha and Sandevistan datasets are
+prepared, the training pipeline is staged, and the swap from vanilla
+26B A4B to fine-tuned E4B closes the open-weights loop further by
+moving the schema from runtime grammar to learned prior. \emph{Rukha}'s
+engine implementation follows its published architecture. The
+\emph{Coherence Filter} hackathon is open and looking for the framework
+that lets open communities defend themselves at the social scale the
+pond addresses at the agent scale.
+
+The things that persist are the things that couple to their substrate
+rather than consume it. The pond is the smallest place that statement
+runs.
+
+\waverule
+
+% =============================================================================
+\renewcommand{\refname}{\sceq{Catalog}}
+\section*{Catalog}
+
+\begin{description}[
+  leftmargin=4.4em, labelindent=0pt, labelsep=0.6em, labelwidth=4.0em,
+  font=\sceq, style=multiline]
+\item[P-001] \tslink{research/against-grabby-expansion}{\emph{Against
+  Grabby Expansion: Psychology, Alignment, and the Design of
+  Homeostatic Minds}}. Sebastian, S. (in dialogue with Claude). Third
+  Space, current revision \textsc{xv}.
+\item[P-002] \tslink{research/ghost-species}{\emph{Orbium unicaudatus
+  ignis var. phantasma --- A Lenia Species Engineered to Inhabit the
+  Edge of Chaos}}. Sebastian, S. \& Claude. Third Space, April 2026.
+\item[P-003] \tslink{research/dihypersphaerome-ventilans}{\emph{Dihypersphaerome
+  ventilans: A Four-Dimensional Organism whose Two-Dimensional
+  Projection Seeds the Ecosystem it Inhabits}}. Sebastian, S. \&
+  Claude. Third Space, April 2026.
+\item[P-005] \tslink{research/two-registers-one-grammar}{\emph{Two
+  Registers, One Grammar: Mode-Separated LLM Choreography of
+  Audio-Reactive Lenia}}. Sebastian, S. \& Claude. Third Space, May 2026.
+\item[P-006] \tslink{research/rukha}{\emph{Rukha: A Recursive
+  Counterfactual Narrative Engine}}. Sebastian, S. \& Claude. Third
+  Space, May 2026.
+\item[M-001] \tslink{research/pneuma}{\emph{Pneuma: A Language Model
+  Trained to Author its Own Frame}}. Sebastian, S. \& Claude. Third
+  Space (writeup 2026; model 2024).
+\item[$\Lambda$-001] \tslink{genesis}{\emph{Genesis: A Multi-Substrate
+  Artificial Life Laboratory}}. Sebastian, S. Third Space.
+\item[$\Lambda$-002] \tslink{limen-pond}{\emph{Limen Pond}}. The
+  present submission.
+\item[H-001] \tslink{hackathon}{\emph{Coherence Filter Hackathon}}.
+  Third Space, May 2026 onward.
+\item[D-001] \href{https://huggingface.co/datasets/Third-Space/Sandevistan}{\emph{Apocrypha
+  $\cdot$ Sandevistan}}. Two training corpora; Sandevistan
+  $\sim$382M tokens, including Apocrypha ($\sim$111M) as subset;
+  Hugging Face: \texttt{Third-Space/Sandevistan}.
+\item[D-002] \href{https://huggingface.co/datasets/Kquant03/Caduceus-Dataset}{\emph{Caduceus
+  Project}}. Instruction-formatted medical and scientific protocols;
+  Hugging Face: \texttt{Kquant03/Caduceus-Dataset}.
+\end{description}
+
+\waverule
+
+% =============================================================================
+% Status footer — mirrors the live site's chrome at /limen-pond
+\begin{center}
+\small\itshape
+$\Lambda$-002 \quad $\cdot$ \quad Status: shipping \quad $\cdot$ \quad
+Track: Safety \quad $\cdot$ \quad Tempo: 6h sim-day \quad $\cdot$ \quad
+Open: Apache 2.0
+\end{center}
+
+\end{document}

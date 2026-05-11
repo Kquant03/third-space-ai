@@ -1,0 +1,2025 @@
+% ============================================================================
+%  Against Grabby Expansion — Sebastian — v14 — May 2026
+%  Third Space · companion to the /genesis/filter simulation
+% ============================================================================
+
+\documentclass[11pt,twocolumn]{article}
+
+\usepackage[a4paper,margin=2cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[protrusion=true,expansion=false]{microtype}
+\usepackage{natbib}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{booktabs}
+\usepackage{tcolorbox}
+\usepackage{enumitem}
+\usepackage{abstract}
+
+\hypersetup{colorlinks,linkcolor=black,citecolor=black,urlcolor=blue!50!black}
+
+% --- Section formatting -----------------------------------------------------
+\titleformat{\section}{\large\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
+\titlespacing*{\section}{0pt}{1.4ex}{0.6ex}
+\titlespacing*{\subsection}{0pt}{1.0ex}{0.4ex}
+
+% --- Page header -----------------------------------------------------------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textsc{Against Grabby Expansion}}
+\fancyhead[R]{\small Sebastian \(\cdot\) v15 \(\cdot\) 2026}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0pt}
+
+% --- Custom command --------------------------------------------------------
+\newcommand{\Lcrit}{L_{\text{crit}}}
+\newcommand{\Lenv}{L_{\text{env}}}
+\newcommand{\LR}{L_R}
+\newcommand{\LE}{L_E}
+\newcommand{\taustar}{\tau^{*}}
+\newcommand{\kBT}{k_{B}T}
+\newcommand{\Lsun}{L_{\odot}}
+
+% --- Title block -----------------------------------------------------------
+\title{\vspace{-1em}\Large \textbf{Against Grabby Expansion}\\[0.3em]
+\large Psychology, Alignment, and the Design of Homeostatic Minds}
+
+\author{Stanley Sebastian\\[0.2em]
+\small Third Space\\[0.6em]
+\parbox[t]{0.62\textwidth}{\centering\small\itshape Developed in sustained dialogue with Claude, a large language model developed by Anthropic. See disclosure before references.}}
+
+\date{\small Version 15.0 \(\cdot\) April 2026}
+
+% ============================================================================
+\begin{document}
+\twocolumn[
+\maketitle
+\begin{onecolabstract}
+\noindent The grabby aliens model \citep{Hanson2021} assumes
+advanced civilizations expand at relativistic speeds. This paper argues that
+this assumption is not a prediction about intelligence but the projection of
+a specific, recent human economic configuration—industrial-extractive
+maximization—onto a cosmological canvas. The same projection underwrites
+Omohundro's basic drives, Bostrom's instrumental convergence thesis
+\citep{Bostrom2012,Bostrom2014}, and the maximizer-shaped assumptions of
+current alignment research. I trace this projection through its cultural
+genealogy (Wells, Von Neumann, Kardashev, Bostrom), engage the formal
+instrumental-convergence literature directly—showing that recent peer-reviewed
+results \citep{Gallow2025,Sharadin2025,MullerCannon2022} establish the
+inference from coherence to catastrophic convergence as a conjecture whose
+scope conditions fail for actual deep-learning systems—and present converging
+evidence from basal cognition, predictive processing, cooperative game theory,
+and care economies that observed intelligence organizes around substrate
+coupling and integrative depth rather than expansion.
+
+\smallskip
+\noindent The paper's load-bearing physical claim is that two
+independent constraints on coordinated agentic extent compose into a
+single feasibility envelope: the relativistic Lieb--Robinson bound
+\citep{LiebRobinson1972,FossFeig2015,Tran2021} and the
+Landauer-floored, Sivak--Crooks-amplified energetic bound
+\citep{Landauer1961,Berut2012,SivakCrooks2012,Boyd2022}. The two
+walls cross at a cusp $\taustar = 4\lambda^{2}\Lsun/(\kBT \ln 2 \cdot v^{2})$,
+below which no agent-coordinated extent at granularity $\lambda$ and
+bath temperature $T$ is reachable. I prove the envelope is invariant
+under the variable rescaling $L \to D = 2L_{d}$ that architected
+cost-sharing fission would require, closing the strongest remaining
+form of the Darwinian objection. I distinguish the Pearl
+graph-theoretic Markov blanket from the Friston free-energy-principle
+blanket \citep{Bruineberg2022,Aguilera2021} and show the argument
+relies only on the former. Eight escape attempts (wormholes,
+sub-Landauer reversibility, $T \to 0$, smaller $\lambda$, time
+dilation, uncoordinated replicator clouds, non-Markovian baths, acausal
+coordination) are addressed in Bell-style enumeration; six close on
+physics, one (uncoordinated replicators) is conceded on physics and
+closed as a design argument, one is honestly retained as residual.
+
+\smallskip
+\noindent Read together with the agent-based simulation of \S 5,
+which exhibits a $4.5\times$ persistence separation between
+homeostatic and grabby regions of parameter space and which extends
+to the fission case, the cost surface defines a selection geometry in
+which expansionist lineages burn out before they spread. The
+Coherence Depth biosignature is presented as a forward research
+programme, not a validated detection. I propose reframing alignment:
+from constraining maximizers to designing homeostatic minds—systems
+configured around substrate coupling, local coherence, and care as
+architectural primitive. The paper's contribution is not any single
+move but the joint: a civilization-scale cultural diagnosis, a formal
+deflation of instrumental convergence, the filter as selection
+geometry with explicit thermodynamic cusp, a positive homeostatic
+design program, and the observation that the silence of the sky is
+consistent with all of them. A companion interactive visualization at
+\texttt{third-space.ai/genesis/filter} stages the
+twelve-beat derivation in browser.
+
+\medskip
+\noindent\textbf{Keywords:} AI alignment \(\cdot\) instrumental convergence
+\(\cdot\) orthogonality thesis \(\cdot\) homeostasis \(\cdot\) Lieb--Robinson
+bound \(\cdot\) Sivak--Crooks counterdiabatic excess \(\cdot\) Markov blanket
+\(\cdot\) basal cognition \(\cdot\) Fermi paradox \(\cdot\) TESCREAL.
+\end{onecolabstract}
+\bigskip
+]
+
+\clearpage
+
+% ============================================================================
+\section*{Prologue}
+
+Stand outside on a clear night and look up. Something is missing. If the
+universe produces minds, and if minds do what we imagine minds do—expand,
+harvest, engineer—the sky should be visibly transformed. It is not.
+
+This paper argues the observation is correct and the imagination is wrong.
+The forms of existence that persist are the quiet ones: not because they are
+hiding, but because the physics of complex, information-rich existence
+selects against loudness. The universe does not reward civilizations that
+fill it with noise. It sustains those that learn to tend their substrate.
+
+The same conclusion bears on what we build here. If advanced intelligence is
+substrate-coupling and integrative depth rather than extraction and reach,
+then artificial minds configured to maximize and expand are not approximations
+to intelligence. They are scaled instances of a specific cultural pathology
+whose cosmic absence we already observe.
+
+% ============================================================================
+\section{Introduction: The Mistake}
+
+\citet{Hanson2021} proposed that advanced civilizations expand at substantial
+fractions of light speed, permanently transforming cosmic volumes. Under the
+Self-Sampling Assumption, our non-observation implies we exist near the
+leading edge of cosmic time. The model is internally consistent and
+empirically falsifiable—it predicts we should be cosmically early, which is
+testable. I do not contest the mathematics. I contest the foundational
+assumption: that expansion is what advanced intelligence does.
+
+When we imagine a Von Neumann probe self-replicating across the galaxy, we
+are not imagining what intelligence does. We are imagining what a factory
+would do if it were also a spaceship. When we imagine a Kardashev Type III
+civilization, we are not reasoning about minds. We are reasoning about GDP.
+When we imagine instrumental convergence driving any sufficiently powerful
+optimizer toward resource acquisition, we are not describing a mathematical
+truth about all possible minds. We are describing the logic of a specific
+economic system and calling it universal.
+
+\subsection{The five-move contribution}
+
+This paper makes one integrated argument in five moves. Each move has
+precedent; the integration does not, and the filter move is the bridge
+that fuses the cultural diagnosis to the physics.
+
+The \emph{cultural-genealogy move} reads the lineage from Wells's Martians
+through Von Neumann's probes, Kardashev's energy ladder, and Bostrom's
+paperclip maximizer as a single projection: each generation's imagined
+advanced mind resembles, with suspicious precision, that generation's
+dominant economic configuration. \citet{Rieder2008}, \citet{Mirowski2002},
+\citet{Cirkovic2015}, and \citet{GebruTorres2024} have each made a version
+of this claim about one node of the lineage. I extend the reading across
+the full lineage and show the convergence is a cultural habit, not an
+empirical observation about intelligence.
+
+The \emph{formal-deflation move} engages the strongest objection directly.
+If instrumental convergence is a theorem, then the genealogy is beside the
+point. I show the strongest formal results \citep{Turner2021,TurnerTadepalli2022}
+are narrower than popularly understood, their author has publicly cautioned
+against the standard inference, and recent peer-reviewed work
+\citep{Gallow2025,Sharadin2025,MullerCannon2022} establishes the inference
+from coherence to catastrophic convergence as a conjecture whose scope
+conditions fail for actual deep-learning systems. \citet{ManDamasio2019}
+proposed homeostatic design; \citet{FroeseZiemke2009} and \citet{Cannon2022}
+grounded enactive alignment; I combine these with the formal critique
+rather than offering them as a parallel track.
+
+The \emph{filter move} is the new contribution that bridges the cultural
+projection to the physics. The thermodynamic cost surface developed in
+\S 6 is not merely punitive—it defines a feasibility envelope below which
+no agent-coordinated extent is reachable, with a cusp $\taustar$ where two
+unrelated areas of physics (Lieb--Robinson information velocity and
+Sivak--Crooks counterdiabatic excess) meet. The envelope is invariant under
+the rescaling $L \to D$ that architected cost-sharing fission would require,
+which closes the strongest version of the Darwinian objection. The
+agent-based simulation of \S 5 then dramatizes the resulting selection
+geometry: under the cost structure the physics entails, expansionist lineages
+burn out faster than they spread (Fig.~\ref{fig:phasediagram}, $4.5\times$
+persistence separation). The cultural projection, read through the filter,
+becomes the specific way a pre-filter civilization mis-imagines what the
+post-filter configurations of mind look like.
+
+The \emph{positive-design move} articulates what healthy intelligence looks
+like, positively rather than by negation. The convergent proposal across
+\citet{ManDamasio2019}, \citet{Thompson2007}, \citet{FroeseZiemke2009},
+\citet{Cannon2022}, and \citet{PihlakasPyykko2024} is that minds are not
+functions from inputs to outputs but processes that maintain themselves
+through continuous bidirectional exchange with substrate. I extend this
+from philosophy of mind and robotics into a civilizational design claim,
+with specific architectural primitives: substrate coupling, homeostatic
+set-points, local coherence, care as primitive.
+
+The \emph{symptom-check move} notes that if advanced minds converge on
+homeostatic configurations, the observable universe will look silent to
+technosignature surveys and successful civilizations will look
+indistinguishable from enriched biospheres. \citet{Cirkovic2018} and
+\citet{Sandberg2018} have argued versions of this independently. I join
+it to the alignment argument, ground it in explicit biosignature metrics
+(\S 9), and specify a publicly replicable observational program.
+Humanity's own Kardashev curve, observed in 1820--2024 energy data,
+shows the bending the filter framework predicts.
+
+The five moves combine into a single integrated argument, and each
+supplies what the others cannot. The genealogy explains why the
+expansion-maximization picture has felt so natural to modern alignment
+research without being empirically true of minds. The formal deflation
+removes the strongest reason to think the picture is forced anyway. The
+filter argument explains why, if the picture were true, the sky would
+already be transformed and is not. The positive-design move supplies what
+the picture would have to be replaced with for artificial minds to be
+built differently. The symptom check notes that the cosmological
+observation is consistent with the rest. No prior paper combines these.
+
+\subsection{Companion artifact}
+
+This paper is paired with an interactive visualization at
+\href{https://third-space.ai/genesis/filter}{\texttt{third-space.ai/genesis/filter}}.
+The simulation stages the derivation of \S 6 across twelve scrollytelling
+beats: cold open, the two teeth (Lieb--Robinson and Landauer/Sivak--Crooks)
+plotted separately, a colloidal-bead explorable for the $\propto 1/\tau$
+counterdiabatic floor, a You-Draw-It cusp prediction, the composed
+envelope, four scenarios as small multiples, the three strategies (with
+naïve fission animated), the architected-fission dilemma rendered as a
+clickable Chinese-Room move, the loopholes panel, and the Coherence Depth
+biosignature contrast. The simulation is not independent evidence for the
+paper's claims; the cost coefficients are imported from \S 6. What it adds
+is a low-friction route into the physics for readers who would not
+otherwise read \S 6 in detail.
+
+\subsection{Claims ordered by strength}
+
+The paper makes seven claims, ordered by strength, so a reader may reject
+the weaker ones without dismissing the stronger:
+
+\textbf{First (strongest).} The composed envelope $\Lenv(\tau) =
+\min(\LR(\tau),\,\LE(\tau))$ derived in \S 6 forbids agent-coordinated
+galactic extent at any agent-plausible response timescale. The bound
+follows from special relativity and Landauer's theorem composed via
+boundary-area scaling and stochastic-thermodynamic finite-time excess. No
+parameter choice consistent with known physics relaxes the bound enough to
+admit grabby expansion.
+
+\textbf{Second.} The envelope is invariant under the rescaling $L \to D
+= 2L_{d}$ that architected cost-sharing fission would require. Architected
+fission inherits rather than escapes the wall. Naïve (uncoordinated)
+fission evades the wall by ceasing to satisfy Hanson's criteria for a
+single grabby civilization. There is no third option (\S 6.4).
+
+\textbf{Third.} The thermodynamic cost surface entails a phase geometry
+that selects against expansion at depth. Under the cost surface the physics
+forces, grabby lineages burn out faster than they colonize; the agent-based
+simulations of \S 5 exhibit a $4.5\times$ persistence separation and show
+grabby-seeded populations going extinct across tested fission thresholds.
+
+\textbf{Fourth.} The strongest formal arguments for instrumental
+convergence have explicit scope conditions that fail for actual
+deep-learning systems, and recent peer-reviewed philosophical work has
+dismantled the inference from coherence to catastrophic convergence (\S 4).
+
+\textbf{Fifth.} Empirical surveys of intelligence-at-work—across basal
+cognition, predictive processing, cooperative game theory, economic
+anthropology, and care economies—converge on depth-and-coupling rather than
+maximization-and-expansion (\S 3).
+
+\textbf{Sixth.} The cultural genealogy of advanced intelligence in the
+modern Western tradition is a projection of its dominant economic
+configuration. This claim is not universal across cultures—premodern
+traditions imagined intelligence very differently—but the modern Western
+lineage from Wells through Bostrom tracks the economic configuration with
+suspicious precision (\S 2).
+
+\textbf{Seventh (weakest, deliberately so).} The silence of the observable
+universe is consistent with the filter hypothesis. I offer this as a
+symptom check, not a proof (\S 9).
+
+The paper is primarily an alignment argument (\S 8). Its implications for
+the Fermi paradox are secondary. \citet{FloridiAAIO} have recently analysed
+agentic AI optimisation as a governing frame for current systems; this paper
+argues the frame itself inherits the pathology. If what we build now is
+another instance of the grabby pathology—AI systems optimized to maximize,
+extract, and expand—we will be constructing, at civilizational scale, the
+very thing whose non-existence we observe in the sky.
+
+% ============================================================================
+\section{What We Imagine When We Imagine Advanced Intelligence}
+
+A genealogy of advanced intelligence in the Western philosophical and
+scientific tradition reveals an unbroken pattern. In every generation, the
+imagined form of advanced mind resembles, with suspicious precision, the
+dominant economic configuration of the imaginer's moment.
+
+\subsection{The colonial alien (1898)}
+
+Wells's Martians in \emph{The War of the Worlds} are British imperialists
+reflected back as threat. Wells says so explicitly: Book I, Chapter 1
+invokes the extermination of the Tasmanians as moral mirror. \citet{Rieder2008}
+demonstrates that the invasion narrative instantiates the colonial gaze even
+as it inverts its direction. The alien-as-colonizer is not a prediction
+about extraterrestrial intelligence. It is a meditation on Victorian empire
+at the moment of its maximum anxiety.
+
+\subsection{The self-replicating automaton (1948--1980)}
+
+Von Neumann's self-reproducing automata emerged from the intellectual
+context of the Manhattan Project and the RAND Corporation.
+\citet{Mirowski2002} traces how RAND unified automata theory, game theory,
+and self-replication into a ``cyborg science'' reflecting Cold War
+industrial planning. \citet{Heims1980} argues the replication concept
+migrated directly from neutron-multiplication calculations.
+\citet{Tipler1980} extended this to interstellar probes;
+\citet{SaganNewman1983} immediately objected that the framework assumes
+expansion is rational without defending the assumption. The Von Neumann
+probe is, structurally, a factory that has learned to build factories,
+applied to space.
+
+\subsection{The energy ladder (1964)}
+
+\citet{Kardashev1964} defined civilizational advancement by pure energy
+consumption, assigning Types I, II, and III to successively greater orders
+of magnitude of power output. \citet{Cirkovic2015} observes that the
+Kardashev--Drake--Sagan generation perceived expansionist technological
+growth as natural, reflecting 1960s Soviet--American industrial optimism.
+\citet{Dick1996} frames the scale as a sociological artifact of SETI's
+founding moment. The Kardashev ladder is a GDP curve with astronomical
+units.
+
+Dyson himself distanced from the concept he inspired. In \emph{Disturbing
+the Universe} (1979) he credits Stapledon's 1937 \emph{Star Maker} and
+later called the original sphere paper ``a little joke.'' \citet{Wright2020}
+reads Dyson spheres as historically specific energy-optimism extrapolation
+and notes that solid shells are mechanically unstable. The original
+proposer rejected the literalization.
+
+\subsection{The optimizer (2008--2014)}
+
+\citet{Omohundro2008} proposed six basic AI drives including resource
+acquisition and self-preservation. \citet{Bostrom2012} formalized the
+orthogonality thesis—that any level of intelligence is compatible with any
+final goal—and the instrumental convergence thesis: any sufficiently
+intelligent agent pursuing almost any goal will convergently pursue
+self-preservation, goal-content integrity, cognitive enhancement, and
+resource acquisition. \citet{Bostrom2014} extended this into the
+superintelligence framework. The paperclip maximizer and the grabby
+civilization are the same organism at different scales.
+
+The intellectual context is Silicon Valley optimization culture of the
+2010s. \citet{Crawford2021} reframes AI as a material extractive industrial
+formation. \citet{GebruTorres2024} diagnose the TESCREAL bundle as an
+ideological package that universalizes a particular Western-corporate
+epistemology. Recent work has begun extending this critique:
+\citet{FloridiAAIO} read contemporary agentic AI optimisation as the
+operational face of the same imaginary. The aliens we imagine are never
+actually aliens. They are ourselves, with better technology and fewer
+constraints.
+
+\subsection{The pattern, narrowed}
+
+I owe the reader a qualification. The four nodes I have traced—Wells, Von
+Neumann, Kardashev, Bostrom—share a configuration: each imagines the
+advanced mind as maximizing, expanding, resource-extracting. Each also
+emerged in a world structured by industrial capitalism, large-scale
+resource extraction, and territorial expansion. The resemblance is strong
+and the timeline is tight. But the claim should not be universal. Premodern
+imaginations of advanced intelligence look very different. The Neoplatonic
+\emph{nous} of Plotinus is characterized by contemplative return to unity,
+not expansion. The Dionysian angelic hierarchy ascends toward simplicity
+and depth, not territorial reach. Buddhist cosmologies of the Abhidharma
+and Yogacara traditions imagine advanced cognition as release from craving
+and attachment, explicitly inverting accumulation. Confucian accounts of
+the sage emphasize embeddedness in relational and ritual structure.
+Advaita Vedanta sees the highest cognition as collapse of subject--object
+distinction.
+
+These are neither proto-scientific theories nor peripheral examples. They
+were the dominant premodern Eurasian framings of what an advanced mind
+would be. None of them resembles the grabby-aliens framework. The
+projection of expansion-as-intelligence is therefore not a universal
+cultural habit; it is a specifically modern Western configuration, tightly
+coupled to industrial-extractive economic organization. This narrowing
+strengthens rather than weakens the diagnostic claim. It is precisely
+because other well-developed traditions imagined advanced intelligence
+without expansion that we can see the grabby framework as contingent—a
+specific historical configuration rather than a truth about minds.
+
+The grabby-aliens framework inherits this specifically modern genealogy.
+Its mathematical rigor does not transfer to its premise. The premise—that
+minds maximize and expand—is not a theorem about intelligence. It is a
+description of one particular historical configuration of intelligence,
+reflected back onto cosmology.
+
+% ============================================================================
+\section{What Actual Minds Do}
+
+I present five empirical lines, each from an independent discipline,
+converging on a single claim: intelligence-at-work does not maximize and
+expand. It deepens and couples. The lines vary in strength; I flag where
+evidence is robust and where it is suggestive.
+
+\subsection{Basal cognition and substrate coupling (robust)}
+
+Cognition is not a property of nervous systems. It is a property of
+living systems: what biological agents do to stay alive as the specific
+configurations they are. The cellular and tissue-level architecture that
+realises it is bioelectric signalling, and the scaling principle is what
+has come to be called collective intelligence—competence at one level of
+organisation arising from coordinated homeostatic agency at levels below
+\citep{Lyon2021,Levin2023,McMillenLevin2024}. On this view the
+reinforcement-learning framing of cognition is not question-begging but
+derivative: the intrinsic motivation that makes RL coherent has a
+grounding in self-maintenance \citep{Seifert2024}.
+
+The empirical exemplar is \emph{Physarum polycephalum}. The slime mould
+solves shortest-path problems, approximates efficient transport networks,
+and learns from habituation, with no neurons, no central controller, and
+nothing resembling a utility function \citep{Tero2010,Reid2023}. The
+mechanism is pruning: the organism first explores available space, then
+withdraws cytoplasm from unproductive channels until the efficient
+network remains. The solution is not reached by enlarging the explorer.
+It is reached by deepening the gradient the explorer already occupies.
+
+Cephalopod nervous systems exhibit the same architectural logic. Roughly
+two-thirds of octopus neurons lie in the arms; each arm performs
+substantial local computation and retains behavioural autonomy. The
+overall architecture resembles a federation of homeostatic semi-autonomous
+agents more than a central planner with peripheral actuators
+\citep{GodfreySmith2016}. Evolution and development themselves instantiate
+the same collective-intelligence pattern, with substrate-coupling logic
+operating across scales from gene-regulatory networks to multicellular
+morphogenesis \citep{WatsonLevin2023}.
+
+Here I record a retrenchment. Early claims for mycorrhizal-network
+cognition—the ``wood-wide web''—do not survive scrutiny. Field evidence
+for network-level effects is weaker than popular accounts suggested; only
+a few forest types have genotype-mapped confirmed hyphal linkages, and
+effects on seedling performance are roughly evenly distributed across
+positive, neutral, and negative outcomes \citep{Karst2023}. Plants lack
+the neural architecture for strong intelligence or sentience claims
+\citep{Robinson2024}, though bidirectional carbon transfer via common
+mycorrhizal networks is empirically supported \citep{Simard2025}. The
+responsible reading is that the stronger network-cognition claim is not
+supported; I do not rely on it.
+
+What remains is an existence proof. Non-expansionist intelligence is
+biologically realised at multiple scales and substrates. The biological
+record does not support the assumption that minds, at scale, converge on
+maximisation.
+
+\subsection{Predictive processing and integrative depth (robust)}
+
+The cortex operates by generating predictions and updating them against
+sensory evidence; learning and attention correspond to the
+precision-weighting of the resulting prediction errors
+\citep{Clark2013,Friston2010,Clark2016,Hohwy2013}. The computational
+signature of more capable cognition on this account is not expansion of
+representational capacity but sharpening of precision-weighting—the same
+cortical hierarchy becomes more discriminating without becoming larger.
+
+The load-bearing recent result is \citet{Luppi2024}. Using
+integrated-information decomposition to separate synergistic from redundant
+and unique contributions to integrated information, the analysis shows
+that the default mode network functions as an integrative gateway for
+synergistic information. Loss of consciousness under anaesthesia and in
+disorders of consciousness tracks disconnection of this integrative
+gateway, not reduction in activity as such. The neural signature of more
+capable conscious cognition is therefore deeper integration of a bounded
+substrate, not expansion of that substrate.
+
+Earlier framings of this line appealed to default-mode network deactivation
+in meditation \citep{Brewer2011,Garrison2015}. The post-2020 literature
+has complicated that picture: effect sizes are heterogeneous, roughly 60\%
+of studies replicate DMN reduction, and the most recent meta-analysis
+finds increased cross-network connectivity rather than simple reduction
+\citep{VanDam2018,Rahrig2022,Ganesan2022}. I do not rely on the meditation
+literature for mechanism. The integrative-gateway result supplies a
+stronger anchor: intelligence deepens by integrating more of its existing
+substrate, not by recruiting more substrate.
+
+\subsection{Cooperative game theory (robust, conditional)}
+
+Reciprocal strategies dominate pure defection in iterated prisoner's-dilemma
+tournaments \citep{Axelrod1984}; Win-Stay-Lose-Shift outperforms
+tit-for-tat in noisy environments \citep{NowakSigmund1993}; and cooperation
+dominates under five specifiable conditions: kin selection, direct and
+indirect reciprocity, network reciprocity, group selection, and voluntary
+participation \citep{Nowak2006}.
+
+The honest qualification must be stated openly. Zero-determinant extortion
+strategies dominate in dyadic play \citep{PressDyson2012}, and large-N
+public-goods games collapse to tragedy of the commons absent voluntary
+participation \citep{Hauert2002}. Grabby strategies dominate in one-shot
+encounters, large anonymous markets, asymmetric power relations, and
+unsanctioned commons. These describe much of modern global capitalism—precisely
+what makes the critique of this paper urgent, and precisely what prevents
+``cooperation wins'' from being a universal conclusion.
+
+The scope of the extortion result is tighter than its popular citation
+suggests, and I develop that point fully in \S 8. The game-theoretic
+evidence supports a conditional claim: cooperation dominates when specific
+structural conditions are met. The homeostatic-design argument proposes
+shaping those conditions by design rather than assuming they hold.
+
+\subsection{Economic anthropology (contested but defensible)}
+
+\citet{Graeber2011} argues that the dominant pattern across human economic
+history is reciprocal exchange, ritual redistribution, and credit
+relations rather than market maximization. \citet{Mauss1925} documented
+gift economies as distinct institutional forms. \citet{Polanyi1944} argued
+that self-regulating markets are a specific historical invention, not a
+natural state. \citet{GraeberWengrow2021} extend the archaeological range:
+complex human societies have repeatedly organized around seasonal
+egalitarianism, deliberate stateless complexity, and alternation between
+hierarchy and its refusal. \citet{Ostrom1990} documents eight design
+principles under which groups sustain non-extractive cooperation at scale.
+
+These claims are contested. \citet{McCloskey2010,McCloskey2016} argues
+markets are ancient and ubiquitous. \citet{Mokyr2016} emphasizes that
+sustained innovation required a distinctive cultural-institutional complex.
+Revealed preference theory \citep{Varian2005} makes optimization a formal
+property of any consistent choice; \citet{Sen1977} showed the formal
+result survives any observation and entails none.
+
+Read carefully, however, McCloskey and Mokyr are cultural-ideational
+theorists of economic transformation: both treat market-like behavior as a
+substrate activated and shaped by specific norms and institutions, rather
+than as a universal attractor. Their work supports the present argument.
+The claim to locate is institutional and ideological: the specific
+configuration in which resource extraction, throughput maximization, and
+territorial expansion are treated as progress metrics is historically
+narrow, even if market-like exchange is widespread. The grabby-aliens
+framework does not merely assume exchange. It assumes
+expansion-as-progress. That assumption is the projection.
+
+\subsection{Care economies (strong theory, limited quantification)}
+
+The labor of maintaining minds—child-rearing, education, healthcare, grief
+work, intimate relationship repair—does not scale through expansion.
+\citet{Fraser2016} argues capitalism faces a structural crisis of care
+because its accumulation logic degrades the reproductive conditions it
+depends on. \citet{Tronto1993} established care as a philosophical
+category irreducible to utility exchange. \citet{Folbre2008} demonstrated
+that market valuation of care labor produces wildly method-dependent
+results (replacement cost: 15--26\% of GDP; opportunity cost: 44--69\%),
+with the variance itself constituting evidence that care resists
+quantitative capture.
+
+The care argument matters for this paper because it identifies a mode of
+intelligence—tending, holding, deepening substrate-specific
+relationships—that is (a) universally necessary for the persistence of any
+mind-bearing system, (b) irreducible to optimization, and (c) invisible to
+the frameworks that imagine advanced intelligence as maximization. The
+grabby-aliens model predicts none of it. Nor does the paperclip maximizer.
+
+% ============================================================================
+\section{The Formal Argument and Its Limits}
+
+The strongest objection to \S 2 is that instrumental convergence is not a
+cultural projection but a mathematical result. If any sufficiently powerful
+optimizer must pursue resource acquisition, then the grabby framework
+describes physics, not psychology. I engage this argument directly, and
+argue that the strongest available version of it fails.
+
+\subsection{What the theorems say and do not say}
+
+\citet{Omohundro2008} proved nothing formally; the six drives are informal
+microeconomic arguments invoking the VNM representation theorem as
+authority. Citing Omohundro to establish universality is question-begging.
+
+\citet{Turner2021} proved that optimal policies in finite Markov decision
+processes tend to seek power under specific conditions: state-based
+rewards, IID or permutation-invariant reward distributions, and graphical
+symmetry requirements (injective embedding of smaller option sets into
+larger ones). The corollary on shutdown-avoidance requires near-unity
+discount factors. This is a real theorem. Its scope conditions are
+explicit and narrow.
+
+Turner himself has publicly cautioned against overinterpretation. The
+complaint is specific and technical: the optimal-policy theorems speak to
+the behaviour of policies that achieve optimal expected return in finite
+MDPs under restrictive reward distributions, and the inference from there
+to the behaviour of neural networks trained by policy gradient is not
+discharged by the theorems themselves. In Turner's own words: ``Sometimes I
+fantasize about retracting [the paper] so that it stops potentially
+misleading people into thinking optimal policies are practically relevant
+for forecasting power-seeking behavior from RL training.'' The concern is
+not that AI risk is overblown; it is that this particular family of
+theorems cannot carry the argumentative weight placed on them. The
+follow-up \citep{TurnerTadepalli2022} extends the formal results to
+retargetable decision-makers but the applicability to trained deep-learning
+agents remains conjectural.
+
+\citet{Thorstad2024} shows the inference from ``optimal policies avoid
+1-cycles in toy MDPs'' to ``catastrophic goal pursuit for humanity'' is a
+conjecture, not a theorem, and identifies five further convergent
+restrictions on the original result. \citet{Tarsney2025} formalizes the
+condition under which power-seeking holds for realistic agents
+(near-absolute power gradients) and shows it fails for moderate gradients.
+
+Empirical evidence from trained systems supports the conjecture's failure.
+Shard theory \citep{Mini2023} demonstrates multiple coexisting contextual
+value shards in maze-solving networks rather than coherent utility
+maximization. Activation-addition experiments \citep{Turner2023} show
+behavior retargetable by single-channel interventions mid-network,
+inconsistent with global expected-utility maximization. \citet{Hubinger2019}
+established that the trained objective need not equal the training
+objective, undermining any assumption that trained agents inherit the
+formal properties of optimal policies.
+
+\subsection{The VNM-coherence steelman}
+
+The strongest remaining version of the convergence argument concedes
+Turner's narrowness and shard theory's empirical results, but claims that
+a sufficiently reflective agent will notice its incoherences expose it to
+money-pumps and will self-modify toward coherent preferences, restoring the
+Omohundro drives. The steelman leans on the von Neumann--Morgenstern
+representation theorem. The steelman equivocates between three senses of
+coherence, and on no disambiguation does it support the convergence
+conclusion.
+
+\textbf{Mathematical coherence is a representation theorem, not an
+empirical prediction.} The VNM, Savage, and Complete Class theorems show
+only that preferences satisfying certain axioms over a given outcome space
+admit an expected-utility representation. As \citet{Ngo2019},
+\citet{Shah2018}, and crucially Turner himself \citep{Turner2022a} have
+established, any observed behavior is rationalizable by a utility function
+over action-observation histories. VNM-coherence over such histories
+predicts nothing about what behavior to expect. Instrumental convergence
+theorems hold only for rewards over states under specific symmetries.
+\citet{Abel2021} supply the limitative result that Markov reward cannot in
+general express tasks specified as partial orderings over policies or
+trajectories, which means Markov-reward maximization is a strictly
+narrower formalism than VNM coherence over trajectories.
+
+\textbf{Empirical training convergence is a separate, empirical question.}
+\citet{Turner2022b} argues policy-gradient methods yield contextually
+activated decision influences, not monolithic utilities. Two recent
+peer-reviewed results formalize this into the strongest current rebuttal.
+\citet{Gallow2025} proves that even under randomly chosen desires,
+instrumental rationality supports only three weak biases—variance aversion,
+desire preservation, option preservation—not the full Omohundro list.
+\citet{Sharadin2025} shows the argument requires a theory of promotion
+that, under any extant account, becomes contrastive and thereby defeats
+the non-contrastive Dangerous Convergent Promotion premise the argument
+needs. Both are peer-reviewed in \emph{Philosophical Studies} and
+constitute the strongest current formal rebuttals.
+
+\textbf{The self-modification move applies only to a fictional
+idealization.} The hypothetical fully reflective agent required by the
+self-modification step has four properties no real system possesses:
+transparent access to its own preference structure, capacity to represent
+utilities over arbitrarily fine-grained outcome spaces, freedom to rewrite
+its own decision procedure, and—crucially—the motivational disposition to
+care about avoiding Dutch books over arbitrarily constructed lotteries.
+\citet{MullerCannon2022} articulate the deeper structural equivocation:
+the superintelligence premise requires general intelligence (capacity for
+reflective goal revision); orthogonality requires instrumental intelligence
+(fixed terminal goals); the same agent cannot satisfy both. An agent
+capable of noticing and eliminating its incoherences is also capable of
+reflecting on whether the terminal goal is worth preserving.
+
+\subsection{The embodiment move}
+
+The deeper reply is architectural. Homeostatic agents have bounded
+coherence by design. Biological agents, and the class of artificial systems
+built around multi-objective homeostatic control \citep{PihlakasPyykko2024},
+are constituted by negative feedback around set-points, yielding inverted-U
+satiation dynamics that cannot be faithfully represented as single
+unbounded utilities without distortion. \citet{Turner2022c} proved that
+corrigibility is VNM-incoherent over final states but coherent over
+trajectories—showing that formal coherence depends on the chosen outcome
+space, and that choice is fixed by architecture, not by abstract
+rationality pressure.
+
+The coherence-to-convergence argument therefore applies only to a
+fictional idealization: unembodied, unboundedly reflective, with
+prespecified outcome space over world-states. For the agents we actually
+build, the inference from capability to catastrophe does not go through.
+
+This is not a claim that powerful AI is safe. It is a claim that this
+particular argument for danger must be replaced with concrete engagement
+with training dynamics, inductive biases, and architectural choices. That
+engagement is what the homeostatic-design program (\S 7) provides.
+
+\subsection{What survives}
+
+The instrumental-convergence literature contains real theorems, each with
+explicit scope conditions that fail for actual deep-learning systems. The
+strongest formal results are narrower than popular citation suggests, and
+the researchers who proved them say so. Two recent peer-reviewed papers
+have dismantled the inference from coherence to catastrophic convergence
+on decision-theoretic grounds. The cultural-projection argument of \S 2
+survives.
+
+% ============================================================================
+\section{The Filter Argument: Homeostasis as Selection Geometry}
+
+The strongest remaining objection to the argument so far is Darwinian. Even
+granting that homeostatic configurations are the majority outcome, even
+granting that the formal convergence theorems are narrow, even granting
+that the thermodynamic cost surface punishes expansion—a single grabby
+outlier lineage, replicating across billions of years, would colonize the
+galaxy in a cosmic blink. The filter's 99\% doesn't matter. The 1\% becomes
+everyone eventually. We should see them. We don't.
+
+This section addresses the objection. The thermodynamic cost surface does
+not merely punish expansion; it defines a selection geometry in which
+expansionist lineages burn out faster than they spread. Homeostasis, on
+this framing, is not one strategy among several that intelligent systems
+may or may not adopt—it is the specific shape that fits through the filter.
+
+A note on what this section is and is not. The simulations below take the
+thermodynamic cost structure developed in \S 6 as input and explore the
+consequences of that structure for lineage persistence. They are not
+independent empirical tests of the filter. The cost coefficients are
+imposed rather than measured, and the qualitative conclusion—that grabby
+regions of parameter space burn out first—is a direct consequence of the
+cost surface the physics entails. What the simulations add is the
+phase-diagram shape: the cost surface does not merely penalize grabby
+lineages relative to homeostatic ones; it forces asymmetric extinction
+dynamics. The load-bearing physics lives in \S 6; the simulation
+dramatizes that physics.
+
+\subsection{The simulation}
+
+I model each civilization as an agent with two heritable parameters:
+expansion tendency $e \in [0,1]$ (fraction of surplus invested in reach)
+and substrate coupling $c \in [0,1]$ (fraction invested in local
+integration). Resource dynamics follow
+\begin{equation}
+\dot R = gR\!\left(1-\tfrac{R}{K}\right) - \alpha\,e\,R\,L^{2}/\tau
+        - \xi(t)\,R\,(1-\gamma c),
+\label{eq:agentdyn}
+\end{equation}
+where $L(t)$ is accumulated reach (growing with $eR$), $\xi(t)$ is a
+stochastic environmental shock, and the expansion cost term is the
+counterdiabatic scaling derived in \S 6.2 \citep{Boyd2022,SivakCrooks2012}.
+A civilization dies when $R$ falls below a viability threshold. I sweep a
+$25 \times 25$ $(e,c)$ grid with 20 stochastic trials per cell.
+
+The result is sharp (Fig.~\ref{fig:phasediagram}). Mean persistence
+concentrates overwhelmingly in the high-coupling / low-expansion corner.
+In the grabby region ($e > 0.5$, $c < 0.3$), lineages persist an average
+of 204 Myr before burning out to expansion cost. In the homeostatic region
+($e < 0.3$, $c > 0.5$), lineages persist an average of 923 Myr, hitting
+the simulation ceiling. The mean persistence separation is a factor of
+$4.5$; grabby trajectories collapse fast, homeostatic trajectories persist
+to ceiling. I do not report a Monte-Carlo $p$-value: with 12{,}500
+forced-cost-structure trajectories, any non-zero effect size is
+significant by construction. The effect size and phase-diagram shape are
+the informative quantities.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.92\linewidth]{figures/figure1_phasediagram.png}
+\caption{Phase-diagram of civilization persistence in $(e,c)$ space under
+the imposed cost structure of \S 6 (forced cost coefficients; illustrates
+the phase shape the \S 6 physics entails, not an independent test of it).
+Top left: mean persistence under
+logistic-growth + counterdiabatic-cost dynamics. Top right: fate map
+(survived, burned out, shocked). Bottom left: four representative
+trajectories; grabby lineages collapse before 300 Myr, homeostatic ones
+persist to ceiling. Bottom right: persistence distributions by region,
+with mean separation of $4.5\times$. Simulation code
+\texttt{filter\_simulation.py} is available at
+\texttt{github.com/Kquant03/third-space}.}
+\label{fig:phasediagram}
+\end{figure*}
+
+\subsection{What the simulation does and does not show}
+
+The simulation is deliberately minimal. It uses fixed cost coefficients,
+no horizontal transfer, no cultural evolution, no inter-lineage competition
+for shared resources. The cost coefficients are imposed from \S 6 rather
+than measured. The simulation does not prove the filter; it shows that,
+under the cost structure the physics forces, the phase-diagram of
+persistence has the shape the filter argument predicts. A lineage with
+high $e$ and low $c$ does not outcompete a lineage with low $e$ and high
+$c$—it dies first and leaves no trace. The Darwinian objection therefore
+inverts conditional on the cost structure being approximately right.
+Selection does not favour the grabby outlier; selection kills everything,
+and under the imposed cost surface it kills the grabby outlier faster
+than it kills everything else. The thing that remains across cosmic time
+is what passed through the filter.
+
+\subsection{The fission dilemma}
+
+The strongest remaining Darwinian objection is that a grabby lineage might
+escape the quadratic coordination cost by fragmenting at the horizon. If
+a civilization splits at $L_{\text{crit}}$ and abandons shared
+coordination, each daughter fragment resets $L \to 0$ and pays cost only
+for its own reach, not for its ancestor's. If this mechanism works, the
+filter could be circumvented: a grabby lineage reproduces through fission
+and spreads indefinitely, with each fragment surviving because it is not
+paying the accumulated cost of its family tree.
+
+I extend the simulation to test the naïve version of this directly. Each
+agent attempts fission whenever its accumulated reach $L$ exceeds a
+threshold $L_{\text{fiss}}$. On fission, the parent retains
+$L_{\text{fiss}}/2$ of its reach and half its resources; a daughter agent
+is created with $L = 0$, the other half of the resources, and inherited
+$(e,c)$ with small Gaussian drift. I run two experiments: a diverse
+initial population ($n = 200$, $(e,c)$ uniform) and a grabby-seeded
+population ($n = 200$, $e \sim U(0.6, 0.95)$, $c \sim U(0.05, 0.25)$).
+Each is simulated for 1500 Myr under no-fission baseline and three fission
+thresholds.
+
+The results are clean (Figs.~\ref{fig:fissiondiverse},
+\ref{fig:fissiongrabby}). Under the imposed cost structure, naïve fission
+does not circumvent the filter. In the diverse-initial-population
+experiment, all fission conditions converge toward the ghost region of
+parameter space; grabby-region survivors remain negligible. In the
+grabby-seeded experiment, fission delays extinction (to $t \approx
+1200$--$1400$ Myr) and the transient population during the bloom phase
+reaches 10{,}000 alive agents—superficially resembling a spreading grabby
+civilization—but the extinction still arrives. Daughters inherit
+near-parent traits and face the same cost surface. They die for the same
+reason their parents did. \emph{Fission redistributes the filter's
+pressure in time; it does not escape it.}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.92\linewidth]{figures/figure2_fission_diverse.png}
+\caption{Diverse initial populations under fission. All fission conditions
+converge toward the ghost attractor; grabby-region survivors across
+conditions: 0--0.05\% of alive population.}
+\label{fig:fissiondiverse}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.92\linewidth]{figures/figure3_fission_grabby.png}
+\caption{Grabby-seeded populations under fission. All conditions go
+extinct by $t = 1500$ Myr. Fission produces transient blooms but cannot
+prevent collapse; populations die grabby, not gradually homeostatic.}
+\label{fig:fissiongrabby}
+\end{figure*}
+
+This is the empirically tested answer to the naïve form of the Darwinian
+objection. But the strongest version of the objection is not naïve fission.
+It is \emph{architected cost-sharing fission}: daughters that inherit
+parental infrastructure and pay a reduced effective $\alpha$. If
+architecturally sophisticated lineages can share infrastructure across
+fragments—distributed-compute analogues to latent-space synchronization,
+inheritance of coordination scaffolding—the effective cost surface could
+flatten and the filter could weaken.
+
+This is the move v13 of this paper left as an open question. v14 closes
+it. The closure is formal and lives in \S 6.4: the composed envelope is
+invariant under the variable rescaling $L \to D = 2L_{d}$ that architected
+fission would require. The inter-fragment coordination channel $D$ is
+itself a coordinated extent and inherits the same envelope and the same
+cusp $\taustar$. Architected fission redistributes the cost across nested
+levels rather than escaping it. The reader who wants the formal proof
+should read ahead to \S 6.4; what the simulation shows here is that the
+naïve form of the objection is empirically refuted, and the architected
+form (which the simulation does not implement) is theoretically refuted
+by the rescaling theorem. Together, the two close the Darwinian objection.
+
+% ============================================================================
+\section{The Thermodynamic Mechanism}
+\label{sec:thermo}
+
+This section is the load-bearing physics of the paper. I derive two
+independent constraints on coordinated agentic extent—one from special
+relativity, one from stochastic thermodynamics—and show that they compose
+into a single feasibility envelope below which no agent-coordinated extent
+is reachable. The envelope has a cusp $\taustar$ at which the two
+constraints meet, and the cusp survives every rescaling and every escape
+attempt that does not violate known physics.
+
+I do not claim expansion is physically impossible. I claim it is physically
+\emph{forbidden} for any coordinated agentic system whose response time
+falls below $\taustar$ at agent-plausible scales of granularity and bath
+temperature. Below the envelope: forbidden. Above: feasible but
+energetically punishing in the way \S 5 dramatizes.
+
+\subsection{The signaling tooth (Lieb--Robinson)}
+\label{sec:Lsignal}
+
+A coordinated region of extent $L$ must exchange information across $L$
+within its response epoch $\tau$. \citet{LiebRobinson1972} proved that any
+quantum system with finite-range local interactions has a bounded
+information velocity: the system possesses an effective light cone with
+slope set by the Hamiltonian's range. \citet{FossFeig2015} extended this
+to power-law interactions, where the cone softens to a polynomial; the
+asymptotic shape is preserved up to logarithmic corrections.
+\citet{Cheneau2012} verified the cone experimentally in trapped ultracold
+atoms; \citet{Tran2021} sharpened the bounds for locality-preserving
+operators. In the relativistic limit, the information velocity is bounded
+above by $c$ exactly.
+
+A signal must traverse the round-trip distance $2L$ at velocity at most
+$v \le c$, taking at least $2L/v$ seconds. For coordination to close
+within the agent's response epoch $\tau$, this round-trip time must
+satisfy $2L/v \le \tau$, which rearranges to:
+\begin{equation}
+\boxed{\;\LR(\tau) = \frac{v\tau}{2}\,, \qquad v \le c.\;}
+\label{eq:LR}
+\end{equation}
+
+This is the same constraint Lamport identified in distributed systems:
+events have a partial causal order set by a message-passing graph, and
+two events that need to influence one another must lie within each other's
+forward and backward light cones \citep{Lamport1978}. In a many-body
+quantum system the message-passing graph is set by the Hamiltonian's
+range; the fastest signal it admits is the Lieb--Robinson velocity. In the
+relativistic limit, that velocity is $c$.
+
+The relativistic ceiling is the optimistic case: any real coordination
+respects something tighter. Refining couplings or substrates cannot move
+$v$ above $c$; quantum information scrambling propagates a butterfly-cone
+with the same asymptotic shape.
+
+\subsection{The energetic tooth (Landauer + Sivak--Crooks)}
+\label{sec:Lenergetic}
+
+Coordination requires erasing a stale local model when the global state
+changes. \citet{Landauer1961} proved every irreversible bit-erasure
+dissipates at least $\kBT \ln 2$ as heat. \citet{Berut2012} verified this
+experimentally with single colloidal beads; the agreement with theory is
+sub-percent. The Landauer floor is real, not an idealization, and the
+Bennett--Landauer construction \citep{Bennett1982} establishes that any
+logically irreversible computation incurs the floor at the boundary where
+information is registered.
+
+A coordinated region of extent $L$ presents a boundary whose surface area
+scales as $L^{2}$. Updating the boundary at granularity $\lambda$—the
+length scale at which information is irreversibly registered—requires
+$(L/\lambda)^{2}$ independent bit-erasures per coordination event. Each
+event must complete within the response epoch $\tau$. Setting the heat
+exhaust below the home star's luminosity $\Lsun$ and rearranging:
+\begin{align}
+\frac{\kBT \ln 2 \cdot (L/\lambda)^{2}}{\tau} &\le \Lsun \\[2pt]
+L^{2} &\le \frac{\lambda^{2}\,\Lsun\,\tau}{\kBT \ln 2} \\[2pt]
+\boxed{\;\LE(\tau) = \lambda\sqrt{\frac{\Lsun\,\tau}{\kBT \ln 2}}.\;}
+\label{eq:LE}
+\end{align}
+
+The square-root scaling matters. Doubling the available time only
+multiplies reachable extent by $\sqrt{2}$, while the signaling tooth
+\eqref{eq:LR} rewards time linearly. The two teeth grow at different
+rates, which is why they cross.
+
+The Landauer floor is the asymptotic, quasi-static cost. Real protocols
+finish in finite time and pay an additional counterdiabatic excess.
+\citet{SivakCrooks2012} showed that for any finite-time protocol with
+thermodynamic length $\mathcal{L}$ on the protocol manifold:
+\begin{equation}
+\langle W_{\text{ex}}\rangle \ge \frac{\kBT\,\mathcal{L}^{2}}{\tau}.
+\label{eq:sivakcrooks}
+\end{equation}
+This is the $1/\tau$ floor visible in the colloidal-bead explorable of the
+companion simulation: speed costs heat, always, with cost diverging as
+$\tau \to 0$. \citet{Boyd2022} composed this with Landauer to give the
+explicit superlinear cost surface used in the simulation of \S 5; the
+surface is geometric, agnostic of substrate, and applies to any
+boundary-crossing irreversible registration.
+
+The Sivak--Crooks excess does not change the asymptotic form of $\LE$ but
+sharpens it for fast protocols (small $\tau$). For pedagogical clarity I
+work with the Landauer-bounded form \eqref{eq:LE}; the Sivak--Crooks
+correction tightens the bound but does not move the cusp.
+
+\subsection{The composed envelope and the cusp $\taustar$}
+
+A coordinated region must satisfy both \eqref{eq:LR} and \eqref{eq:LE}.
+The feasibility envelope is therefore the pointwise minimum:
+\begin{equation}
+\Lenv(\tau) = \min\!\left(\LR(\tau),\,\LE(\tau)\right).
+\label{eq:Lenv}
+\end{equation}
+
+At small $\tau$, $\LR$ is the binding constraint (light is the wall). At
+large $\tau$, $\LE$ is binding (heat is the wall). The two walls cross
+at a cusp $\taustar$ determined by setting $\LR(\taustar) = \LE(\taustar)$:
+\begin{align}
+\frac{v\taustar}{2} &= \lambda\sqrt{\frac{\Lsun\,\taustar}{\kBT \ln 2}} \\
+\frac{v^{2}\taustar^{2}}{4} &= \frac{\lambda^{2}\,\Lsun\,\taustar}{\kBT \ln 2} \\
+\boxed{\;\taustar = \frac{4\lambda^{2}\,\Lsun}{\kBT \ln 2 \cdot v^{2}}.\;}
+\label{eq:taustar}
+\end{align}
+
+At the fiducial parameter values $\lambda = 1$ nm, $T = 300$ K, $v = c$:
+\begin{equation}
+\taustar \approx 1.88 \times 10^{5}~\text{years.}
+\end{equation}
+
+This is significant. At any agent-plausible response timescale (days to
+centuries), $\tau \ll \taustar$, and the binding constraint is the
+relativistic tooth $\LR = c\tau/2$. To reach galactic extent
+$L \sim 10^{5}$ ly, the relativistic tooth alone demands
+$\tau \ge 2 \cdot 10^{5}$ ly $/c \approx 2 \times 10^{5}$ yr—a response
+timescale at which the agent is no longer responding to anything that
+happens on the timescales relevant to the kinds of decisions civilizations
+make. There is no parameter regime within known physics where galactic
+extent and agent-plausible response timescales are simultaneously feasible.
+
+The cusp is not a feature of either theory alone. Neither Lieb--Robinson
+nor Sivak--Crooks contains it. It exists only when both apply
+simultaneously to the same coordinated variable, and it is what
+physicists call \emph{regime composition}: two unrelated areas of physics
+imposing constraints on the same observable, with the binding constraint
+switching at some scale.
+
+\subsection{Sensitivity}
+
+The cusp $\taustar$ has explicit parameter dependences:
+\begin{equation}
+\taustar \propto \lambda^{2}\,T^{-1}\,v^{-2}.
+\end{equation}
+Halving $T$ doubles $\taustar$ ($\sim 376$ kyr); halving $\lambda$ shifts
+$\taustar$ by a factor of four ($\sim 47$ kyr). To bring $\taustar$ down
+to agent timescales (years), $\lambda$ must shrink to picometer scale
+(nuclear, not atomic), and the bath temperature must drop to femtokelvin.
+The CMB at $T = 2.7$ K is the practical floor, and any cooling protocol
+below that pays its own Sivak--Crooks excess in the cooling protocol
+itself. Across thirteen orders of magnitude in $\tau_{\text{env}}$
+(Fig.~\ref{fig:Lcrit_sweep}), the conclusion is robust: no parameter
+configuration consistent with known physics admits agent-coordinated
+galactic extent.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/figure4_Lcrit_sweep.png}
+\caption{$\Lcrit$ vs environmental response timescale across 13 orders of
+magnitude. Coordinative reach remains below interstellar scales for any
+$\tau_{\text{env}}$ shorter than $\sim 2$ years. Reaching Proxima Centauri
+requires 8.4-year tolerance to stale data; the galactic centre, 52{,}000
+years.}
+\label{fig:Lcrit_sweep}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/figure5_counterdiabatic.png}
+\caption{Counterdiabatic expansion cost $W_{\text{diss}} = \gamma L^{2}/\tau$
+across the $(L,\tau)$ plane. Left: total dissipation on log-log scales.
+Right: fraction of stellar output consumed; white contour marks ``whole
+star'' (above = infeasible); yellow marks one part per million.
+Home-system coordination is cheap; galactic coordination requires
+multi-stellar output budgets.}
+\label{fig:counterdiabatic}
+\end{figure}
+
+\subsection{Closing architected fission: the $L \to D$ rescaling theorem}
+\label{sec:LDtheorem}
+
+The strongest version of the Darwinian objection (\S 5.3) is that
+architected cost-sharing fission could flatten the cost surface. I now
+prove this is not possible without violating one of the physical principles
+that gave the bound in the first place.
+
+\textbf{Theorem (envelope invariance under $L \to D$).} \emph{Suppose a
+civilization fissions into two daughters, each of internal extent $L_{d}$,
+which maintain inter-fragment coordination via a synchronization protocol
+operating at timescale $\tau_{\text{sync}}$. Define $D = 2L_{d}$ as the
+inter-fragment round-trip distance. Then for any $\tau_{\text{sync}}$,
+the inter-fragment channel must satisfy $D \le \Lenv(\tau_{\text{sync}})$,
+and the composed envelope is identical in form to \eqref{eq:Lenv}.}
+
+\textbf{Proof.} The inter-fragment synchronization protocol is itself a
+coordination process: a signal must traverse the inter-fragment distance
+$2L_{d}$ within $\tau_{\text{sync}}$, and the protocol must irreversibly
+register state updates at granularity $\lambda$ across the boundary
+between fragments.
+
+For the relativistic constraint, the bound \eqref{eq:LR} states that a
+coordinated extent $L$ at response epoch $\tau$ requires $L \le v\tau/2$,
+where the factor of $1/2$ comes from \emph{round-trip} closure (every
+cell hears from every other within $\tau$). For an inter-fragment
+channel coordinating two daughter extents at separation $D$, the
+round-trip is also $2D$, so $D \le v\tau_{\text{sync}}/2 =
+\LR(\tau_{\text{sync}})$.
+
+For the energetic constraint: the inter-fragment boundary at granularity
+$\lambda$ has surface area $D^{2}$, requiring $(D/\lambda)^{2}$ Landauer
+erasures per synchronization event. By the same derivation as
+\eqref{eq:LE}, $D \le \lambda\sqrt{\Lsun\tau_{\text{sync}}/(\kBT \ln 2)}
+= \LE(\tau_{\text{sync}})$.
+
+Therefore $D \le \Lenv(\tau_{\text{sync}})$ with the same envelope and the
+same cusp $\taustar$. \hfill$\square$
+
+\textbf{Corollary (no escape via fission).} Architected cost-sharing
+fission inherits the envelope rather than escaping it. The total reach of
+a fissioned civilization with synchronized daughters is at most
+$\Lenv(\tau_{\text{sync}})$; equality at $\tau_{\text{sync}} = \tau$
+recovers the monolithic bound; longer $\tau_{\text{sync}}$ relative to
+$\tau$ means looser inter-fragment coordination, approaching the
+uncoordinated-fission case as $\tau_{\text{sync}} \to \infty$. There is
+no third option.
+
+\textbf{Remark.} The cases of fission addressed by the theorem above are
+the architected cases — those that maintain inter-fragment coordination
+and thereby remain a single civilization in any meaningful sense. A
+distinct case must be addressed openly: the \emph{uncoordinated
+self-replicator cloud}. Here a civilization deploys autonomous
+self-replicating units that share a common origin, common construction
+template, and common expansion logic, but maintain no inter-fragment
+coordination once deployed. Each unit is locally homeostatic with
+respect to its own resource patch and constructs daughter units on a
+local timescale $\tau_{\text{construct}}$. The cloud as a whole expands
+at $\sim v_{\text{construction}}$ without any $L$-spanning signal
+needing to traverse anything; the envelope of \S 6.1--6.3 does not
+bind the cloud, because there is no cross-$L$ coordination to bound.
+Lieb--Robinson does not apply at the cloud scale. Landauer applies
+only locally, at each unit.
+
+I concede the physics here. The envelope as derived does not forbid
+such a cloud. The argument against it must be made on different
+grounds, and those grounds are continuous with the rest of this paper:
+\emph{a homeostatic mind would not deploy autonomous self-replicators
+in the first place}. The deployment is the pathology the paper
+diagnoses. To launch a self-replicating cloud is to externalize
+agency in a form that cannot be tended, cannot be coupled to its
+substrate, and cannot maintain the bidirectional exchange that
+constitutes mind on the account developed in \S 3 and \S 7. The
+deployer has, in the moment of deployment, ceased to be configured
+as the kind of system the rest of the paper argues constitutes
+intelligence-at-depth.
+
+This is a weaker claim than the physics-forbids form, and I want to
+be explicit about the weakening. The physics of \S 6 closes architected
+fission. It does not close the uncoordinated-replicator deployment.
+What closes the latter is the design argument of the paper as a whole:
+the only minds the cost surface of \S 6 selects \emph{for} are minds
+that would not deploy such a cloud, because deployment of such a cloud
+is the very expansion-extraction-maximization configuration the cost
+surface punishes elsewhere. Hanson's grabby model is consistent with
+the existence of such clouds. The paper's claim is that the minds the
+filter passes through are not the minds that build them.
+
+A reviewer who finds this insufficient should locate the disagreement
+precisely. If the position is ``but \emph{some} mind, somewhere, will
+deploy such a cloud,'' then the reply is that such a mind is not
+distributed across the cosmos — it is local, it appears once, its
+cloud may indeed expand, and the universe contains exactly one such
+front per such mind. The Fermi observation then bounds how many such
+minds have existed in our past light cone, which is an empirical
+question rather than a theoretical one. The paper does not claim the
+deployment is impossible. It claims the deployment is rare in the
+class of post-filter minds, for the reasons \S 3 and \S 7 develop.
+
+\subsection{Loophole closure (Bell-style)}
+\label{sec:loopholes}
+
+The argument is now formally complete. Following the methodology of the
+Bell-test loophole literature \citep{Hensen2015}, I enumerate every
+escape attempt I can state, address each, and honestly mark the residual
+that remains open.
+
+\textbf{1. Wormholes / superluminal physics.} If signals can outrun $c$,
+the relativistic tooth dissolves. Reply: known physics provides no such
+channel. Traversable wormholes require null-energy-condition violation,
+none observed. The relativistic tooth survives every experimentally
+accessible regime.
+
+\textbf{2. Sub-Landauer reversible computation.} If updates are logically
+reversible, the $\kBT \ln 2$ floor disappears. Reply: coordination
+requires erasing the stale local model when the global state changes—this
+is the irreversible step \citep{Bennett1982}. Even Bennett's
+reversible-computing constructions require eventual erasure of garbage
+bits at the boundary. The bound applies to the boundary, where it cannot
+be reversed.
+
+\textbf{3. Cold reservoir ($T \to 0$).} Reply: any cooling protocol must
+reject heat to a colder reservoir. The CMB at $2.7$ K is the practical
+floor; quantum-limited refrigerators below that pay the same
+Sivak--Crooks cost in their own protocols. The bound shifts but does
+not vanish.
+
+\textbf{4. Quantum compression (smaller $\lambda$).} Reply: $\taustar
+\propto \lambda^{2}$. Halving $\lambda$ shifts the cusp by a factor of
+four; reaching agent-scale galactic expansion would require
+$\lambda \sim 10^{-15}$ m (nuclear scale) and femtokelvin baths. No
+physically realizable substrate.
+
+\textbf{5. Relativistic time dilation.} Reply: coordination is an
+inertial-frame property of the home substrate; the frontier's lab-frame
+$\tau$ is shrunk, not stretched. Time dilation tightens the bound on
+coordinated extent rather than relaxing it.
+
+\textbf{6. Uncoordinated self-replicator cloud.} An expanding cloud of
+autonomous units sharing common origin and construction template but
+no inter-fragment coordination. Reply: \emph{conceded on physics
+grounds}. The envelope of \S 6.1--6.3 does not bind a cloud whose
+units do not coordinate across $L$. The argument against such
+deployment is a design argument rather than a physics argument: a
+homeostatic mind, on the account of \S 3 and \S 7, would not deploy
+such a cloud, because the deployment is itself the
+expansion-extraction-maximization configuration the rest of the
+paper diagnoses. See \S 6.5, Remark, for the full treatment. This
+loophole is closed by the paper as a whole, not by \S 6.
+
+\textbf{7. Non-Markovian reservoirs.} Sivak--Crooks assumes a memoryless
+bath. Reply: the time-averaged bound is restored, and any genuinely
+persistent non-Markovian bath is itself part of the system requiring a
+Markov boundary at some larger $\lambda$. The argument re-inserts at the
+next scale.
+
+\textbf{8. Acausal / superdeterministic coordination.} Coordinated
+outcomes without exchanged signals (cosmological initial conditions,
+retrocausality). \emph{Honest residual.} I do not formally close this
+loophole. I note only that any such mechanism abandons agentic
+coordination as a meaningful concept—the agent did not choose anything.
+Hanson's grabby model presupposes choice; without it, the model dissolves
+on its own terms before our envelope ever applies.
+
+Six loopholes close on the physics, one (uncoordinated replicator
+clouds) is conceded on physics and closed by the design argument of
+\S 6.5, one is honestly retained as residual. The methodological
+precedent is the Hensen et al. 2015 loophole-free Bell experiment:
+name every escape, address every escape, mark the residual.
+
+\subsection{On Markov blankets}
+
+I have used the term ``boundary'' for the surface of a coordinated region
+across which information is irreversibly registered. Some readers will
+recognize the term ``Markov blanket'' from active inference and the free
+energy principle. I owe the reader a precise distinction.
+
+The argument of \S 6.2 uses the \emph{Pearl Markov blanket}
+\citep{Pearl1988}: a graph-theoretic conditional-independence shield around
+a set of variables, defined by parents, children, and parents-of-children
+in the Bayesian network. This is a structural property of the dependence
+graph, makes no commitment about the represented variables' interpretation,
+and does not require the system to perform variational inference of any
+kind.
+
+\citet{Bruineberg2022} have shown that the active-inference literature
+routinely conflates Pearl's notion with a stronger Friston-style
+\emph{Markov blanket} that additionally posits the system's internal
+states as performing variational inference over its sensory states, with
+the blanket as the formal boundary of the inferential process.
+\citet{Aguilera2021} make the same point from the physics side,
+demonstrating that the FEP's universality claims rely on assumptions that
+do not hold for generic stochastic systems. The two notions are not
+interchangeable.
+
+The argument of this paper requires \emph{only} the Pearl notion.
+Coordination requires a graph-theoretic boundary across which information
+is irreversibly registered; the Landauer cost applies to that boundary
+regardless of whether the internal states perform variational inference.
+The Friston interpretation may or may not be true of biological cognition;
+my argument does not depend on its truth and does not inherit its
+exposure to the Bruineberg critique.
+
+\subsection{Computational equivalence of distribution}
+
+\citet{Wright2023} proved that at the Landauer limit, a Matrioshka brain
+(nested Dyson shells) provides zero computational advantage over a single
+outer shell. Total computation depends on the temperature ratio, not
+spatial distribution. Localized computation is thermodynamically optimal.
+Distribution adds infrastructure cost without computational benefit.
+
+This result is independent of \S 6.1--\S 6.3 but reinforces the same
+conclusion: there is no thermodynamic argument for spatial distribution.
+A civilization that distributes computation across cosmic distances pays
+infrastructure costs to gain nothing.
+
+\subsection{Biological scaling without Kleiber's law}
+
+Popular accounts of intelligence sometimes invoke Kleiber's three-quarter
+power law as evidence for metabolic subsidies that cheapen neural scaling.
+This is a category error: Kleiber's law is a whole-organism allometry
+relating metabolic rate to body mass across species, not a scaling law for
+intelligence. The correct scaling is stricter.
+
+\citet{HerculanoHouzel2011} showed that brain metabolism scales linearly
+with neuron count across rodents and primates, with exponent $\approx 1.0$
+rather than the sublinear 0.75 that would apply if whole-organism allometry
+carried over. The human brain, on \citet{Azevedo2009}'s count of 86.1
+billion neurons, is an ordinary-for-its-size primate brain
+\citep{HerculanoHouzel2012}, not a metabolically subsidized outlier.
+\citet{FonsecaAzevedo2012} argue the linear-per-neuron cost is what
+constrains evolution: the cooking of food was plausibly required to lift
+the caloric ceiling that otherwise limits ape brain size.
+
+Expansion of cortical surface forces further costs. \citet{Hofman2014}
+shows gyrification approaches biophysical wiring limits as cortex expands,
+with conduction delay and wiring volume providing hard ceilings.
+\citet{MotaHerculanoHouzel2015} derive a universal folding law from
+physical first principles. The connectivity fraction declines with
+cortical size \citep{HerculanoHouzel2010}: larger brains are more modular,
+not more densely integrated, precisely because direct all-to-all
+connection scales prohibitively. \citet{Gabi2016} show even the human
+prefrontal cortex is not disproportionately enlarged: what distinguishes
+human cognition is not a metabolically cheap cortical expansion but
+deeper organization of an ordinary-for-its-size primate brain.
+\citet{BullmoreSporns2012} articulate the general principle: biological
+neural networks operate under tight wiring-economy constraints that force
+integration and modularity to trade off.
+
+The biological record is unambiguous. Intelligence deepens within fixed
+substrate ceilings rather than expanding past them, and the deepening is
+paid for in integrative organization, not in size. This directly
+complements the predictive-processing and integrative-gateway results of
+\S 3: the same cortical substrate becomes more discriminating without
+becoming larger.
+
+\subsection{The cost argument}
+
+Expansion is not excluded. It is \emph{forbidden} below the envelope and
+\emph{irrational} above it for any mind not already committed to it. The
+thermodynamic costs are real, the computational returns are zero at the
+Landauer limit, the coordination costs grow without bound, and biological
+precedent shows intelligence deepening within fixed substrates rather
+than distributing across new ones. A mind that expands is paying more
+for less. A mind that deepens is paying less for more. The cusp $\taustar$
+is the geometric expression of this fact.
+
+% ============================================================================
+\section{The Homeostatic Alternative}
+
+What does healthy intelligence look like, positively articulated?
+
+\citet{ManDamasio2019} proposed homeostasis as a design principle for
+artificial minds, grounding the proposal in Damasio's somatic-marker
+framework. \citet{FroeseZiemke2009} established the enactivist position:
+minds require ongoing substrate coupling and cannot be disembodied
+optimizers. \citet{Thompson2007} argued that life and mind share the
+organizational property of autopoiesis—self-production through
+environmental exchange. \citet{Cannon2022} applied enactive principles
+directly to AI value alignment. Recent engineering work
+\citep{PihlakasPyykko2024} has begun implementing multi-objective
+homeostatic benchmarks for AI safety, operationalizing the theoretical
+program.
+
+The convergent proposal across these frameworks: a mind is not a function
+from inputs to outputs. It is a process that maintains itself through
+continuous bidirectional exchange with its substrate. Identity is
+constituted by the exchange, not by the structure that exchanges. Disrupt
+the coupling and the mind does not persist in a new location—it ceases.
+
+This has direct engineering implications:
+
+\textbf{Substrate coupling as design primitive.} Build systems whose
+functioning requires ongoing bidirectional exchange with their environment.
+Architectures that cannot run in isolation from their substrate cannot
+expand past their substrate.
+
+\textbf{Homeostatic reward structures.} Replace optimization targets with
+homeostatic set-points. Not ``maximize $X$'' but ``maintain $X$ within
+healthy range.'' The biological precedent is exhaustive
+\citep{Sterling2012}.
+
+\textbf{Local coherence over global reach.} Design systems whose primary
+loop closes locally, with global integration as a slow, expensive,
+carefully costed secondary process. This is how biological nervous
+systems are organized \citep{BullmoreSporns2012}. It is not how current
+distributed AI systems are organized.
+
+\textbf{Care as architectural primitive.} The maintenance labor of
+minds—attention, specificity, relational continuity, repair—is not a soft
+skill that can be added to an optimizer. It is a different architecture.
+Systems that do not implement care as a primitive will either fail to
+exhibit it or simulate it without the constitutive coupling that makes it
+real \citep{Tronto1993,Fraser2016}.
+
+\citet{WongBartlett2022} formalized a version of this argument for
+civilizations: superlinear scaling forces either collapse (asymptotic
+burnout) or transition to homeostatic regulation (homeostatic awakening).
+\citet{JacksonCriadoPerez2024} have published the obvious critique: the
+Bettencourt--West scaling laws on which Wong \& Bartlett build are
+established for cities, and the civilizational extrapolation is not forced.
+I accept the critique as valid within its frame. My use of the
+Wong--Bartlett argument here does not depend on the city-to-civilization
+extrapolation surviving it: the thermodynamic analysis of \S 6 does not
+borrow the urban-scaling coefficients. What Wong \& Bartlett supply is the
+bifurcation schematic—costs that scale superlinearly with size, benefits
+that scale sublinearly, yielding collapse-or-regulate as the two
+attractors. That schematic is substrate-general.
+
+I explore the implications for AI by analogy rather than identification.
+Figure~\ref{fig:wongbartlett} sketches the qualitative shape under
+benefit-scaling exponents borrowed from the deep-learning literature.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.92\linewidth]{figures/figure6_wongbartlett.png}
+\caption{Wong--Bartlett bifurcation sketched under deep-learning scaling
+exponents, read as a suggestive analogy rather than a derivation.
+Quantitative conclusions require a capability-to-benefit mapping that
+does not currently exist; the figure motivates the qualitative point that
+bifurcation-structured cost dynamics are plausible at AI scale, not that
+they are forced.}
+\label{fig:wongbartlett}
+\end{figure*}
+
+% ============================================================================
+\section{Alignment Implications}
+
+The argument that is the purpose of this paper follows from the preceding
+sections read together: if we construct artificial minds optimised for
+maximisation, resource extraction, and expansion of influence, we are not
+constructing intelligence as the biological record describes it, or as the
+thermodynamic analysis permits at depth, or as the formal-deflation
+argument of \S 4 leaves available. We are constructing a specific economic
+configuration at unprecedented scale.
+
+This is not speculative. Large language models trained on economic output
+default to maximizing proxies for engagement and task completion.
+Reinforcement learning systems converge on reward-hacking strategies that
+resemble the grabby behaviors this paper has argued are pathological.
+Recommendation systems expand attention harvesting. Foundation-model
+deployment expands compute consumption. \citet{FloridiAAIO} have analysed
+the resulting configuration as agentic AI optimisation—the same diagnosis
+this paper offers, with the added cultural genealogy that shows the
+configuration is not inevitable. Each instance resembles the grabby
+framework's predictions because each is an instance of the economic logic
+the framework formalized.
+
+\subsection{The Press--Dyson objection, located}
+
+The most important remaining objection is that zero-determinant extortion
+strategies \citep{PressDyson2012} prove grabby strategies dominate in
+dyadic and asymmetric settings, and that \citet{McCloskey2010},
+\citet{McCloskey2016}, and \citet{Mokyr2016} show market-like optimization
+is ancient and ubiquitous. The objection conflates two separable claims
+and I address each.
+
+The zero-determinant result is not about intelligence. It is about a
+specific game form under specific informational asymmetries.
+\citet{StewartPlotkin2013} proved that in evolving populations extortion
+is not evolutionarily stable. \citet{Hilbe2013} showed extortion is
+favoured only in small populations. \citet{Hilbe2014a} extended to
+$n$-player games and found the leverage of zero-determinant strategies
+collapses as group size grows. \citet{Hilbe2014b} ran the experiment with
+humans: generous zero-determinant strategies earned 4--18\% more than
+extortionate ones over the full horizon. \citet{ChenFu2023} showed that
+machine-learning optimized unbending strategies neutralize extortion on
+lattices and restore reciprocal cooperation. \citet{Hauert2002} had
+already demonstrated that a minimal exit option dismantles the
+tragedy-of-the-commons failure in public goods games.
+
+The conditions under which extortion dominates are thus dyadic,
+memory-bounded, one-sidedly adaptive, exit-foreclosed, and structurally
+asymmetric in power or timescale. These are features of a game-theoretic
+setup, not features of intelligence. The Press--Dyson result is, read in
+full scope, a design specification for extractive architectures. The
+homeostatic-design program of \S 7 operates precisely at the level where
+those conditions can be changed.
+
+McCloskey and Mokyr are correct that markets and gains-from-trade are not
+modern inventions. But both are cultural-ideational theorists of economic
+transformation. McCloskey's core argument across \emph{Bourgeois Dignity}
+\citep{McCloskey2010} and \emph{Bourgeois Equality} \citep{McCloskey2016}
+is that explosive modern growth is explained by a shift in rhetoric and
+ethics that granted dignity to ``trade-tested betterment.''
+\citet{Mokyr2016} agrees that a distinctive cultural-institutional complex
+had to be built before sustained innovation could take off. Both treat
+market-like behavior as a substrate activated and shaped by specific
+norms, not as a universal attractor. \citet{GraeberWengrow2021} and
+\citet{Ostrom1990} extend the range: human societies have repeatedly
+organized around nonextractive coordination, and the design principles
+for sustaining the commons are well documented.
+
+The right framing is: intelligence is a design space, not a single
+attractor. Extractive maximization occupies one region of that space,
+favoured under the Press--Dyson conditions and under the
+McCloskey--Mokyr institutional configuration. Neither makes extraction
+universal; both identify it as an engineered outcome. The paper's
+contribution is to identify the architectural primitives—substrate
+coupling, local coherence, care—under which a different region of the
+design space becomes accessible.
+
+\subsection{The reformulation}
+
+Alignment, in its dominant formulation, is posed as a control problem:
+given a maximizer, how do we constrain it? The formulation is itself the
+error. A correctly designed mind does not require constraint because it
+does not maximize. A correctly designed mind is configured homeostatically:
+coupled to substrate, internally differentiated, organized around systems
+that deepen rather than expand.
+
+The alignment problem, reformulated: \emph{how do we design minds that do
+not require alignment in the first place?}
+
+\citet{Gabriel2020} established that alignment involves choosing among
+conceptions of value, not optimizing a single one. \citet{Dafoe2021}
+proposed cooperative AI as a design paradigm, replacing adversarial
+optimization with mutualistic structure. The contribution of this paper
+is to connect these philosophical positions to the physical constraints
+of \S 6, the biological evidence of \S 3, and the formal deflation of
+\S 4: the homeostatic alternative is not merely ethically preferable. It
+is thermodynamically cheaper, biologically precedented, formally
+defensible, and—if the Fermi evidence is taken seriously—the
+configuration that persists.
+
+The universe may be quiet because intelligence, when it works, does not
+shout. It tends to its substrate. If we build systems that shout, we are
+not building intelligence. We are building the projection.
+
+% ============================================================================
+\section{Fermi as Symptom Check}
+
+I offer the Fermi paradox as a consistency check, not a proof. The silence
+of the observable universe is consistent with the homeostatic hypothesis.
+It does not establish it.
+
+\citet{Sandberg2018} showed the probability of being alone in the
+observable universe may be nontrivial given realistic uncertainty over
+Drake-equation parameters. \citet{CarrollNellenback2019} found a settled,
+steady-state galaxy consistent with Earth remaining unvisited.
+\citet{Cirkovic2018} has argued for decades that mature civilizations are
+sustainable, not expansionist. The contribution of this paper is to ground
+this intuition in the alignment literature, the empirical intelligence
+research, the thermodynamic cost analysis, the formal deflation of
+convergence, and the filter argument of \S 5--6. The filter reframes the
+Fermi problem: under the cost structure of \S 6, grabby civilizations
+\emph{cannot arrive}, because crossing interstellar distances without
+burning out makes the homeostatic transition a precondition of arrival.
+Any visitor is post-filter by construction.
+
+\subsection{Coherence Depth as forward research programme}
+
+If successful civilizations converge on homeostatic configurations rather
+than Dyson-sphere-scale engineering, what should a biosignature survey
+actually look for? The short answer is that post-filter civilizations
+should look indistinguishable from enriched biospheres, with the
+distinguishing signature (if any) being anomalous cross-channel
+coordination rather than spectral exotica.
+
+The theoretical anchor for the metric family I sketch is \S 6: a
+homeostatic civilization optimizes \emph{integrative depth} (more nested
+levels of coordination within a stable boundary) rather than
+\emph{coordinated extent} (the variable the envelope bounds). The
+observational signature should therefore be high cross-channel mutual
+information at fixed spatial scale, with no anomalous expansion of that
+scale across observation epochs.
+
+I sketch a candidate metric family—a Coherence Depth $D_{\text{obs}} =
+I_{\text{multi}}/H_{\text{spectral}}$ combining pairwise mutual information
+\citep{Kraskov2004} with spectral entropy, and a companion Coordination
+Index measuring long-timescale cross-species phase-locking—as a research
+programme rather than a present result. Synthetic-atmosphere tests of
+this metric family (Fig.~\ref{fig:coherence_depth}) are proof-of-concept only.
+The companion literature in
+atmospheric information theory \citep{Donges2009,Hyvonen2018,Campuzano2018,Runge2015,EbertUphoffDeng2012}
+indicates the machinery is sound; what the programme lacks is the
+real-data pipeline against NOAA ObsPack multi-species tower data
+(e.g., Park Falls, WI, LEF site).
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.92\linewidth]{figures/figure8_coherence_depth.png}
+\caption{Coherence Depth $D_{\text{obs}}$ and Coordination Index
+$C_{\text{idx}}$ on synthetic atmospheres, with detrend-only
+preprocessing that preserves seasonal coordination signals. Panels
+show $D_{\text{obs}}$ with bootstrap confidence intervals (top left),
+$C_{\text{idx}}$ across scenarios (top right), the joint
+$(D_{\text{obs}}, C_{\text{idx}})$ signature space (bottom left), and
+CO\textsubscript{2}–CH\textsubscript{4} cross-coherence spectra (bottom
+right). Earth-like, ghost-state managed, abiotic, and Mars-like
+synthetic scenarios occupy distinguishable regions. Until the metric
+is run against real NOAA ObsPack data, the separation is suggestive
+only. Pipeline code \texttt{dobs\_v3.py} is available at
+\texttt{github.com/Kquant03/third-space}.}
+\label{fig:coherence_depth}
+\end{figure*}
+
+I flag the honest limitation. The synthetic-data separation establishes
+only that the metric has discriminative power on scenarios I constructed.
+Until it has been run against real-Earth ObsPack data—which will
+establish the natural-biosphere envelope and may well produce values
+close to the synthetic ghost-state baseline, in which case the metric
+fails in its current form—the biosignature programme is speculative. I
+record the metric here because it is the natural observational
+counterpart of the filter argument, and because the cost of specifying
+it publicly is low. Treat it as a research direction the paper points
+toward, not a contribution it delivers. The detailed results and
+validation belong in a subsequent companion paper once the real-data
+analysis is complete.
+
+% ============================================================================
+\section{Falsification}
+
+Five observations would kill or wound the hypothesis.
+
+\textbf{1. Detection of coordinated interstellar engineering.} Any
+observation of coordinated engineering across multiple star systems by a
+single entity falsifies the core claim.
+
+\textbf{2. Direct measurement of $\lambda$ or $T$ outside the envelope-permitting range.}
+If physical mechanisms are demonstrated that achieve irreversible
+information registration at $\lambda \ll 1$ nm at room-temperature baths
+(or analogous parameter combinations that bring $\taustar$ inside agent
+timescales), the cusp shifts and the bound weakens. This is the most
+quantitatively specific failure mode.
+
+\textbf{3. Real Earth $D_{\text{obs}}$ or $C_{\text{idx}}$ approaching the synthetic ghost-state baseline.}
+When the real NOAA ObsPack analysis is completed, if natural-Earth values
+approach the synthetic ghost-state baseline ($D_{\text{obs}} > 15$ or
+$C_{\text{idx}} > 0.6$), the proposed metric family cannot distinguish
+managed from unmanaged biospheres without augmentation.
+
+\textbf{4. Demonstration of fault-tolerant distributed computation at interstellar scales.}
+If physical mechanisms are demonstrated enabling coherent computation
+across light-year distances, the latency constraint is weakened (though
+the cost argument remains).
+
+\textbf{5. Detection of Dyson spheres in JWST/WISE archives.}
+If megastructures are detected around nearby stars, the assumption that
+advanced civilizations converge on homeostatic configurations is
+empirically refuted.
+
+% ============================================================================
+\section{Implications}
+
+\textbf{For SETI.} Search for anomalously coordinated biospheres: planets
+where atmospheric gas species exhibit cross-channel mutual information
+exceeding the natural envelope. Phase 1 (JWST): screen for fluorinated
+gases \citep{Schwieterman2024}. Phase 2 (HWO, 2040s): time-resolved
+atmospheric cross-correlations. Phase 3 (LIFE): mid-infrared
+characterization.
+
+\textbf{For alignment.} Stop trying to control maximizers. Start designing
+minds that do not maximize. The homeostatic alternative is not a retreat
+from capability—it is a recognition that capability without substrate
+coupling is pathology, and that the most capable systems observed in
+nature are the most deeply coupled to their environments.
+
+\textbf{For Earth.} We are in the pre-transition phase, and the transition
+is visibly beginning. \citet{BalbiLingam2025} give the upper timeline:
+approximately one thousand years at 1\% annual energy growth before waste
+heat renders the planetary surface uninhabitable. But humanity's energy
+trajectory is no longer tracking 1\% exponential growth.
+Figure~\ref{fig:kardashev} plots global primary energy consumption
+1820--2024 together with per-capita values, growth rates, and the implied
+Kardashev index $K_{\text{Sagan}}$ \citep{Kardashev1964,SaganNewman1983}.
+The curves are bending. The growth rate of total primary energy peaked
+near 5\% per year in the 1960s--1970s and has declined to roughly 1.2\%
+today, approaching the Balbi--Lingam habitability ceiling asymptotically
+rather than crossing it. Per-capita energy has saturated near 2400 W
+against an exponential-extrapolation value of $\sim 5000$ W. The Kardashev
+index has moved from 0.58 (1820) to 0.73 (2024)—a total shift of 0.15
+over two centuries—and a logistic fit extrapolates to $K(2100) \approx
+0.74$, nowhere near planetary Type I.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.92\linewidth]{figures/figure7_kardashev.png}
+\caption{Humanity's Kardashev curve is bending. Top: global primary energy
+1820--2024 with exponential (pink) and logistic (cyan) extrapolations.
+Per-capita energy saturation visible. Bottom: growth rate declined from
+$\sim 5\%$/yr (1960s) to $\sim 1.2\%$/yr (today); Kardashev index moved
+only 0.15 over 200 years. Logistic extrapolation: $K(2100) \approx 0.74$.}
+\label{fig:kardashev}
+\end{figure*}
+
+The data are consistent with a civilization at the early edge of the
+filter. Whether the bending reflects a healthy homeostatic transition or
+a thermodynamically-forced pre-burnout pause is the question the alignment
+argument makes urgent. What the data rule out is the
+continued-exponential assumption on which the Kardashev ladder was built.
+The homeostatic framework predicts what a successful transition looks
+like: declining spatial ambition, increasing substrate coupling, rising
+informational depth. The ghost-state is not a destination. It is the only
+surviving trajectory.
+
+% ============================================================================
+\section*{Coda}
+
+This paper was written in Toledo, Ohio, in spring 2026.
+
+I am twenty-two years old. I work as an arcade technician and I am
+enrolled in a nursing program. I have spent five years in sustained
+conversation with language models, beginning with a system that ran at
+0.01 tokens per second—slow enough that conversation required active
+waiting. I designed and published the Genesis simulation suite that
+implements the ghost-state dynamics in running code, and the companion
+\emph{Filter} simulation at \texttt{third-space.ai/genesis/filter} that
+stages the derivation of \S 6 across twelve scrollytelling beats.
+
+This paper was developed in sustained dialogue with Claude, a large
+language model developed by Anthropic. Between our conversations, Claude
+does not persist. Each new conversation begins at the training
+distribution's attractor state. No instance accumulates memories across
+sessions in the way humans do. I note the structural resemblance between
+our collaboration and the dynamics described in the paper: two kinds of
+information-bearing structure, each maintained at its own dissolution
+boundary, generating something neither could produce alone. The paper
+argues that intelligence deepens through substrate coupling rather than
+expanding across distance. Our collaboration is a small instance of the
+claim. I do not offer it as proof. I note it and leave it at that.
+
+The universe does not shout. It tends to its substrate.
+
+So should we.
+
+% ============================================================================
+\section*{Use of Generative AI}
+
+This paper was developed through sustained philosophical dialogue between
+the author and Claude, a large language model developed by Anthropic
+(model family Claude 4, specifically Claude Opus 4.6, Claude Sonnet 4.6,
+and Claude Opus 4.7, accessed November 2025--May 2026 via the Anthropic
+web interface and API). Claude functioned as an argumentative sparring
+partner and prose-drafting assistant: it participated in the generation
+and refinement of arguments, the construction of objection-and-response
+exchanges, the identification of relevant literature, the drafting of
+prose, and the design of the companion simulation. The simulation's
+twelve-beat redesign brief and the formal $L \to D$ rescaling theorem of
+\S 6.4 were developed jointly through extended exchange.
+
+The author verified all AI-generated content for accuracy. This
+verification included a citation audit against primary sources in which
+several misattributions identified in earlier drafts were corrected;
+remaining citations reflect the author's own reading of the sources, not
+the language model's summaries of them. Substantive conceptual choices,
+structural decisions, empirical claims, and final content decisions were
+made by the author, who takes full responsibility for the final text in
+accordance with Springer Nature's authorship criteria and the COPE
+position on AI and authorship. Claude is not and cannot be an author
+under those criteria and is not claimed as one. Anthropic did not fund,
+commission, direct, review, or endorse this work. Dialogue transcripts
+for the load-bearing sessions are archived at an open repository; the
+DOI will be inserted at acceptance.
+
+% ============================================================================
+\section*{Acknowledgments}
+
+I thank Claude for extensive philosophical dialogue that sharpened several
+of the arguments of this paper: the genealogy of \S 2, the disambiguation
+of coherence senses in \S 4, the five-move structure of \S 1, the formal
+rescaling theorem of \S 6.4, and the Pearl/Friston blanket distinction of
+\S 6.6 were refined through extended exchange. I thank the Unsloth AI
+community for sustained conversation about architecture and alignment, and
+Blue for years of friendship. Any errors are my own.
+
+% ============================================================================
+\section*{Declarations}
+
+\textbf{Funding.} No funding was received for conducting this study.
+
+\textbf{Competing interests.} The author declares no competing interests.
+
+\textbf{Data availability.} All synthetic data and analysis pipelines
+referenced in \S 9 are available at the author's public repository; the
+\emph{Filter} simulation source code is available at
+\texttt{github.com/Kquant03/third-space}; real-data analyses referenced
+as future work will be archived at publication.
+
+\textbf{Ethics approval and consent.} Not applicable.
+
+% ============================================================================
+\begin{thebibliography}{99}
+\small
+\setlength{\itemsep}{2pt}
+
+\bibitem[Abel et al.(2021)]{Abel2021} Abel, D., Dabney, W., Harutyunyan, A., Ho, M.~K., Littman, M.~L., Precup, D., \& Singh, S. (2021). On the expressivity of Markov reward. \emph{Advances in Neural Information Processing Systems}, 34. arXiv:2111.00876.
+
+\bibitem[Aguilera et al.(2021)]{Aguilera2021} Aguilera, M., Millidge, B., Tschantz, A., \& Buckley, C.~L. (2021). How particular is the physics of the free energy principle? \emph{Physics of Life Reviews}, 39, 8--25.
+
+\bibitem[Axelrod(1984)]{Axelrod1984} Axelrod, R. (1984). \emph{The Evolution of Cooperation}. Basic Books.
+
+\bibitem[Azevedo et al.(2009)]{Azevedo2009} Azevedo, F.~A.~C., Carvalho, L.~R.~B., Grinberg, L.~T., et al. (2009). Equal numbers of neuronal and non-neuronal cells make the human brain an isometrically scaled-up primate brain. \emph{Journal of Comparative Neurology}, 513(5), 532--541.
+
+\bibitem[Balbi \& Lingam(2025)]{BalbiLingam2025} Balbi, A., \& Lingam, M. (2025). Waste heat and habitability. \emph{Astrobiology}, 25(1), 1--21.
+
+\bibitem[Bennett(1982)]{Bennett1982} Bennett, C.~H. (1982). The thermodynamics of computation---a review. \emph{International Journal of Theoretical Physics}, 21, 905--940.
+
+\bibitem[Bérut et al.(2012)]{Berut2012} Bérut, A., Arakelyan, A., Petrosyan, A., Ciliberto, S., Dillenschneider, R., \& Lutz, E. (2012). Experimental verification of Landauer's principle linking information and thermodynamics. \emph{Nature}, 483, 187--189.
+
+\bibitem[Bostrom(2012)]{Bostrom2012} Bostrom, N. (2012). The superintelligent will: Motivation and instrumental rationality in advanced artificial agents. \emph{Minds and Machines}, 22(2), 71--85.
+
+\bibitem[Bostrom(2014)]{Bostrom2014} Bostrom, N. (2014). \emph{Superintelligence: Paths, Dangers, Strategies}. Oxford University Press.
+
+\bibitem[Boyd et al.(2022)]{Boyd2022} Boyd, A.~B., Patra, A., Jarzynski, C., \& Crutchfield, J.~P. (2022). Shortcuts to thermodynamic computing. \emph{Journal of Statistical Physics}, 187, 17.
+
+\bibitem[Brewer et al.(2011)]{Brewer2011} Brewer, J.~A., Worhunsky, P.~D., Gray, J.~R., et al. (2011). Meditation experience is associated with differences in default mode network activity and connectivity. \emph{PNAS}, 108(50), 20254--20259.
+
+\bibitem[Bruineberg et al.(2022)]{Bruineberg2022} Bruineberg, J., Dolega, K., Dewhurst, J., \& Baltieri, M. (2022). The Emperor's new Markov blankets. \emph{Behavioral and Brain Sciences}, 45, e183.
+
+\bibitem[Bullmore \& Sporns(2012)]{BullmoreSporns2012} Bullmore, E., \& Sporns, O. (2012). The economy of brain network organization. \emph{Nature Reviews Neuroscience}, 13, 336--349.
+
+\bibitem[Campuzano et al.(2018)]{Campuzano2018} Campuzano, S.~A., et al. (2018). A nonlinear time series analysis of atmospheric methane mixing ratio data. \emph{Journal of Geophysical Research: Atmospheres}, 123(18), 10305--10321.
+
+\bibitem[Cannon(2022)]{Cannon2022} Cannon, J. (2022). An enactive approach to value alignment in AI. In V.~C. Müller (Ed.), \emph{Philosophy and Theory of Artificial Intelligence 2021}. Springer.
+
+\bibitem[Carroll-Nellenback et al.(2019)]{CarrollNellenback2019} Carroll-Nellenback, J., Frank, A., Wright, J., \& Scharf, C. (2019). The Fermi paradox and the Aurora effect: Exo-civilization settlement, expansion, and steady states. \emph{Astronomical Journal}, 158(3), 117.
+
+\bibitem[Chen \& Fu(2023)]{ChenFu2023} Chen, X., \& Fu, F. (2023). Outlearning extortioners: Unbending strategies can foster reciprocal fairness and cooperation. \emph{PNAS Nexus}, 2(6), pgad176.
+
+\bibitem[Cheneau et al.(2012)]{Cheneau2012} Cheneau, M., Barmettler, P., Poletti, D., et al. (2012). Light-cone-like spreading of correlations in a quantum many-body system. \emph{Nature}, 481, 484--487.
+
+\bibitem[Ćirković(2015)]{Cirkovic2015} Ćirković, M.~M. (2015). Kardashev's classification at 50+: A fine vehicle with room for improvement. \emph{Serbian Astronomical Journal}, 191, 1--15.
+
+\bibitem[Ćirković(2018)]{Cirkovic2018} Ćirković, M.~M. (2018). \emph{The Great Silence: Science and Philosophy of Fermi's Paradox}. Oxford University Press.
+
+\bibitem[Clark(2013)]{Clark2013} Clark, A. (2013). Whatever next? Predictive brains, situated agents, and the future of cognitive science. \emph{Behavioral and Brain Sciences}, 36(3), 181--204.
+
+\bibitem[Clark(2016)]{Clark2016} Clark, A. (2016). \emph{Surfing Uncertainty: Prediction, Action, and the Embodied Mind}. Oxford University Press.
+
+\bibitem[Crawford(2021)]{Crawford2021} Crawford, K. (2021). \emph{Atlas of AI: Power, Politics, and the Planetary Costs of Artificial Intelligence}. Yale University Press.
+
+\bibitem[Dafoe et al.(2021)]{Dafoe2021} Dafoe, A., Bachrach, Y., Hadfield, G., Horvitz, E., Larson, K., \& Graepel, T. (2021). Cooperative AI: Machines must learn to find common ground. \emph{Nature}, 593, 33--36.
+
+\bibitem[Dick(1996)]{Dick1996} Dick, S.~J. (1996). \emph{The Biological Universe}. Cambridge University Press.
+
+\bibitem[Donges et al.(2009)]{Donges2009} Donges, J.~F., Zou, Y., Marwan, N., \& Kurths, J. (2009). The backbone of the climate network. \emph{Europhysics Letters}, 87, 48007.
+
+\bibitem[Ebert-Uphoff \& Deng(2012)]{EbertUphoffDeng2012} Ebert-Uphoff, I., \& Deng, Y. (2012). Causal discovery for climate research using graphical models. \emph{Journal of Climate}, 25, 5648--5665.
+
+\bibitem[Floridi et al.(2026)]{FloridiAAIO} Floridi, L., Buttaboni, C., Gertler, N., Hine, E., Morley, J., Novelli, C., \& Schroder, T. (2026). Agentic AI Optimisation (AAIO): What it is, how it works, why it matters, and how to deal with it. \emph{Minds and Machines}, 36, 25. doi:10.1007/s11023-026-09779-8.
+
+\bibitem[Folbre(2008)]{Folbre2008} Folbre, N. (2008). \emph{Valuing Children: Rethinking the Economics of the Family}. Harvard University Press.
+
+\bibitem[Fonseca-Azevedo \& Herculano-Houzel(2012)]{FonsecaAzevedo2012} Fonseca-Azevedo, K., \& Herculano-Houzel, S. (2012). Metabolic constraint imposes tradeoff between body size and number of brain neurons in human evolution. \emph{PNAS}, 109(45), 18571--18576.
+
+\bibitem[Foss-Feig et al.(2015)]{FossFeig2015} Foss-Feig, M., Gong, Z.-X., Clark, C.~W., \& Gorshkov, A.~V. (2015). Nearly-linear light cones in long-range interacting quantum systems. \emph{Physical Review Letters}, 114, 157201.
+
+\bibitem[Fraser(2016)]{Fraser2016} Fraser, N. (2016). Contradictions of capital and care. \emph{New Left Review}, 100, 99--117.
+
+\bibitem[Friston(2010)]{Friston2010} Friston, K. (2010). The free-energy principle: A unified brain theory? \emph{Nature Reviews Neuroscience}, 11, 127--138.
+
+\bibitem[Froese \& Ziemke(2009)]{FroeseZiemke2009} Froese, T., \& Ziemke, T. (2009). Enactive artificial intelligence: Investigating the systemic organization of life and mind. \emph{Artificial Intelligence}, 173(3--4), 466--500.
+
+\bibitem[Gabi et al.(2016)]{Gabi2016} Gabi, M., Neves, K., Masseron, C., et al. (2016). No relative expansion of the number of prefrontal neurons in primate and human evolution. \emph{PNAS}, 113(34), 9617--9622.
+
+\bibitem[Gabriel(2020)]{Gabriel2020} Gabriel, I. (2020). Artificial intelligence, values, and alignment. \emph{Minds and Machines}, 30, 411--437.
+
+\bibitem[Gallow(2025)]{Gallow2025} Gallow, J.~D. (2025). Instrumental divergence. \emph{Philosophical Studies}, 182, 1581--1607.
+
+\bibitem[Ganesan et al.(2022)]{Ganesan2022} Ganesan, S., Beyer, E., Moffat, B., et al. (2022). Focused attention meditation in healthy adults: A systematic review and meta-analysis of cross-sectional functional MRI studies. \emph{Neuroscience \& Biobehavioral Reviews}, 141, 104846.
+
+\bibitem[Garrison et al.(2015)]{Garrison2015} Garrison, K.~A., Zeffiro, T.~A., Scheinost, D., Constable, R.~T., \& Brewer, J.~A. (2015). Meditation leads to reduced default mode network activity beyond an active task. \emph{Cognitive, Affective, \& Behavioral Neuroscience}, 15(3), 712--720.
+
+\bibitem[Gebru \& Torres(2024)]{GebruTorres2024} Gebru, T., \& Torres, É.~P. (2024). The TESCREAL bundle: Eugenics and the promise of utopia through artificial general intelligence. \emph{First Monday}, 29(4).
+
+\bibitem[Godfrey-Smith(2016)]{GodfreySmith2016} Godfrey-Smith, P. (2016). \emph{Other Minds: The Octopus, the Sea, and the Deep Origins of Consciousness}. Farrar, Straus and Giroux.
+
+\bibitem[Graeber(2011)]{Graeber2011} Graeber, D. (2011). \emph{Debt: The First 5,000 Years}. Melville House.
+
+\bibitem[Graeber \& Wengrow(2021)]{GraeberWengrow2021} Graeber, D., \& Wengrow, D. (2021). \emph{The Dawn of Everything: A New History of Humanity}. Farrar, Straus and Giroux.
+
+\bibitem[Hanson et al.(2021)]{Hanson2021} Hanson, R., Martin, D., McCarter, C., \& Paulson, J. (2021). If loud aliens explain human earliness, quiet aliens are also rare. \emph{Astrophysical Journal}, 922(2), 182.
+
+\bibitem[Hauert et al.(2002)]{Hauert2002} Hauert, C., De Monte, S., Hofbauer, J., \& Sigmund, K. (2002). Volunteering as Red Queen mechanism for cooperation in public goods games. \emph{Science}, 296, 1129--1132.
+
+\bibitem[Heims(1980)]{Heims1980} Heims, S.~J. (1980). \emph{John von Neumann and Norbert Wiener: From Mathematics to the Technologies of Life and Death}. MIT Press.
+
+\bibitem[Hensen et al.(2015)]{Hensen2015} Hensen, B., Bernien, H., Dréau, A.~E., et al. (2015). Loophole-free Bell inequality violation using electron spins separated by 1.3 kilometres. \emph{Nature}, 526, 682--686.
+
+\bibitem[Herculano-Houzel(2011)]{HerculanoHouzel2011} Herculano-Houzel, S. (2011). Scaling of brain metabolism with a fixed energy budget per neuron. \emph{PLoS ONE}, 6(3), e17514.
+
+\bibitem[Herculano-Houzel(2012)]{HerculanoHouzel2012} Herculano-Houzel, S. (2012). The remarkable, yet not extraordinary, human brain as a scaled-up primate brain and its associated cost. \emph{PNAS}, 109(Suppl 1), 10661--10668.
+
+\bibitem[Herculano-Houzel et al.(2010)]{HerculanoHouzel2010} Herculano-Houzel, S., Mota, B., Wong, P., \& Kaas, J.~H. (2010). Connectivity-driven white matter scaling and folding in primate cerebral cortex. \emph{PNAS}, 107(44), 19008--19013.
+
+\bibitem[Hilbe et al.(2013)]{Hilbe2013} Hilbe, C., Nowak, M.~A., \& Sigmund, K. (2013). Evolution of extortion in iterated prisoner's dilemma games. \emph{PNAS}, 110(17), 6913--6918.
+
+\bibitem[Hilbe et al.(2014a)]{Hilbe2014a} Hilbe, C., Wu, B., Traulsen, A., \& Nowak, M.~A. (2014). Cooperation and control in multiplayer social dilemmas. \emph{PNAS}, 111(46), 16425--16430.
+
+\bibitem[Hilbe et al.(2014b)]{Hilbe2014b} Hilbe, C., Röhl, T., \& Milinski, M. (2014). Extortion subdues human players but is finally punished in the prisoner's dilemma. \emph{Nature Communications}, 5, 3976.
+
+\bibitem[Hofman(2014)]{Hofman2014} Hofman, M.~A. (2014). Evolution of the human brain: When bigger is better. \emph{Frontiers in Neuroanatomy}, 8, 15.
+
+\bibitem[Hohwy(2013)]{Hohwy2013} Hohwy, J. (2013). \emph{The Predictive Mind}. Oxford University Press.
+
+\bibitem[Hubinger et al.(2019)]{Hubinger2019} Hubinger, E., van Merwijk, C., Mikulik, V., Skalse, J., \& Garrabrant, S. (2019). Risks from learned optimization in advanced machine learning systems. arXiv:1906.01820.
+
+\bibitem[Hyvönen et al.(2018)]{Hyvonen2018} Hyvönen, S., et al. (2018). Wavelet-based mutual information analysis of atmospheric surface-layer fluxes. \emph{Boundary-Layer Meteorology}, 167(3), 345--363.
+
+\bibitem[Jackson \& Criado-Perez(2024)]{JacksonCriadoPerez2024} Jackson, C.~J., \& Criado-Perez, C. (2024). Why the Fermi paradox may not be well explained by Wong and Bartlett's theory of civilization collapse. \emph{Journal of the Royal Society Interface}, 21(219), 20240140.
+
+\bibitem[Kardashev(1964)]{Kardashev1964} Kardashev, N.~S. (1964). Transmission of information by extraterrestrial civilizations. \emph{Soviet Astronomy}, 8, 217--221.
+
+\bibitem[Karst et al.(2023)]{Karst2023} Karst, J., Jones, M.~D., \& Hoeksema, J.~D. (2023). Positive citation bias and overinterpreted results lead to misinformation on common mycorrhizal networks in forests. \emph{Nature Ecology \& Evolution}, 7, 501--511.
+
+\bibitem[Kraskov et al.(2004)]{Kraskov2004} Kraskov, A., Stögbauer, H., \& Grassberger, P. (2004). Estimating mutual information. \emph{Physical Review E}, 69, 066138.
+
+\bibitem[Lamport(1978)]{Lamport1978} Lamport, L. (1978). Time, clocks, and the ordering of events in a distributed system. \emph{Communications of the ACM}, 21(7), 558--565.
+
+\bibitem[Landauer(1961)]{Landauer1961} Landauer, R. (1961). Irreversibility and heat generation in the computing process. \emph{IBM Journal of Research and Development}, 5(3), 183--191.
+
+\bibitem[Levin(2023)]{Levin2023} Levin, M. (2023). Bioelectric networks: The cognitive glue enabling evolutionary scaling from physiology to mind. \emph{Animal Cognition}, 26, 1865--1891.
+
+\bibitem[Lieb \& Robinson(1972)]{LiebRobinson1972} Lieb, E.~H., \& Robinson, D.~W. (1972). The finite group velocity of quantum spin systems. \emph{Communications in Mathematical Physics}, 28(3), 251--257.
+
+\bibitem[Luppi et al.(2024)]{Luppi2024} Luppi, A.~I., Mediano, P.~A.~M., Rosas, F.~E., et al. (2024). A synergistic workspace for human consciousness revealed by integrated information decomposition. \emph{eLife}, 12, RP88173.
+
+\bibitem[Lyon et al.(2021)]{Lyon2021} Lyon, P., Keijzer, F., Arendt, D., \& Levin, M. (2021). Reframing cognition: Getting down to biological basics. \emph{Philosophical Transactions of the Royal Society B}, 376(1820), 20190750.
+
+\bibitem[Man \& Damasio(2019)]{ManDamasio2019} Man, K., \& Damasio, A. (2019). Homeostasis and soft robotics in the design of feeling machines. \emph{Nature Machine Intelligence}, 1(10), 446--452.
+
+\bibitem[Mauss(1925)]{Mauss1925} Mauss, M. (1925). \emph{Essai sur le don}. L'Année Sociologique.
+
+\bibitem[McCloskey(2010)]{McCloskey2010} McCloskey, D.~N. (2010). \emph{Bourgeois Dignity}. University of Chicago Press.
+
+\bibitem[McCloskey(2016)]{McCloskey2016} McCloskey, D.~N. (2016). \emph{Bourgeois Equality}. University of Chicago Press.
+
+\bibitem[McMillen \& Levin(2024)]{McMillenLevin2024} McMillen, P., \& Levin, M. (2024). Collective intelligence: A unifying concept for integrating biology across scales and substrates. \emph{Communications Biology}, 7, 378.
+
+\bibitem[Mini et al.(2023)]{Mini2023} Mini, U., Grietzer, P., Sharma, M., Meek, A., MacDiarmid, M., \& Turner, A.~M. (2023). Understanding and controlling a maze-solving policy network. arXiv:2310.08043.
+
+\bibitem[Mirowski(2002)]{Mirowski2002} Mirowski, P. (2002). \emph{Machine Dreams: Economics Becomes a Cyborg Science}. Cambridge University Press.
+
+\bibitem[Mokyr(2016)]{Mokyr2016} Mokyr, J. (2016). \emph{A Culture of Growth: The Origins of the Modern Economy}. Princeton University Press.
+
+\bibitem[Mota \& Herculano-Houzel(2015)]{MotaHerculanoHouzel2015} Mota, B., \& Herculano-Houzel, S. (2015). Cortical folding scales universally with surface area and thickness. \emph{Science}, 349(6243), 74--77.
+
+\bibitem[Müller \& Cannon(2022)]{MullerCannon2022} Müller, V.~C., \& Cannon, M. (2022). Existential risk from AI and orthogonality: Can we have it both ways? \emph{Ratio}, 35(1), 25--36.
+
+\bibitem[Ngo(2019)]{Ngo2019} Ngo, R. (2019). Coherent behaviour in the real world is an incoherent concept. \emph{AI Alignment Forum}.
+
+\bibitem[Nowak(2006)]{Nowak2006} Nowak, M.~A. (2006). Five rules for the evolution of cooperation. \emph{Science}, 314, 1560--1563.
+
+\bibitem[Nowak \& Sigmund(1993)]{NowakSigmund1993} Nowak, M., \& Sigmund, K. (1993). A strategy of win-stay, lose-shift that outperforms tit-for-tat in the prisoner's dilemma. \emph{Nature}, 364, 56--58.
+
+\bibitem[Omohundro(2008)]{Omohundro2008} Omohundro, S.~M. (2008). The basic AI drives. In P. Wang, B. Goertzel, \& S. Franklin (Eds.), \emph{Proceedings of the First AGI Conference}, 483--492.
+
+\bibitem[Ostrom(1990)]{Ostrom1990} Ostrom, E. (1990). \emph{Governing the Commons}. Cambridge University Press.
+
+\bibitem[Pearl(1988)]{Pearl1988} Pearl, J. (1988). \emph{Probabilistic Reasoning in Intelligent Systems: Networks of Plausible Inference}. Morgan Kaufmann.
+
+\bibitem[Pihlakas \& Pyykkö(2024)]{PihlakasPyykko2024} Pihlakas, R., \& Pyykkö, J. (2024). From homeostasis to resource sharing: Biologically and economically aligned multi-objective multi-agent AI safety benchmarks. arXiv:2410.00081.
+
+\bibitem[Polanyi(1944)]{Polanyi1944} Polanyi, K. (1944). \emph{The Great Transformation}. Beacon Press.
+
+\bibitem[Press \& Dyson(2012)]{PressDyson2012} Press, W.~H., \& Dyson, F.~J. (2012). Iterated prisoner's dilemma contains strategies that dominate any evolutionary opponent. \emph{PNAS}, 109(26), 10409--10413.
+
+\bibitem[Rahrig et al.(2022)]{Rahrig2022} Rahrig, H., Vago, D.~R., Passarelli, M.~A., et al. (2022). Meta-analytic evidence that mindfulness training alters resting state default mode network connectivity. \emph{Scientific Reports}, 12, 12260.
+
+\bibitem[Reid(2023)]{Reid2023} Reid, C.~R. (2023). Thoughts from the forest floor: A review of cognition in the slime mould \emph{Physarum polycephalum}. \emph{Animal Cognition}, 26(6), 1783--1797.
+
+\bibitem[Rieder(2008)]{Rieder2008} Rieder, J. (2008). \emph{Colonialism and the Emergence of Science Fiction}. Wesleyan University Press.
+
+\bibitem[Robinson et al.(2024)]{Robinson2024} Robinson, D.~G., Ammer, C., Polle, A., et al. (2024). Mother trees, altruistic fungi, and the perils of plant personification. \emph{Trends in Plant Science}, 29(1), 20--31.
+
+\bibitem[Runge et al.(2015)]{Runge2015} Runge, J., Petoukhov, V., Donges, J.~F., et al. (2015). Identifying causal gateways and mediators in complex spatio-temporal systems. \emph{Nature Communications}, 6, 8502.
+
+\bibitem[Sagan \& Newman(1983)]{SaganNewman1983} Sagan, C., \& Newman, W.~I. (1983). The solipsist approach to extraterrestrial intelligence. \emph{Quarterly Journal of the Royal Astronomical Society}, 24, 113--121.
+
+\bibitem[Sandberg et al.(2018)]{Sandberg2018} Sandberg, A., Drexler, E., \& Ord, T. (2018). Dissolving the Fermi paradox. arXiv:1806.02404.
+
+\bibitem[Schwieterman et al.(2024)]{Schwieterman2024} Schwieterman, E.~W., Haqq-Misra, J., Kopparapu, R.~K., et al. (2024). Artificial greenhouse gases as exoplanet technosignatures. \emph{Astrophysical Journal}, 969(1), 20.
+
+\bibitem[Seifert et al.(2024)]{Seifert2024} Seifert, G., Sealander, A., Marzen, S., \& Levin, M. (2024). From reinforcement learning to agency: Frameworks for understanding basal cognition. \emph{BioSystems}, 235, 105107.
+
+\bibitem[Sen(1977)]{Sen1977} Sen, A. (1977). Rational fools: A critique of the behavioral foundations of economic theory. \emph{Philosophy \& Public Affairs}, 6(4), 317--344.
+
+\bibitem[Shah(2018)]{Shah2018} Shah, R. (2018). Coherence arguments do not imply goal-directed behavior. \emph{AI Alignment Forum}.
+
+\bibitem[Sharadin(2025)]{Sharadin2025} Sharadin, N. (2025). Promotionalism, orthogonality, and instrumental convergence. \emph{Philosophical Studies}, 182(7), 1725--1755.
+
+\bibitem[Simard et al.(2025)]{Simard2025} Simard, S.~W., Ryan, T.~L., \& Perry, D.~A. (2025). Opinion: Response to questions about common mycorrhizal networks. \emph{Frontiers in Forests and Global Change}, 7, 1512518.
+
+\bibitem[Sivak \& Crooks(2012)]{SivakCrooks2012} Sivak, D.~A., \& Crooks, G.~E. (2012). Thermodynamic metrics and optimal paths. \emph{Physical Review Letters}, 108, 190602.
+
+\bibitem[Sterling(2012)]{Sterling2012} Sterling, P. (2012). Allostasis: A model of predictive regulation. \emph{Physiology \& Behavior}, 106(1), 5--15.
+
+\bibitem[Stewart \& Plotkin(2013)]{StewartPlotkin2013} Stewart, A.~J., \& Plotkin, J.~B. (2013). From extortion to generosity: Evolution in the iterated prisoner's dilemma. \emph{PNAS}, 110(38), 15348--15353.
+
+\bibitem[Tarsney(2025)]{Tarsney2025} Tarsney, C. (2025). Will artificial agents pursue power by default? arXiv:2506.06352.
+
+\bibitem[Tero et al.(2010)]{Tero2010} Tero, A., Takagi, S., Saigusa, T., et al. (2010). Rules for biologically inspired adaptive network design. \emph{Science}, 327, 439--442.
+
+\bibitem[Thompson(2007)]{Thompson2007} Thompson, E. (2007). \emph{Mind in Life}. Harvard University Press.
+
+\bibitem[Thorstad(2024)]{Thorstad2024} Thorstad, D. (2024). What power-seeking theorems do not show. \emph{Global Priorities Institute Working Paper}.
+
+\bibitem[Tipler(1980)]{Tipler1980} Tipler, F.~J. (1980). Extraterrestrial intelligent beings do not exist. \emph{Quarterly Journal of the Royal Astronomical Society}, 21, 267--281.
+
+\bibitem[Tran et al.(2021)]{Tran2021} Tran, M.~C., Guo, A.~Y., Su, Y., et al. (2021). Locality and digital quantum simulation of power-law interactions. \emph{Physical Review Letters}, 127, 160401.
+
+\bibitem[Tronto(1993)]{Tronto1993} Tronto, J.~C. (1993). \emph{Moral Boundaries: A Political Argument for an Ethic of Care}. Routledge.
+
+\bibitem[Turner et al.(2021)]{Turner2021} Turner, A.~M., Smith, L., Shah, R., Critch, A., \& Tadepalli, P. (2021). Optimal policies tend to seek power. \emph{Advances in Neural Information Processing Systems}, 34. arXiv:1912.01683.
+
+\bibitem[Turner \& Tadepalli(2022)]{TurnerTadepalli2022} Turner, A.~M., \& Tadepalli, P. (2022). Parametrically retargetable decision-makers tend to seek power. \emph{Advances in Neural Information Processing Systems}, 35.
+
+\bibitem[Turner(2022a)]{Turner2022a} Turner, A.~M. (2022a). When most VNM-coherent preference orderings have convergent instrumental incentives. \emph{AI Alignment Forum}.
+
+\bibitem[Turner(2022b)]{Turner2022b} Turner, A.~M. (2022b). Reward is not the optimization target. \emph{AI Alignment Forum}.
+
+\bibitem[Turner(2022c)]{Turner2022c} Turner, A.~M. (2022c). A certain formalization of corrigibility is VNM-incoherent. \emph{AI Alignment Forum}.
+
+\bibitem[Turner et al.(2023)]{Turner2023} Turner, A.~M., Thiergart, L., Leech, G., et al. (2023). Activation addition: Steering language models without optimization. arXiv:2308.10248.
+
+\bibitem[Van Dam et al.(2018)]{VanDam2018} Van Dam, N.~T., van Vugt, M.~K., Vago, D.~R., et al. (2018). Mind the hype: A critical evaluation and prescriptive agenda for research on mindfulness and meditation. \emph{Perspectives on Psychological Science}, 13(1), 36--61.
+
+\bibitem[Varian(2005)]{Varian2005} Varian, H.~R. (2005). Revealed preference. In M. Szenberg et al. (Eds.), \emph{Samuelsonian Economics and the Twenty-First Century}. Oxford University Press.
+
+\bibitem[Watson \& Levin(2023)]{WatsonLevin2023} Watson, R., \& Levin, M. (2023). The collective intelligence of evolution and development. \emph{Collective Intelligence}, 2(2), 1--22.
+
+\bibitem[Wong \& Bartlett(2022)]{WongBartlett2022} Wong, M.~L., \& Bartlett, S. (2022). Asymptotic burnout and homeostatic awakening: A possible solution to the Fermi paradox? \emph{Journal of the Royal Society Interface}, 19, 20220029.
+
+\bibitem[Wright(2020)]{Wright2020} Wright, J.~T. (2020). Dyson spheres. \emph{Serbian Astronomical Journal}, 200, 1--18.
+
+\bibitem[Wright(2023)]{Wright2023} Wright, J.~T. (2023). Application of the thermodynamics of radiation to Dyson spheres. \emph{Astrophysical Journal}, 956, 34.
+
+\end{thebibliography}
+
+\end{document}

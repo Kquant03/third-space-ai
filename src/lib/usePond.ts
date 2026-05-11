@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
+import { pondSDF as gourdSDF } from "./pondGeometry";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Limen Pond — client integration · v4 · continuous kinematic
@@ -1052,20 +1053,6 @@ const BODY_LEN_M_KINE: Record<string, number> = {
   egg: 0.03, fry: 0.08, juvenile: 0.20, adolescent: 0.35,
   adult: 0.50, elder: 0.58, dying: 0.50,
 };
-
-/** Gourd-shaped pond SDF, mirrored from LivingSubstrate's pondSDF.
- *  Two joined basins with smooth union. Must match the shader exactly
- *  so the visual pond boundary and the physics pond boundary agree. */
-function gourdSDF(x: number, z: number): number {
-  // Large basin
-  const dA = Math.hypot(x - (-1.0), z - 0.0) - 3.5;
-  // Small basin
-  const dB = Math.hypot(x - 1.8, z - 0.4) - 2.2;
-  // Smooth union (k = 0.9)
-  const k = 0.9;
-  const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (dB - dA) / k));
-  return dA * (1 - h) + dB * h - k * h * (1 - h);
-}
 
 
 /** Convert a continuous kinematic state into a ShaderFish. The

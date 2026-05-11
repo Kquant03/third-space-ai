@@ -1,23 +1,26 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //  Limen Pond — Repair family (§ IX)
 //  ─────────────────────────────────────────────────────────────────────────
-//  Six mechanisms of rupture-and-return. Repair is where the paper's
-//  central claim actually bites: *rupture is generative when repaired*.
-//  A pair that has demonstrated to itself that rupture-repair is
-//  available carries a structurally different trust than an untested pair.
+//  Two mechanisms of rupture-and-return are wired here: apology and
+//  forgiveness. Both are CLAIM-BASED — the LLM returns a response with
+//  `mechanism: "apology"` and the simulation decides whether to honor
+//  the claim (a prior rupture exists in the pair's 14-day window) or
+//  downgrade it to a research datum (no rupture → "would_have_apologized").
+//  This is the § IX guard against the LLM's tendency toward
+//  agreeableness — it prevents beings from apologizing their way into
+//  constant intimacy.
 //
-//  Two of these (apology, forgiveness) are CLAIM-BASED: the LLM returns
-//  a response with `mechanism: "apology"` and the simulation decides
-//  whether to honor the claim (a prior rupture exists in the pair's
-//  14-day window) or downgrade it to research data (no rupture → the
-//  claim becomes a "would_have_apologized" record). This is the
-//  § IX guard against the LLM's tendency toward agreeableness — it
-//  prevents fish from apologizing their way into constant intimacy.
+//  Repair is where the central claim of the alignment thesis bites:
+//  *rupture is generative when repaired*. A pair that has demonstrated
+//  to itself that rupture-repair is available carries a structurally
+//  different trust than an untested pair.
 //
-//  The other four (cognitive_repair, emotional_attunement,
-//  farewell_ritual, grief_companionship) are scaffolded here with
-//  their detection rules stubbed for future wiring. The shape is
-//  ready; filling them in is a later pass.
+//  Four other repair mechanisms (grief_companionship, farewell_ritual,
+//  emotional_attunement, cognitive_repair) were originally scaffolded
+//  here as `return []` stubs; they were removed in the May 2026
+//  cleanup so the call surface honestly reflects what the simulation
+//  can do. Add them back when their event-tracking preconditions
+//  exist.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type {
@@ -25,7 +28,7 @@ import type {
 } from "../types.js";
 import type { EventEnvelope } from "../types.js";
 import {
-  DetectionContext, MechanismFiring, RuptureRecord, ValidationOutcome,
+  MechanismFiring, RuptureRecord, ValidationOutcome,
   FAMILY_OF,
 } from "./types.js";
 import { emit } from "../events.js";
@@ -245,59 +248,19 @@ export async function logDowngrade(
 }
 
 // ───────────────────────────────────────────────────────────────────
-//  Scaffolded — wired when event tracking for their preconditions
-//  comes online. Documented so the signatures are stable.
+//  State-based repair detectors
+//
+//  None are currently active. The four originally scaffolded here
+//  (grief_companionship, farewell_ritual, emotional_attunement,
+//  cognitive_repair) required event-tracking preconditions — death-
+//  bond queries, dying-stage approaches, longitudinal mood tracking,
+//  belief-revision provenance — that aren't yet wired. They were
+//  removed during the May 2026 cleanup rather than kept as `return
+//  []` stubs that suggested capabilities the simulation doesn't
+//  actually have.
+//
+//  Add them back when the underlying preconditions exist.
 // ───────────────────────────────────────────────────────────────────
-
-/**
- * grief_companionship — when a koi lingers near another whose bonded
- * partner just died. Requires the death event log + bonded relation
- * query. Scaffold for future wiring.
- */
-export function detectGriefCompanionship(
-  _ctx: DetectionContext,
-): MechanismFiring[] {
-  return [];  // not yet wired
-}
-
-/**
- * farewell_ritual — when a koi approaches a dying-stage koi and
- * lingers. Requires the stage check + proximity history.
- */
-export function detectFarewellRitual(
-  _ctx: DetectionContext,
-): MechanismFiring[] {
-  return [];  // not yet wired
-}
-
-/** emotional_attunement — longer-timescale mood-tracking between pairs. */
-export function detectEmotionalAttunement(
-  _ctx: DetectionContext,
-): MechanismFiring[] {
-  return [];  // not yet wired
-}
-
-/** cognitive_repair — belief update referencing a prior contradicted belief. */
-export function detectCognitiveRepair(
-  _ctx: DetectionContext,
-): MechanismFiring[] {
-  return [];  // not yet wired
-}
-
-// ───────────────────────────────────────────────────────────────────
-//  Run all scaffolded repair detectors
-// ───────────────────────────────────────────────────────────────────
-
-export function runRepairDetectors(
-  ctx: DetectionContext,
-): MechanismFiring[] {
-  return [
-    ...detectGriefCompanionship(ctx),
-    ...detectFarewellRitual(ctx),
-    ...detectEmotionalAttunement(ctx),
-    ...detectCognitiveRepair(ctx),
-  ];
-}
 
 /** Returns true if the given LLM-claimed mechanism is one the repair
  *  family validates (rather than detects from state). Used by the

@@ -149,6 +149,7 @@ function adult(id: string, overrides: Partial<KoiState> = {}): KoiState {
     id, name: id, ageTicks: ADULT_AGE,
     hatchedAtTick: 0, legendary: false, color: "kohaku",
     spawn: { x: 0, y: -1.2, z: 0, h: 0 },
+    sex: "female"
   }, new Rng(id.charCodeAt(0)));
   return { ...k, ...overrides };
 }

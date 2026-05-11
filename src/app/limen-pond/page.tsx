@@ -1,4 +1,5 @@
 "use client";
+import { CAM, clientToViewport, viewportToPondXZ, pondToScreen } from "@/lib/pondCamera";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  /limen-pond — the viewer
@@ -51,70 +52,6 @@ const FONT = {
   mono:    "var(--font-mono), 'JetBrains Mono', monospace",
 } as const;
 
-// ───────────────────────────────────────────────────────────────────
-//  Camera — MUST match CAMERA_GLSL in LivingSubstrate.tsx
-// ───────────────────────────────────────────────────────────────────
-
-const CAM = {
-  HEIGHT: 2.6,
-  BACK:   6.0,
-  TILT:   0.52,
-  FOV_Y:  0.785,
-} as const;
-
-function clientToViewport(
-  clientX: number, clientY: number, W: number, H: number,
-): { vx: number; vy: number; aspect: number } {
-  const aspect = W / H;
-  const u = clientX / W - 0.5;
-  const v = 0.5 - clientY / H;
-  return { vx: u * aspect, vy: v, aspect };
-}
-
-function viewportToPondXZ(
-  vx: number, vy: number, aspect: number,
-): { x: number; z: number } | null {
-  const fy = Math.tan(CAM.FOV_Y * 0.5);
-  const fx = fy * aspect;
-  const dcx0 = vx * 2.0 * fx;
-  const dcy0 = vy * 2.0 * fy;
-  const dcz0 = -1.0;
-  const m = Math.hypot(dcx0, dcy0, dcz0);
-  const dcx = dcx0 / m, dcy = dcy0 / m, dcz = dcz0 / m;
-  const cT = Math.cos(CAM.TILT);
-  const sT = Math.sin(CAM.TILT);
-  const dwx = dcx;
-  const dwy =  cT * dcy + sT * dcz;
-  const dwz = -sT * dcy + cT * dcz;
-  if (dwy >= -1e-4) return null;
-  const t = -CAM.HEIGHT / dwy;
-  const x = 0.0 + t * dwx;
-  const z = CAM.BACK + t * dwz;
-  return { x, z };
-}
-
-function pondToScreen(
-  pondX: number, pondZ: number, W: number, H: number,
-): { sx: number; sy: number } | null {
-  const aspect = W / H;
-  const relX = pondX;
-  const relY = 0 - CAM.HEIGHT;
-  const relZ = pondZ - CAM.BACK;
-  const cT = Math.cos(CAM.TILT);
-  const sT = Math.sin(CAM.TILT);
-  const camX = relX;
-  const camY = cT * relY - sT * relZ;
-  const camZ = sT * relY + cT * relZ;
-  if (camZ >= -1e-4) return null;
-  const fy = Math.tan(CAM.FOV_Y * 0.5);
-  const fx = fy * aspect;
-  const invNegZ = 1.0 / -camZ;
-  const vx = (camX / fx) * invNegZ;
-  const vy = (camY / fy) * invNegZ;
-  const u = vx / aspect + 0.5;
-  const v = 0.5 - vy;
-  return { sx: u * W, sy: v * H };
-}
 
 // ───────────────────────────────────────────────────────────────────
 //  Gourd SDF — canonical
@@ -123,14 +60,14 @@ function pondToScreen(
 const GOURD = {
   basinA: { cx: -1.0, cz: 0.0, r: 3.5 },
   basinB: { cx:  1.8, cz: 0.4, r: 2.2 },
-  kBlend: 1.2,
+  k: 0.9,
 };
 
 function pondSDF(x: number, z: number): number {
   const dA = Math.hypot(x - GOURD.basinA.cx, z - GOURD.basinA.cz) - GOURD.basinA.r;
   const dB = Math.hypot(x - GOURD.basinB.cx, z - GOURD.basinB.cz) - GOURD.basinB.r;
-  const h = Math.max(GOURD.kBlend - Math.abs(dA - dB), 0) / GOURD.kBlend;
-  return Math.min(dA, dB) - h * h * h * GOURD.kBlend / 6.0;
+  const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (dB - dA) / GOURD.k));
+  return dB * (1 - h) + dA * h - GOURD.k * h * (1 - h);
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -239,7 +176,22 @@ export default function LimenPondPage() {
   const sendFood = useCallback((x: number, z: number) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ t: "food", x, z }));
+    const devKey = process.env.NEXT_PUBLIC_DEV_FEED_KEY;
+    ws.send(JSON.stringify({
+      t: "food", x, z,
+      // Server validates devKey against DEV_FEED_KEY env. When matched,
+      // visitor rate-limiting is bypassed. When absent or wrong, the
+      // message still goes through the normal rate-limited path.
+      ...(devKey ? { devKey } : {}),
+    }));
+  }, []);
+
+  const sendDevFeedAll = useCallback(() => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const devKey = process.env.NEXT_PUBLIC_DEV_FEED_KEY;
+    if (!devKey) return;
+    ws.send(JSON.stringify({ t: "dev_feed_all", devKey }));
   }, []);
 
   const sendPebble = useCallback((x: number, z: number, inscription: string) => {
@@ -494,6 +446,15 @@ export default function LimenPondPage() {
         }}
       >
         <ModeToggle mode={mode} onChange={setMode} />
+        {process.env.NEXT_PUBLIC_DEV_FEED_KEY && (
+          <DevFeedButton
+            onClick={() => {
+              sendDevFeedAll();
+              setFeedMsg("DEV: fed all alive koi.");
+              window.setTimeout(() => setFeedMsg(null), 1400);
+            }}
+          />
+        )}
         <div
           style={{
             fontFamily: FONT.mono,
@@ -663,6 +624,52 @@ function ModeToggle({
         }
       `}</style>
     </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
+//  DevFeedButton
+//
+//  Only rendered when NEXT_PUBLIC_DEV_FEED_KEY is set. Drops one
+//  pellet at every alive koi's current position. Auth is the dev key,
+//  validated server-side against DEV_FEED_KEY env. Used during
+//  development to keep the founder koi (Kokutou, Shiki) alive without
+//  hitting the visitor rate limit or going through the visitor flow.
+//
+//  The button is deliberately small and styled distinctly from the
+//  main mode chips — it's a developer affordance, not part of the
+//  visitor experience.
+// ───────────────────────────────────────────────────────────────────
+
+function DevFeedButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        background: "rgba(180,120,40,0.10)",
+        border: "1px dashed rgba(220,150,70,0.42)",
+        borderRadius: 999,
+        padding: "5px 14px",
+        fontFamily: FONT.mono,
+        fontSize: 10,
+        letterSpacing: "0.28em",
+        textTransform: "uppercase",
+        color: "rgba(230,170,90,0.78)",
+        cursor: "pointer",
+        transition: "background 220ms, color 220ms",
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.background =
+          "rgba(180,120,40,0.18)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.background =
+          "rgba(180,120,40,0.10)";
+      }}
+    >
+      dev · feed all
+    </button>
   );
 }
 

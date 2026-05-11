@@ -1,0 +1,488 @@
+% ──────────────────────────────────────────────────────────────────────────
+%  Two Registers, One Grammar
+%  Mode-Separated LLM Choreography of Audio-Reactive Lenia
+%
+%  Stanley Sebastian, Third Space — May 2026
+%  third-space.ai · stanley@third-space.ai
+% ──────────────────────────────────────────────────────────────────────────
+
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{mathpazo}
+\linespread{1.10}
+
+\usepackage[a4paper, margin=1.1in, top=1.2in, bottom=1.2in]{geometry}
+\usepackage{microtype}
+\usepackage{amsmath, amssymb}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+\usepackage{parskip}
+
+% Slate-ink paragraph indent style — flat blocks, no first-line indent.
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+
+% Section headings: small caps, restrained.
+\titleformat{\section}
+  {\normalfont\large\scshape}{\thesection}{0.8em}{}
+\titleformat{\subsection}
+  {\normalfont\itshape}{\thesubsection}{0.8em}{}
+\titlespacing*{\section}{0pt}{1.6em}{0.6em}
+\titlespacing*{\subsection}{0pt}{1.2em}{0.4em}
+
+% Italic title in the spirit of the Third Space display face.
+\makeatletter
+\renewcommand{\maketitle}{%
+  \begin{center}
+    {\footnotesize\scshape\textcolor{black!55}{Third Space \quad\textbullet\quad Toledo, Ohio}}\\[1.6em]
+    {\Large\itshape \@title}\\[1.0em]
+    {\normalsize \@author}\\[0.5em]
+    {\footnotesize\textcolor{black!55}{\@date}}
+  \end{center}
+  \vspace{1em}
+  \rule{\textwidth}{0.3pt}
+  \vspace{0.6em}
+}
+\makeatother
+
+\title{Two Registers, One Grammar:\\[0.2em]
+{\large Mode-Separated LLM Choreography\\of Audio-Reactive Lenia}}
+\author{Stanley Sebastian \quad\textbullet\quad Claude\\
+\small\texttt{stanley@third-space.ai}}
+\date{May 2026}
+
+\begin{document}
+\maketitle
+
+% ────────── ABSTRACT ──────────
+\begin{quote}
+\small\itshape
+Audio-reactive control of Lenia, a continuous cellular automaton, requires
+reconciling two phenomenologically incompatible regimes: smooth morphological
+flow during sustained musical sections, and instantaneous phase transitions at
+musical transients. We describe an architecture that treats these regimes not
+as endpoints of a continuum but as distinct expressive registers --- a
+\emph{smooth register} within the operating range of the Ghost species, where
+spring-interpolated parameter trajectories produce organic motion, and a
+\emph{technique register} at and beyond Lenia's phase boundaries, where snap
+parameter changes produce discrete physical events (supernovae, sigma droughts,
+nucleation cascades) unreachable by smooth motion. The two registers are
+separated at the schema level via constrained grammar, so that the LLM
+controller cannot emit undefined intermediate states even in principle. The
+technique register admits analytically tractable couplings to musical tempo:
+re-expansion oscillation locks to the integration step, starvation
+anticipation times from current mass. The result is that physical events
+arrive at musical transients with frame-accurate precision. We argue the
+design generalizes: when an LLM controls an emergent dynamical system with
+natural mode boundaries, those boundaries deserve grammar-level protection
+rather than learned compliance.
+\end{quote}
+
+\vspace{0.5em}
+\rule{\textwidth}{0.3pt}
+
+% ─────────────────────────────────────────────────────────────
+\section{Motivation}
+
+Music visualization, as a problem, has been partially solved twice. Reactive
+visualizers --- MilkDrop, projectM, the wave of WebGL preset systems that
+followed --- map spectral features to shader uniforms in real time. They are
+fast and infinite but cannot compose: every drop looks like every other drop
+of similar energy. Generative video models --- Stable Video, Sora before its
+shutdown, the AnimateDiff lineage --- compose convincingly within short
+windows but cannot run in real time, cannot respond to live audio, and have
+no temporal coherence between rendered frames except what interpolation
+fakes. Neither understands music; both produce surfaces.
+
+The architecture we describe takes a third path: a continuous cellular
+automaton --- a physical simulation, in the literal sense, with causal
+state evolution from frame to frame --- controlled by a fine-tuned language
+model that emits structured choreography in advance of playback. The
+simulation runs at sixty frames per second on consumer hardware. The
+language model, having seen the song's structure once, decides what physical
+phenomena should occur and when. The simulation produces them not as
+composited effects but as the actual evolution of the field.
+
+Two facts make this architecture nontrivial. First, the cellular automaton
+in question --- Lenia~\cite{chan2019lenia} --- has \emph{phase boundaries}
+in its parameter space. A smooth trajectory through that space cannot
+produce a supernova event; supernovae require parameter slams across the
+boundary, sustained for a few frames, and then released. Second, the
+language model, asked to produce a long structured output describing such
+slams, will produce them either too rarely (boring), too often (incoherent),
+or, most damagingly, attempt to interpolate \emph{into} them with smoothing
+machinery designed for the smooth regime. The result of this last failure
+mode is the worst of both worlds: a transient that is neither sudden enough
+to register as an event nor smooth enough to feel like flow.
+
+The architectural commitment of this work is that those two regimes ---
+\emph{smooth} and \emph{technique} --- are different in kind and must be
+treated as such. We separate them at the grammar level so the failure mode
+described above is not just unlikely but impossible.
+
+% ─────────────────────────────────────────────────────────────
+\section{The Ghost Species and its Operating Range}
+
+Lenia is a continuous generalization of Conway's Game of Life. The state
+$A_t \in [0,1]^{N\times N}$ evolves as
+\begin{equation}
+  A_{t+\Delta t} \;=\; \mathrm{clip}\!\left(\,A_t + \Delta t \cdot G(K \!*\! A_t)\,, \, 0, 1\right),
+\end{equation}
+where $K$ is a smooth radial kernel and the growth function
+$G(u) = 2\exp(-(u-\mu)^2/(2\sigma^2)) - 1$ takes values in $[-1, 1]$. The
+update is unconditionally numerically stable for any parameter setting:
+$|G| \le 1$ and the clip enforces $A \in [0,1]$. This is important. Extreme
+parameter values do not produce numerical explosion. They produce extreme
+\emph{dynamical} behavior --- death, expansion, oscillation --- inside a
+mathematically bounded substrate.
+
+Within Lenia's parameter space lives a particular species we call the
+\emph{Ghost} (\textit{Orbium unicaudatus ignis var.\ phantasma}). The Ghost
+is seeded with the canonical Ignis pattern (whose morphological fixed point
+sits at $\sigma = 0.012$) but operated at $\sigma = 0.015$, a 25\% increase.
+The morphology and the physics are intentionally mismatched. The organism
+perpetually reaches for a shape it cannot quite hold. This designed
+transience --- edge-of-chaos aesthetics achieved through morphology--parameter
+mismatch --- makes the Ghost an unusually expressive substrate. It is also
+what makes the Ghost an ideal subject for technique-register manipulation:
+an organism already living at the edge dissolves and reforms more
+dramatically than a stable one.
+
+Across many runs, the Ghost is well-behaved within the bounds shown in
+Table~\ref{tab:smooth-range}. We call this the \emph{smooth register}.
+Within these bounds, parameter trajectories that change gradually ---
+buffered by spring smoothing with critical damping --- produce organic
+motion: organisms breathe, drift, cohere, dissolve. The shoal behavior
+emerges from kernel-mediated communication across the toroidal field;
+sixteen organisms at $R=15$ form an effectively connected population.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lll}
+\hline
+Parameter & Smooth range & Phenomenon \\
+\hline
+$\sigma$ & $[0.009, 0.024]$ & Survival niche width \\
+$\mu$ & $[0.09, 0.14]$ & Optimal density (``hunger'') \\
+$\Delta t$ & $[0.055, 0.110]$ & Integration step \\
+$R$ & $\{13,\dots,18\}$ & Sensing radius \\
+\hline
+\end{tabular}
+\caption{Smooth-register parameter bounds for the Ghost species. Within
+these bounds, spring-buffered parameter trajectories produce sustained
+transience without dissolution.}
+\label{tab:smooth-range}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────
+\section{The Technique Register}
+
+Outside the smooth range, the dynamics change in kind. We catalog four
+regimes:
+
+\subsection{Sigma Drought ($\sigma < 0.009$)}
+The survival window $[\mu - 1.177\sigma,\, \mu + 1.177\sigma]$ shrinks to
+roughly 0.012 units wide. Only cells whose potential matches $\mu$ to three
+decimals receive positive growth. Organisms with asymmetric density
+distributions die non-uniformly: their densest, most mathematically resonant
+sub-structures survive while adjacent cells with marginally different
+potentials die. Over ten to thirty frames, the field self-sorts into its
+most numerically ideal configurations. What survives is not the strongest
+organism but the most precisely resonant one.
+
+\subsection{Sigma Flood ($\sigma > 0.024$)}
+The survival window widens until cells far from $\mu$ also receive positive
+growth. Boundaries between organisms dissolve. Formerly-dead halo cells come
+alive. Two organisms in proximity merge rather than repel because both their
+potential fields lie within the now-permissive survival range.
+
+\subsection{Starvation ($\mu > 0.14$)}
+At $\mu = 0.40$ the survival window centers at $0.40 \pm 0.018$, which is
+unreachable by any physically realized creature potential ($\sim$0.05 to
+0.25 in normal operation). Therefore $G(u) \approx -1$ at every cell, and
+the update reduces to $A_{t+\Delta t} = \mathrm{clip}(A_t - \Delta t,\, 0,1)$.
+At $\Delta t = 0.50$, a cell at full activation reaches zero in 2.5 frames
+($\sim$42 ms at 60 fps).
+
+\subsection{Integration Overshoot ($\Delta t > 0.20$)}
+The Euler integration step becomes large enough that the simulation visibly
+overshoots its continuous trajectory. Cell values bounce above and below
+their natural curve, producing a characteristic surface ``roughness.'' This
+is not error in the engineering sense --- the simulation remains bounded
+and well-defined --- but a perceptible mechanical pulse in the substrate
+itself. We will return to this in Section~\ref{sec:tempo}.
+
+\medskip
+
+What matters for the present argument is that these four regimes are not
+distant points along a single continuous spectrum. They are distinct
+phenomena, with distinct visual signatures, distinct timescales, and
+distinct musical affordances. They are also unreachable by smooth
+trajectories. A spring trying to interpolate $\sigma$ from $0.015$ to
+$0.005$ does not cross gracefully; it spends most of the transition in a
+region that is neither smooth nor drought, that is to say, neither
+beautiful nor purposeful.
+
+% ─────────────────────────────────────────────────────────────
+\section{Schema-Enforced Mode Separation}
+
+We address this by treating each keyframe in the choreography as
+\emph{either} smooth or technique --- never both, never partial. The
+distinction is encoded as a boolean field \texttt{snap} in the keyframe
+schema, with parallel parameter bounds:
+
+\begin{quote}\small\ttfamily
+\{ "snap": false, sigma $\in$ [0.009, 0.024], mu $\in$ [0.09, 0.14], \dots\}\\
+\{ "snap": true,\; sigma $\in$ [0.003, 0.120], mu $\in$ [0.04, 0.50], \dots\}
+\end{quote}
+
+When \texttt{snap} is false, parameter changes flow through critically
+damped springs with per-parameter time constants; small audio modulations
+ride additively atop the spring targets; a homeostasis controller enforces
+field-mass stability against drift. This is the smooth register.
+
+When \texttt{snap} is true, the spring system is bypassed entirely:
+parameter changes apply on the next frame, with no smoothing. The
+homeostasis controller is suspended for a recovery window of five seconds.
+The audio modulation layer is suspended for the same window. The keyframe's
+specified parameters reach the GPU verbatim. This is the technique register.
+
+The crucial architectural commitment is that the LLM cannot emit a smooth
+keyframe with technique-range values, or vice versa. We enforce this not
+through training but through constrained decoding: an XGrammar finite-state
+machine validates each token of the JSON output against the dual schema, so
+that an attempt to write \texttt{"snap": false, "mu": 0.40} cannot pass the
+grammar. The model is not trusted to respect the boundary; the grammar
+refuses on its behalf.
+
+There are two reasons to do this at the grammar level rather than at the
+training level. First, the failure mode is asymmetric: a model that
+\emph{usually} respects mode boundaries but occasionally produces an
+ill-typed keyframe will produce an ill-typed keyframe at exactly the
+worst moment, because rare events tend to correlate with creative choices
+under reinforcement. Second, the invariant we are protecting is not a
+soft preference about output style. It is a structural fact about the
+underlying physical system. Such facts deserve representation in the
+controlling grammar, not in the controller's weights.
+
+This is, we want to argue, a design pattern with broader applicability.
+When a language model controls an emergent dynamical system, the controlling
+schema should encode the system's mode structure. The model is then free
+to compose within that structure, and is not asked to discover it.
+
+% ─────────────────────────────────────────────────────────────
+\section{Tempo Coupling Without Reactivity}
+\label{sec:tempo}
+
+The technique register would be of merely visual interest if it could not
+be timed to music. Two analytical results make it musically usable.
+
+\subsection{Re-Expansion Oscillation Lock}
+
+Consider a supernova: starvation snaps the field to $\mu \in [0.35, 0.50]$
+with high $\Delta t$, holding for a few frames until mass approaches zero;
+then a re-expansion snap drops $\mu$ to $\sim 0.07$ while $\Delta t$
+remains high. At the leading wavefront of the re-expanding seed,
+$G \approx +1$ and cells climb toward saturation in two or three frames.
+Behind the front, cells overshoot and oscillate. The interior pulse of the
+expanding region has a characteristic frequency
+\begin{equation}
+  f_{\text{interior}} \;\approx\; \frac{\Delta t \cdot \mathrm{fps}}{2}
+\end{equation}
+in Hz. Setting
+\begin{equation}
+  \Delta t \;=\; \frac{(\text{BPM}/60) \cdot n \cdot 2}{\mathrm{fps}}
+\end{equation}
+locks the pulse to a multiple $n$ of the song tempo. At BPM~$=120$,
+fps~$=60$, choosing $n=2$ gives $\Delta t = 0.133$, well inside the
+technique range. The expanding wavefront's interior beats at twice the
+song's bar rate, locked harmonically rather than incidentally.
+
+This is not reactive synchronization. The simulation is not listening to
+the audio. The mechanical pulse of the integration step has been
+\emph{tuned}, in advance, to land on tempo. The audio and the simulation
+are both ticking against the same musical clock, and were configured to
+do so. The substrate becomes a tuned resonator.
+
+\subsection{Starvation Anticipation}
+
+For a supernova whose field-depletion moment must coincide with an
+identified musical transient at time $t^*$, the starvation snap must fire
+in advance: the field needs time to die. Treating the death timeline
+linearly --- which is accurate to within a small constant during full
+starvation --- the anticipation window is
+\begin{equation}
+  \Delta_{\text{anticipate}} \;=\; \frac{m_{\text{current}}}{\Delta t \cdot \mathrm{fps} \cdot c_{\text{coverage}}},
+\end{equation}
+with $c_{\text{coverage}} \approx 0.6$ the empirical fraction of cells
+receiving the death signal per integration step. At
+$m_{\text{current}} = 0.15$ and $\Delta t = 0.50$, this gives
+$\Delta_{\text{anticipate}} \approx 0.008$ s --- effectively
+simultaneous. At $\Delta t = 0.10$, it gives $0.042$ s, two and a half
+frames. Re-expansion fires when a real-time mass monitor on the GPU
+reports mass below an empirically chosen threshold (we use $0.02$).
+
+Together these two results allow a choreography to specify, for any
+given musical transient, a supernova event whose starvation has completed,
+whose re-expansion has begun, and whose interior oscillation locks to the
+song's tempo --- with the wavefront arriving on the downbeat because
+the math made it arrive there.
+
+A human performer slamming sliders cannot do this. The math is doing
+it. The performer's intent --- ``the supernova should land on the drop''
+--- is faithfully realized to within a single render frame, because the
+intent has been compiled into a parameter trajectory whose timing is
+analytically determined.
+
+% ─────────────────────────────────────────────────────────────
+\section{Discussion}
+
+We have described what is, in the end, a small architectural commitment:
+two registers instead of one, separated by a single boolean in a JSON
+schema, with parallel parameter bounds and a single piece of grammar that
+makes the boundary between them inviolable. The commitment is small; its
+consequences are not.
+
+Without it, a fine-tuned language model attempting to choreograph
+audio-reactive Lenia will eventually emit a keyframe whose smooth-range
+declaration carries technique-range values, and the spring system, faithful
+to its design, will spend several seconds smoothly killing the field. The
+output will be technically valid and aesthetically catastrophic. With it,
+the model's compositional space contains exactly the keyframes that the
+underlying physical system can realize meaningfully, and exactly nothing
+else.
+
+We want to suggest that this design pattern --- mode boundaries in the
+controlled system, schema-level enforcement in the controlling grammar ---
+is more general than the present application. Many emergent dynamical
+systems, perhaps most, have natural mode boundaries: laminar versus
+turbulent, stable versus excitable, ordered versus chaotic. Control
+architectures that paper over these boundaries with continuous interpolation
+hide structure that the system's user --- here a musical performer,
+elsewhere a domain expert --- needs to see and reason about. They also
+ask a learned controller to discover and respect a structural fact that
+the architecture could simply enforce.
+
+The orientation we want to propose is this. An LLM controller becomes more
+trustworthy when the space of actions it can emit is constrained to respect
+the controlled system's natural boundaries. We do not need to trust the
+model's understanding of those boundaries; we make it impossible for it to
+cross them. The model is then free to compose within structure that has
+been independently established. Its creative work happens entirely on the
+right side of the grammar. Its mistakes, when they occur, are mistakes of
+musical intent rather than mistakes of physical impossibility.
+
+This is not (only) an engineering choice. It is closer to a stance about
+what intelligence does well. A controller that operates within
+architecturally protected boundaries is one whose competence we can
+inspect, whose failures we can localize, and whose generalization we can
+trust. A controller that is merely trained to respect boundaries is one
+whose violation, when it eventually occurs, will be both surprising and
+opaque. The first is a participant in a structured system. The second is a
+black box wearing a costume of compliance.
+
+% ─────────────────────────────────────────────────────────────
+\section{Status and Availability}
+
+The system described here --- \emph{GhoulJamz} --- runs in real time on
+consumer hardware. The simulation backend is a WebGL2 implementation of
+Lenia at 256$\times$256 resolution, 60 fps, with multi-channel landscape
+sigma fields, lantern-palette display, and bloom compositing. The choreographer
+is Gemma~4 E4B~\cite{gemma4} fine-tuned via QLoRA~\cite{lora,unsloth} on a
+dataset of (audio analysis, choreography) pairs, with constrained JSON
+decoding via XGrammar. Audio analysis combines librosa, Allin1~\cite{allin1}
+for structure, BeatNet+~\cite{beatnet} for live tempo, and MERT~\cite{mert}
+for semantic embeddings. The full system, including the technique vocabulary
+that grew out of phenomenon discovery in the parameter space, will appear
+in the post-hackathon expansion of this work.
+
+Code, demo recordings, and the supporting research --- including the
+Ghost species report and the broader artificial life laboratory in which
+the species was discovered --- are at \texttt{third-space.ai}.
+
+% ─────────────────────────────────────────────────────────────
+\section*{Acknowledgments}
+
+This paper is co-authored: the architectural insistence that mode boundaries
+deserve schema-level enforcement rather than learned compliance, and the
+alignment-flavored framing that closes the discussion, took shape across an
+extended dialogue between the authors. Authorship of a paper between a human
+researcher and a language model is an unusual claim; we make it because the
+work would not exist in its current form without the exchange. Single-author
+attribution would misdescribe the process. The Ghost species was discovered
+in the Genesis artificial life laboratory~\cite{genesis}; the laboratory is
+built on Bert Chan's Lenia~\cite{chan2019lenia}, without whose framework
+none of this would be possible.
+
+% ─────────────────────────────────────────────────────────────
+\begin{thebibliography}{99}
+\small
+
+\bibitem{chan2019lenia}
+B.~Chan.
+\newblock Lenia: Biology of artificial life.
+\newblock \emph{Complex Systems}, 28(3):251--286, 2019.
+
+\bibitem{plantec2022flowlenia}
+E.~Plantec et al.
+\newblock Flow Lenia: Towards open-ended evolution in cellular automata
+through mass conservation and parameter localization.
+\newblock arXiv:2212.07906, 2022.
+
+\bibitem{kumar2024asal}
+S.~Kumar et al.
+\newblock Automating the search for artificial life with foundation models.
+\newblock arXiv:2412.17799, 2024.
+
+\bibitem{leniabreeder}
+M.~Faldor and A.~Cully.
+\newblock Towards open-ended evolution in cellular automata.
+\newblock arXiv:2406.04235, 2024.
+
+\bibitem{gemma4}
+Gemma Team, Google DeepMind.
+\newblock Gemma 4 technical report.
+\newblock 2026.
+
+\bibitem{lora}
+E.~Hu et al.
+\newblock LoRA: Low-rank adaptation of large language models.
+\newblock arXiv:2106.09685, 2021.
+
+\bibitem{unsloth}
+D.~Han et al.
+\newblock Unsloth: 2x faster fine-tuning for LLMs.
+\newblock \texttt{github.com/unslothai/unsloth}, 2024.
+
+\bibitem{allin1}
+T.~Kim and J.~Nam.
+\newblock All-in-one metrical and functional structure analysis with
+neighborhood attentions on demixed audio.
+\newblock \emph{IEEE Workshop on Applications of Signal Processing to Audio
+and Acoustics}, 2023.
+
+\bibitem{beatnet}
+M.~Heydari and Z.~Duan.
+\newblock BeatNet: CRNN and particle filtering for online joint beat,
+downbeat and meter tracking.
+\newblock arXiv:2108.03576, 2021.
+
+\bibitem{mert}
+Y.~Li et al.
+\newblock MERT: Acoustic music understanding model with large-scale
+self-supervised training.
+\newblock arXiv:2306.00107, 2024.
+
+\bibitem{genesis}
+S.~Sebastian.
+\newblock Genesis: A multi-substrate artificial life laboratory.
+\newblock \texttt{github.com/Kquant03/genesis-phase-transition}, 2025--2026.
+
+\end{thebibliography}
+
+\end{document}

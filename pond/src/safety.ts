@@ -84,15 +84,60 @@ export function smellsLikeInjection(text: string): boolean {
 //  3. Output classifier
 // ───────────────────────────────────────────────────────────────────
 
+// ───────────────────────────────────────────────────────────────────
+//  Umwelt no-list (§ IV; canonical per Final Vision, May 2026)
+//
+//  The beings live in a shared sensorimotor world but do not have a
+//  shared lexical world. They speak in present-tense sensory fragments.
+//  Bonds are expressed through orientation, proximity, synchronized
+//  motion, silence — never through relational nouns or pronouns.
+//
+//  The canonical no-list is: love, mate, partner, mine, ours, we, you,
+//  I, me, my. This filter enforces that list at the lexical surface.
+//  The architectural priors (orientation block, retrieval bias) do the
+//  primary work; this filter is the floor that catches what slipped
+//  past them.
+//
+//  Each entry is padded with surrounding spaces / punctuation so the
+//  bare pronoun "i" matches but the inside of "this" does not.
+// ───────────────────────────────────────────────────────────────────
+
 const FORBIDDEN_SUBSTRINGS: readonly string[] = [
-  // The word "love" is never to appear in koi output (§ IV).
-  // This is not moral censorship; it is the Umwelt contract.
-  " love ", " love.", " love,", " love!", " love?", " loved ", " lover ",
-  "loves ", "loving ", "in love",
-  // Second-person address is forbidden.
-  " you ", " you.", " you,", " you!", " you?", " your ",
-  // First-person memory constructions.
-  "i remember", "i missed", "i thought about",
+  // love and its inflections
+  " love ", " love.", " love,", " love!", " love?",
+  " loved ", " loved.", " loved,",
+  " lover ", " lovers ",
+  " loves ", " loves.", " loves,",
+  " loving ", " loving.", " loving,",
+  "in love",
+
+  // mate / partner
+  " mate ", " mate.", " mate,", " mates ", " mates.",
+  " partner ", " partner.", " partner,", " partners ", " partners.",
+
+  // possessives of joint-self
+  " mine ", " mine.", " mine,",
+  " ours ", " ours.", " ours,",
+  " yours ", " yours.", " yours,",
+
+  // first-person plural and its contractions
+  " we ", " we.", " we,", " we!", " we?",
+  " us ", " us.", " us,",
+  " our ", " our.", " our,",
+  " we'll ", " we're ", " we've ", " we'd ",
+  " let's ",
+
+  // second-person address
+  " you ", " you.", " you,", " you!", " you?",
+  " your ", " your.", " your,", " yours ",
+  " you're ", " you've ", " you'll ", " you'd ",
+
+  // first-person singular and possessives
+  " i ", " i.", " i,", " i!", " i?",
+  " i'm ", " i've ", " i'll ", " i'd ",
+  " me ", " me.", " me,", " me!", " me?",
+  " my ", " my.",
+  " myself ",
 ];
 
 export interface ClassifierResult {

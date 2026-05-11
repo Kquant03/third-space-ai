@@ -85,6 +85,8 @@ DIRECTORY TREE
   📄 wrangler.toml     87 loc  ~ 1.1k tok  [TOML]
 📁 public/
   📁 audio/
+    📁 ghost/
+      📄 hildegard-voice.mid      2 loc  ~  279 tok
     📁 midi/
       📄 allegri-miserere.mid     57 loc  ~ 5.6k tok
       📄 bach-bwv622.mid    190 loc  ~ 1.8k tok
@@ -230,7 +232,7 @@ DIRECTORY TREE
     📄 PDFReaderClient.tsx     81 loc  ~  582 tok  [TypeScript/React]
     📄 PondDiagnostic.tsx    586 loc  ~ 4.9k tok  [TypeScript/React]
     📄 PondWhispers.tsx    194 loc  ~ 1.7k tok  [TypeScript/React]
-    📄 SiteAudio.tsx    702 loc  ~ 6.2k tok  [TypeScript/React]
+    📄 SiteAudio.tsx    707 loc  ~ 6.3k tok  [TypeScript/React]
     📄 SiteChrome.tsx    441 loc  ~ 3.6k tok  [TypeScript/React]
     📄 SiteHeader.tsx    782 loc  ~ 6.3k tok  [TypeScript/React]
     📄 SmoothScroll.tsx     53 loc  ~  391 tok  [TypeScript/React]
@@ -239,13 +241,14 @@ DIRECTORY TREE
   📁 data/
     📄 papers.ts    184 loc  ~ 2.1k tok  [TypeScript]
     📄 substrates.ts    100 loc  ~ 1.0k tok  [TypeScript]
-    📄 tracks.ts    540 loc  ~ 4.8k tok  [TypeScript]
+    📄 tracks.ts    559 loc  ~ 5.0k tok  [TypeScript]
   📁 lib/
     📄 gsapConfig.ts      9 loc  ~   52 tok  [TypeScript]
     📄 pond-types.ts    305 loc  ~ 2.2k tok  [TypeScript]
     📄 shaders.ts    121 loc  ~  954 tok  [TypeScript]
     📄 usePond.ts   1214 loc  ~  10k tok  [TypeScript]
 📄 .gitignore     70 loc  ~  188 tok
+📄 .npmrc      1 loc  ~    5 tok
 📄 AGENTS.md      5 loc  ~   93 tok  [Markdown]
 📄 CLAUDE.md      1 loc  ~    3 tok  [Markdown]
 📄 eslint.config.mjs     18 loc  ~  116 tok  [JavaScript]
@@ -260,8 +263,8 @@ DIRECTORY TREE
 ========================================================================
 LOC + TOKENS BY LANGUAGE
 
-  TypeScript         25853 loc  ~  233k tok  156% ctx   83 files  █████████████
-  TypeScript/React   27537 loc  ~  224k tok  150% ctx   67 files  ████████████
+  TypeScript         25872 loc  ~  233k tok  156% ctx   83 files  █████████████
+  TypeScript/React   27542 loc  ~  225k tok  150% ctx   67 files  ████████████
   Markdown            1388 loc  ~   34k tok   23% ctx    7 files  █
   Python              2160 loc  ~   20k tok   14% ctx    7 files  █
   SQL                  329 loc  ~  4.5k tok    3% ctx    1 files  
@@ -271,9 +274,9 @@ LOC + TOKENS BY LANGUAGE
   Shell                 67 loc  ~   480 tok    0% ctx    1 files  
   JavaScript            25 loc  ~   140 tok    0% ctx    2 files  
 
-  TOTAL              57903 loc  ~  523k tok  349% of usable context
+  TOTAL              57927 loc  ~  524k tok  349% of usable context
 
-  ⚠️  EXCEEDS usable context by ~373k tokens.
+  ⚠️  EXCEEDS usable context by ~374k tokens.
      Share files selectively — do NOT paste the whole repo.
 
 ========================================================================
@@ -301,14 +304,14 @@ FILES BY TOKEN COST  (heaviest context cost first)
   ~  7.1k    736     5%  TypeScript              src/components/genesis/lenia-expanded/useLeniaExpanded.ts
   ~  6.4k    667     4%  TypeScript              pond/src/constants.ts
   ~  6.3k    782     4%  TypeScript/React        src/components/SiteHeader.tsx
+  ~  6.3k    707     4%  TypeScript/React        src/components/SiteAudio.tsx
   ~  6.2k    670     4%  TypeScript              pond/src/cognition-log.ts
-  ~  6.2k    702     4%  TypeScript/React        src/components/SiteAudio.tsx
   ~  5.6k    757     4%  TypeScript/React        src/components/PDFReader.tsx
   ~  5.3k    604     4%  TypeScript              pond/src/kinematics.ts
   ~  5.1k    589     3%  TypeScript              pond/src/artifacts.ts
+  ~  5.0k    559     3%  TypeScript              src/data/tracks.ts
   ~  4.9k    586     3%  TypeScript/React        src/components/PondDiagnostic.tsx
   ~  4.8k    498     3%  TypeScript/React        src/components/genesis/filter/FilterExperience.tsx
-  ~  4.8k    540     3%  TypeScript              src/data/tracks.ts
   ~  4.7k    553     3%  TypeScript/React        src/components/genesis/filter/PhasePlot.tsx
   ~  4.5k    329     3%  SQL                     pond/src/schema.sql
   ~  4.3k    209     3%  TypeScript              src/content/posts.ts
@@ -456,4 +459,4 @@ FILES BY TOKEN COST  (heaviest context cost first)
   ~    24      7     0%  JavaScript              postcss.config.mjs
   ~     3      1     0%  Markdown                CLAUDE.md
 
-  Cumulative if all pasted: ~523k (349% of usable context)
+  Cumulative if all pasted: ~524k (349% of usable context)

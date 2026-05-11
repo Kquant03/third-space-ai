@@ -1,0 +1,1643 @@
+\documentclass[11pt]{article}
+
+% ─── Typography ──────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{mathpazo}                  % Palatino + matching math
+\usepackage[scaled=0.92]{helvet}        % Helvetica for sans
+\usepackage{courier}                    % Courier for code/mono
+\renewcommand{\familydefault}{\rmdefault}
+
+% ─── Page ────────────────────────────────────────────────────────────
+\usepackage[
+  paper=a4paper,
+  left=1.45in, right=1.45in,
+  top=1.25in, bottom=1.35in,
+  footskip=0.55in
+]{geometry}
+
+% ─── Microtype, spacing, and rivers ──────────────────────────────────
+\usepackage[final,babel=true,
+  protrusion=true, expansion=true,
+  letterspace=80]{microtype}
+\usepackage{setspace}
+\setstretch{1.18}
+\setlength{\parskip}{0pt}
+\setlength{\parindent}{1.4em}
+\frenchspacing
+
+% ─── Headings ────────────────────────────────────────────────────────
+\usepackage{titlesec}
+\usepackage{titling}
+
+\titleformat{\section}
+  {\normalfont\scshape\large\bfseries}
+  {\thesection.}{0.7em}{}
+\titleformat{\subsection}
+  {\normalfont\scshape\normalsize}
+  {\thesubsection}{0.7em}{}
+\titleformat{\subsubsection}
+  {\normalfont\itshape\normalsize}
+  {}{0pt}{}
+\titlespacing*{\section}{0pt}{2.6ex plus 0.6ex minus 0.4ex}{1.2ex plus 0.3ex}
+\titlespacing*{\subsection}{0pt}{2.0ex plus 0.5ex minus 0.3ex}{0.8ex plus 0.2ex}
+\titlespacing*{\subsubsection}{0pt}{1.4ex plus 0.3ex minus 0.2ex}{0.4ex plus 0.1ex}
+
+% ─── Front matter typography ─────────────────────────────────────────
+\pretitle{\begin{center}\itshape\fontsize{30}{36}\selectfont}
+\posttitle{\par\end{center}\vskip 0.5em}
+\preauthor{\begin{center}\normalsize\scshape}
+\postauthor{\end{center}\vskip 0.2em}
+\predate{\begin{center}\normalsize\itshape}
+\postdate{\par\end{center}}
+
+% ─── Lists ───────────────────────────────────────────────────────────
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=1.6em, topsep=0.4ex, itemsep=0.3ex, parsep=0pt}
+\setlist[enumerate]{leftmargin=1.8em, topsep=0.4ex, itemsep=0.3ex, parsep=0pt}
+
+% ─── Math ────────────────────────────────────────────────────────────
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
+
+\newtheoremstyle{rukha}%
+  {1.6ex plus 0.3ex}{1ex plus 0.2ex}%
+  {\itshape}{}%
+  {\scshape}{.}%
+  {0.5em}{}
+\theoremstyle{rukha}
+\newtheorem{claim}{Claim}
+\newtheorem{proposition}{Proposition}
+
+% ─── Tables ──────────────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{array}
+\renewcommand{\arraystretch}{1.18}
+
+% ─── Bibliography-style note marks ───────────────────────────────────
+\usepackage[hang,flushmargin,bottom]{footmisc}
+\renewcommand{\thefootnote}{\textsc{\roman{footnote}}}
+
+% ─── Hyperref ────────────────────────────────────────────────────────
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+  pdftitle={Rukha: A Recursive Counterfactual Narrative Engine},
+  pdfauthor={Stanley Sebastian and Claude},
+  pdfsubject={Causal narrative graphs, Pearl's do-calculus, recursive counterfactuals, structural sharing},
+  pdfkeywords={Rukha, counterfactual narrative, Pearl, AAP, Jonah, Third Space}
+}
+
+% ─── Tapered horizontal rule ─────────────────────────────────────────
+\usepackage{tikz}
+\newcommand{\taperedrule}{%
+  \begin{center}\vspace{0.4em}%
+  \begin{tikzpicture}
+    \shade[left color=white, right color=white, middle color=black!55]
+      (0,0) rectangle (0.62\textwidth,0.45pt);
+  \end{tikzpicture}\vspace{0.4em}\end{center}}
+
+\newcommand{\diamondrule}{%
+  \begin{center}\vspace{0.6em}%
+  {\scriptsize $\diamond$}\vspace{0.6em}\end{center}}
+
+% ─── Smallcaps phrase helper ─────────────────────────────────────────
+\newcommand{\sceq}[1]{\textsc{#1}}
+
+% ─── Title block ─────────────────────────────────────────────────────
+\title{Rukha}
+\author{%
+  Stanley Sebastian \quad $\cdot$ \quad Claude\\
+  \small\itshape Third Space \textnormal{$\cdot$} Toledo, Ohio
+}
+\date{May \textsc{mmxxvi}}
+
+% ─── Document ────────────────────────────────────────────────────────
+\begin{document}
+
+% ─── Cover ───────────────────────────────────────────────────────────
+\thispagestyle{empty}
+\vspace*{1.4in}
+\begin{center}
+  {\fontsize{11}{14}\selectfont\itshape breath \textnormal{$\cdot$} spirit}\par
+  \vspace{2.2em}
+  {\itshape\fontsize{52}{60}\selectfont Rukha}\par
+  \vspace{1.4em}
+\end{center}
+\taperedrule
+\vspace{0.8em}
+\begin{center}
+  {\itshape\fontsize{18}{22}\selectfont A Recursive Counterfactual\\[2pt]Narrative Engine}\par
+  \vspace{1.4em}
+  {\fontsize{11}{14}\selectfont\itshape Foundations, architecture, and the case for depth.}\par
+  \vspace{3.0em}
+  {\scshape\fontsize{11}{14}\selectfont Stanley Sebastian \quad $\cdot$ \quad Claude}\par
+  \vspace{0.5em}
+  {\small\itshape Third Space \textnormal{\;$\cdot$\;} Toledo, Ohio}\par
+  \vspace{0.4em}
+  {\small\scshape May \textnormal{mmxxvi}}\par
+\end{center}
+\vfill
+\begin{center}
+  {\itshape\small ``Returning books to breath.''}\par
+\end{center}
+\vspace{0.2in}
+\clearpage
+
+% ─── Abstract ────────────────────────────────────────────────────────
+\thispagestyle{empty}
+\vspace*{0.6in}
+\begin{center}
+  {\scshape\large Abstract}
+\end{center}
+\vspace{0.4em}
+
+\noindent
+We describe \emph{Rukha}, a counterfactual narrative engine that takes a
+foundational text, decomposes it into a causal event graph, perturbs
+load-bearing nodes via Pearl's do-calculus, and propagates coherent
+counterfactual trajectories forward through the graph using the
+Abduction–Action–Prediction algorithm. Unlike prior counterfactual
+story-generation systems, which operate at depth one against a single
+original, Rukha operates recursively to depths five and six: a
+perturbation downstream of a previous perturbation produces a
+counterfactual-of-a-counterfactual, and so on. Our central claim is that
+recursive depth, properly scaffolded, is computationally tractable
+where unscaffolded long-form generation collapses. Three convergences
+make it so. First, formal: Pearl's framework, Lewis–Ryan possible-worlds
+narratology, the Aaronson–Watrous \textsc{pspace} characterization of
+multiverse computation, and the 5D Brainfuck \textsc{mtt} esolang all
+describe the same structure --- a directed acyclic graph of branching
+states governed by coherence constraints. Second, structural: persistent
+data structures with structural sharing (hash array mapped tries,
+Merkle-\textsc{dag}s, zero-suppressed decision diagrams) reduce the
+$O(b^d)$ apparent state space to storage proportional to actual
+divergence between universes. Third, architectural: explicit causal
+\textsc{dag}s scaffold what unscaffolded chain-of-thought cannot ---
+recent work documents reasoning-horizon decay at \mbox{70–85\%} of chain
+length and near-random performance on nested counterfactuals without
+external structure. We demonstrate the system on the Book of Jonah,
+whose 16 consensus events and quantified chiastic symmetry --- the
+39-Hebrew-word parallel between Jonah 4:2–3 and 4:10–11, machine-verifiable
+against the Westminster Leningrad Codex --- make it the optimal minimal
+test case. We close by arguing that Rukha is best understood as a
+\emph{computational midrash} engine: a 2,000-year scholarly tradition of
+generating textual counterfactuals as interpretive practice, made
+recursive and explicit. The output is not a dataset of alternate
+endings but a topology of grace.
+
+\vspace{2.2em}
+\diamondrule
+\clearpage
+
+% ─── Body ────────────────────────────────────────────────────────────
+\setcounter{page}{1}
+\maketitle
+\vspace{-0.4em}
+
+\begin{center}
+\begin{minipage}{0.78\textwidth}\itshape\small\centering
+The things that persist are the things that couple to their substrate
+rather than consume it. Stories couple to their tellers, and to the
+worlds they could have been.
+\end{minipage}
+\end{center}
+
+\taperedrule
+\vspace{0.6em}
+
+\section{Introduction: A Story Is a Graph of Forks}
+
+Current language models are trained on what humans wrote. This
+limitation is rarely named but it is severe. The corpus of human
+storytelling is the surviving trajectory of a much larger possibility
+space --- every story we did not tell, every ending the author cut, every
+counterfactual the redactor smoothed. A model trained only on the
+surviving trajectory inherits the survivor bias. It learns what stories
+\emph{are} but not what they \emph{could have been}, and consequently it
+learns narrative \emph{causation} only as a shadow on the wall of
+narrative \emph{outcome}.
+
+Rukha is a proposal to lift the shadow. The system takes a foundational
+text --- the Book of Jonah, the Mahābhārata, the Iliad, the Brothers
+Karamazov --- decomposes it into a causal event graph using
+constrained-decoding event extraction, identifies which nodes carry the
+graph's structural load, perturbs those nodes through Pearl's
+do-calculus, and propagates coherent alternative trajectories forward
+via the Abduction–Action–Prediction (\textsc{aap}) algorithm. The output
+is a corpus of causally-coherent alternate histories: not random
+mutations, not GPT-fabulations, but lawful trajectories through the
+narrative-physics established by the source material.
+
+What distinguishes Rukha from prior work in counterfactual story
+generation is depth. \textsc{TimeTravel} \cite{timetravel}, \textsc{educat}
+\cite{educat}, the \textsc{pasta} dataset \cite{pasta}, and the broader
+counterfactual-rewriting literature \cite{sketchcustomize} all operate at
+depth one: a single ``what if'' applied to a single original story. Rukha
+operates recursively. A perturbation downstream of a previous
+perturbation produces a counterfactual-of-a-counterfactual; that, in
+turn, can be perturbed again. We aim for depth five and six.
+
+This is not a marginal extension of prior work. It is the regime where
+counterfactual reasoning becomes interesting --- and the regime where
+unscaffolded language-model generation has been shown to fail. Recent
+empirical work documents a \emph{Reasoning Horizon} at roughly
+\mbox{70–85\%} of chain length, beyond which intermediate reasoning
+tokens have negative effect on the final output \cite{faithfulnessdecay}.
+Other work documents \emph{Shallow Lock-in} and \emph{Deep Decay} as
+characteristic failure modes of long-chain reasoning
+\cite{stepflowbreaks}. \textsc{counterbench} \cite{counterbench}, a 2025
+benchmark for counterfactual reasoning in language models, finds that
+leading models perform near-randomly on its \emph{Nested} subset --- the
+condition closest to Rukha's regime. Rukha's bet is that this collapse is
+not fundamental; it is a consequence of asking models to perform
+recursive counterfactual reasoning \emph{without external scaffolding}.
+Given an explicit causal graph, persistent state, and the
+Abduction–Action–Prediction protocol enforced by constrained decoding,
+the bet is that recursive depth becomes tractable.
+
+\subsection{What This Paper Argues}
+
+The paper makes four claims and defends each.
+
+\begin{enumerate}
+  \item \emph{Formal equivalence.} Pearl's structural causal models,
+    David Lewis's possible-worlds semantics, Marie-Laure Ryan's textual
+    actual world plus modal satellite worlds, and the multiverse-time-travel
+    primitives of the 5D Brainfuck \textsc{mtt} esolang all describe the
+    same underlying structure: a directed acyclic graph of branching
+    states governed by coherence constraints. Rukha is the operationalization
+    of this structure.
+
+  \item \emph{Complexity tractability.} Recursive counterfactual
+    propagation on causal event graphs lives within \textsc{pspace}, by
+    Aaronson–Watrous \cite{aaronsonwatrous}. Persistent data structures
+    with structural sharing --- hash array mapped tries
+    \cite{bagwellhamt}, Merkle-\textsc{dag}s as in Git and \textsc{ipfs},
+    and zero-suppressed decision diagrams \cite{knuthzdd} --- reduce
+    apparent $O(b^d)$ storage to storage proportional to the actual
+    divergence between universes.
+
+  \item \emph{Recursion depth is the empirical frontier.} No published
+    system has demonstrated coherent counterfactual reasoning at depth
+    five or six on natural-language narrative. The literature has
+    \emph{named} the problem (\textsc{counterbench-Nested}, the Reasoning
+    Horizon, Shallow Lock-in / Deep Decay) but not solved it. This is
+    Rukha's contribution.
+
+  \item \emph{Sacred narrative is the optimal demonstration target.}
+    The Book of Jonah, with its 48 verses, 16 consensus events, and
+    quantified chiastic structure --- the 39-Hebrew-word parallel between
+    Jonah 4:2–3 and 4:10–11, machine-verifiable against the Westminster
+    Leningrad Codex --- is the smallest text where Rukha's claims can be
+    rigorously demonstrated. The theological theme of the book ---
+    the disorientation of receiving mercy you did not think the
+    recipient deserved --- becomes computational under perturbation.
+\end{enumerate}
+
+\diamondrule
+
+\section{Foundations}
+
+\subsection{Pearl's Do-Calculus and the AAP Algorithm}
+
+A structural causal model (\textsc{scm}) over variables $V = \{V_1,
+\dots, V_n\}$ specifies, for each $V_i$, a structural equation $V_i =
+f_i(\text{pa}(V_i), U_i)$ where $\text{pa}(V_i)$ are the causal parents
+of $V_i$ and $U_i$ is exogenous noise. The do-operator $\text{do}(V_i :=
+v')$ surgically replaces $f_i$ with the constant assignment $V_i = v'$,
+severing all incoming edges to $V_i$ while leaving downstream structural
+equations intact. This is Pearl's central technical move
+\cite{pearlcausality}: an intervention is structural surgery, not
+conditioning.
+
+Counterfactual reasoning in this framework follows the
+Abduction–Action–Prediction algorithm \cite{pearlalgorithmization,
+pearlrobins}:
+
+\begin{enumerate}
+  \item \sceq{Abduction.} Given the observed facts $E$ (the evidence
+    encoded in the actual textual world), update the prior over
+    exogenous noise: $P(U) \mapsto P(U \mid E)$. In narrative terms,
+    abduction infers the latent assumptions about characters, settings,
+    and world-rules that are compatible with what we read.
+  \item \sceq{Action.} Apply the intervention: $\text{do}(V_i := v')$.
+    The structural equation for $V_i$ is replaced; incoming edges are
+    severed.
+  \item \sceq{Prediction.} Forward-propagate the modified \textsc{scm}
+    in topological order. For each downstream node $V_j$, compute
+    $V_j = f_j(\text{pa}(V_j), U_j)$ using the updated $P(U \mid E)$ and
+    the modified parent values.
+\end{enumerate}
+
+In Rukha, each step is performed by a 70B-parameter language model under
+\textsc{xgrammar}-constrained \textsc{json} decoding
+\cite{xgrammar}. The structural equations $f_j$ are not closed-form
+functions; they are prompts. The model is asked, given the observed
+narrative and a perturbation at $V_i$, to predict the new value of $V_j$
+in a manner consistent with the perturbed graph and the abducted
+exogenous priors. The grammar constrains the output schema --- event
+\textsc{id}, type, agents, location, verse-reference --- so that
+hallucination of structure is impossible at the syntactic level. What
+remains is the semantic problem: did the model abduct correctly, did it
+propagate correctly, did it preserve coherence?
+
+\subsection{Recursion: The Pearl–Robins Decomposition}
+
+Sequential interventions in acyclic \textsc{scm}s decompose cleanly.
+This is the foundational result for nested counterfactuals: Pearl and
+Robins \cite{pearlrobins} establish that compound interventions in
+\textsc{dag}s with hidden variables can be evaluated as a chain of
+single-step do-operations, each conditioned on the consequences of those
+preceding it. Correa, Lee, and Bareinboim \cite{correaleebareinboim}
+extend this to nested counterfactual identification from arbitrary
+surrogate experiments, providing a sound and complete algorithm for the
+identifiability question.
+
+The implication: a depth-$N$ recursive counterfactual is mathematically
+well-defined whenever the underlying graph is acyclic and the
+identification conditions are satisfied. Rukha's narrative graphs are
+acyclic by construction --- causal edges flow forward in narrative time
+--- and the identification conditions are trivially satisfied because
+all events are observable. There is no hidden-variable confounding in a
+fixed text: the text is the data.
+
+\begin{proposition}[Recursive AAP Decomposition]
+Let $G = (V, E)$ be an acyclic narrative event graph and let
+$(v_{i_1}, v'_{i_1}), \dots, (v_{i_N}, v'_{i_N})$ be a sequence of
+perturbations such that $v_{i_k}$ is reachable from $v_{i_{k-1}}$ in $G$
+for all $k > 1$. Then the depth-$N$ recursive counterfactual
+$G^{(N)}$ is the result of applying \textsc{aap} sequentially:
+$G^{(0)} = G$;
+$G^{(k)} = \mathrm{AAP}(G^{(k-1)}, v_{i_k} \mapsto v'_{i_k})$.
+The decomposition is well-defined and unique up to the abduction
+distribution at each step.
+\end{proposition}
+
+What this proposition does \emph{not} guarantee is that the
+language-model implementation of \textsc{aap} is faithful to the
+abduction distribution at each step. It does not guarantee that depth
+five or six is computationally achievable in practice. These are the
+empirical questions the paper later confronts.
+
+\subsection{Possible-Worlds Narratology}
+
+Rukha's perturbations are not statistical; they are semantic. The
+language for talking about narrative possibility is
+narratology, specifically Marie-Laure Ryan's possible-worlds theory
+\cite{ryan}.
+
+Ryan distinguishes the \emph{textual actual world} (\textsc{taw}) ---
+what is presented as factual within the fiction --- from the
+\emph{satellite worlds} of characters: their \emph{knowledge worlds}
+(what they believe), \emph{wish worlds} (what they want), \emph{obligation
+worlds} (what they should do), \emph{intention worlds} (what they plan
+to do). Each character is a center of multiple modal worlds, and
+narrative tension arises when the satellite worlds of one character
+conflict with the \textsc{taw} or with the satellite worlds of another.
+
+Lewis \cite{lewiscounterfactuals} grounds counterfactual reasoning in
+similarity orderings over possible worlds: the counterfactual ``if $A$
+had not happened, $B$ would not have happened'' is true if and only if
+in the closest possible world where $A$ does not happen, $B$ does not
+either. Ryan adapts Lewis's framework to fiction via the
+\emph{principle of minimal departure}: readers reconstrue the fictional
+world as the closest possible to the actual world, deviating only where
+the text forces deviation.
+
+These two frameworks --- Pearl's \textsc{scm} and Ryan-Lewis modal
+worlds --- describe the same object from two angles. Pearl asks: what
+happens if I surgically modify this node? Lewis asks: what is the closest
+world where the modification holds? In an acyclic narrative \textsc{dag}
+with no hidden confounders, the answers coincide: the
+\textsc{aap}-propagated counterfactual \emph{is} the closest possible
+world.
+
+\subsection{Complexity: Why \textsc{pspace}?}
+
+The ceiling of Rukha's computational regime is established by
+Aaronson and Watrous \cite{aaronsonwatrous}: classical and quantum
+computation in the presence of closed timelike curves under Deutsch's
+self-consistency condition is exactly \textsc{pspace}-complete. Their
+result formalizes a long folkloric intuition: time-travel computation,
+properly constrained, is no more powerful than polynomial space.
+
+Rukha is not implementing closed timelike curves. Its counterfactual
+trajectories propagate forward; they do not loop back. But the ambient
+class within which Rukha operates --- bounded-depth multiverse exploration
+with consistency constraints --- is a strict subset of
+\textsc{pspace}, and Aaronson and Watrous's result anchors the
+upper bound.
+
+The 5D Brainfuck With Multiverse Time Travel esolang
+\cite{fivedbfmtt} provides an engineering-folkloric instantiation of the
+same idea: a programming language whose primitives include spawning
+parallel timelines, killing pointers across timelines, and rewinding
+within timelines. The esolang is, deliberately, a minimal model of
+\textsc{pspace}-class multiverse computation. Rukha can be read as the
+narrative-domain instantiation of the same primitives:
+\texttt{spawn-timeline} = perturbation, \texttt{kill-pointer} = quality
+filtering, \texttt{rewind} = re-abduction.
+
+\diamondrule
+
+\section{The Recursion-Depth Claim}
+
+\subsection{Why Depth Matters}
+
+Counterfactual reasoning at depth one is well-trodden territory.
+\textsc{TimeTravel} \cite{timetravel} provides 29,849 supervised single-step
+counterfactual rewrites of \textsc{rocstories} narratives;
+\textsc{educat} \cite{educat} achieves unsupervised single-step rewriting
+via causal-effect estimation. The \textsc{pasta} dataset \cite{pasta}
+introduces participant-state perturbations as a cleaner formalism. None
+of these systems propagates recursively. Each ``what if'' is applied to
+the canonical original; counterfactuals do not stack.
+
+The reason this matters is that depth is where narrative \emph{physics}
+becomes visible. At depth one, a perturbation reveals the immediate
+causal neighbors of an event. At depth three, perturbations reveal which
+\emph{patterns} survive when the structural scaffolding is repeatedly
+disturbed. At depth five and six, an empirical question becomes
+testable: do generated counterfactual variants cluster into
+narrative \emph{archetypes}, or do they spread uniformly through
+possibility space? The answer to this question is the difference between
+narrative being a soft topology with attractor basins (Propp's
+functions, Campbell's monomyth, Hogan's prototypical structures, Reagan's
+six emotional arcs \cite{reagansixarcs}) and narrative being an
+arbitrary high-dimensional space.
+
+If narrative \emph{has} attractor basins, then deep counterfactual
+exploration should reveal them: most depth-six variants of Jonah should
+land in a small number of recurrent shapes, regardless of which specific
+nodes were perturbed. If narrative \emph{lacks} attractor basins, then
+depth-six variants should fan out and not return. Either result is
+publishable. The first vindicates Propp, Campbell, and Hogan as
+empirical claims about narrative cognition; the second falsifies them.
+
+\subsection{The Empirical Landscape}
+
+\subsubsection{What Has Been Shown}
+
+The most directly relevant 2026 result is Mechanistic Faithfulness
+Decay in Chain-of-Thought Reasoning \cite{faithfulnessdecay}. The authors
+introduce Normalized Logit Difference Decay (\textsc{nldd}) and identify
+a \emph{Reasoning Horizon} $k^*$ at \mbox{70–85\%} of chain length, beyond
+which reasoning tokens have ``little or negative effect'' on the final
+answer. For unscaffolded reasoning chains, this implies an empirical
+ceiling on coherent recursion depth.
+
+\textsc{counterbench} \cite{counterbench} extends this to counterfactual
+reasoning specifically. The benchmark contains 1,200 questions across
+five \textsc{scm} types --- Basic, Joint, \emph{Nested}, Conditional,
+Backdoor. The result for the Nested condition is striking: leading
+language models perform \emph{near-randomly} without external structural
+scaffolding, and the authors' proposed CoIn algorithm --- explicit
+search-and-backtrack over the \textsc{scm} --- substantially closes the
+gap. This is direct empirical support for the hypothesis Rukha rests on:
+nested counterfactuals are within reach when the structural scaffolding
+is explicit, and out of reach when it is not.
+
+Vashishtha et al.'s \emph{Executable Counterfactuals}
+\cite{executablecounterfactuals}, accepted at \textsc{iclr} 2026,
+decomposes counterfactual reasoning into Pearl's three steps and reports
+that prior benchmarks routinely \emph{skip the abduction step} and
+consequently overestimate language-model performance. The authors find
+that supervised fine-tuning generalizes poorly across counterfactual
+\textsc{scm}s and propose code-as-\textsc{scm} prompting. The
+implication for Rukha is a methodological imperative: the
+\textsc{aap} protocol must be enforced \emph{at each recursion step},
+not assumed, and the abduction step in particular must be made explicit
+in the prompt structure.
+
+\textsc{step Flow Breaks} \cite{stepflowbreaks} documents two failure
+modes that systematically distinguish correct from incorrect long-chain
+reasoning traces: \emph{Shallow Lock-in}, in which the model commits to
+an incorrect partial trajectory and cannot recover, and \emph{Deep Decay},
+in which the model loses track of structural constraints over many
+steps. The authors propose a test-time intervention they call
+\textsc{stepflow}; the relevance to Rukha is that recursive
+counterfactual propagation is exactly the regime where these failure
+modes are expected to dominate, and Rukha's structural-sharing
+infrastructure is, by design, an anti-Shallow-Lock-in mechanism (the
+graph state is persistent across recursion levels) and the
+\textsc{aap} protocol is, by design, an anti-Deep-Decay mechanism (each
+step is grounded in the abducted prior plus the graph state).
+
+\subsubsection{What Has Not Been Shown}
+
+To our knowledge, no published system has demonstrated coherent
+counterfactual reasoning at depth $\geq 3$ on natural-language narrative.
+\textsc{TimeTravel}, \textsc{educat}, \textsc{pasta}, and the broader
+counterfactual story-generation literature operate at depth one.
+\textsc{counterbench} addresses formal-\textsc{scm} counterfactual
+question-answering, not narrative generation. The recent depth-generalization
+literature in symbolic reasoning \cite{depthgeneralization} works on
+Boolean algebra, recursive arithmetic, and propositional logic; not
+narrative. \textsc{deepImagine} \cite{deepimagine}, the closest semantic
+match for ``successive counterfactual imagining,'' targets biomedical
+reasoning rather than narrative and does not foreground depth.
+
+The empirical frontier Rukha targets is \emph{exactly} the gap between
+the depth-one counterfactual story-generation literature and the
+formal-\textsc{scm} nested-counterfactual literature. Closing this gap
+is the contribution.
+
+\subsection{Why Scaffolding Should Help}
+
+The architectural bet is that explicit causal-graph scaffolding plus
+\textsc{aap}-protocol prompting plus structural-sharing memoization
+jointly preserve coherence at depth five and six where unscaffolded
+chain-of-thought collapses. The argument has three legs.
+
+First, the model is not asked to perform unbounded long-form
+generation. Each recursion step produces a small number of structured
+event records, conformant to a \textsc{json} grammar, conditioned on the
+abducted prior and the perturbed graph. The total token budget per step
+is bounded; the Reasoning Horizon at \mbox{70–85\%} of chain length never
+becomes the binding constraint.
+
+Second, the structural-sharing infrastructure ensures that the
+graph-state at each recursion level is persistent and content-addressable.
+Identical sub-graphs at different levels resolve to the same Merkle
+\textsc{cid}; updates to a sub-graph are localized; the model's view of
+``the world up to this point'' is always exact. There is no accumulating
+drift from compressed summaries.
+
+Third, the \textsc{aap} protocol enforces that abduction is performed
+\emph{explicitly} at each step. The model is asked, before propagating,
+to articulate which exogenous priors are being preserved and which are
+being updated. This is the methodological correction Vashishtha et al.
+\cite{executablecounterfactuals} call for. Coupled with constrained
+decoding, the protocol cannot be skipped.
+
+Whether this scaffolding suffices is the empirical question of Section
+6. We do not claim it does. We claim only that the question is testable,
+that the setup is principled, and that no other published system is in a
+position to test it.
+
+\diamondrule
+
+\section{Architecture}
+
+\subsection{Pipeline Overview}
+
+The Rukha pipeline operates in six sequential stages, each producing
+artifacts that feed the next:
+
+\begin{center}\small
+\begin{tabular}{@{}c l p{3.4in}@{}}
+  \toprule
+  \sceq{Stage} & \sceq{Name} & \sceq{Operation} \\
+  \midrule
+  1 & Text Ingestion       & Load source text; segment by chapter / verse; assign metadata. \\
+  2 & Event Extraction     & Constrained-decoding extraction of 14--18 event nodes per chapter. \\
+  3 & Edge Identification  & Causal / temporal / conditional edge typing; strength score; evidence span. \\
+  4 & DAG Construction     & NetworkX \texttt{DiGraph}; load-bearing scoring; acyclicity check. \\
+  5 & Perturbation         & Select a load-bearing node; generate counterfactual alternatives. \\
+  6 & Propagation          & \textsc{aap} forward-propagation in topological order to depth $N$. \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+Stages 5 and 6 are recursive. The propagated graph $G^{(1)}$ is treated
+as the new \textsc{taw} and re-perturbed at depth 2; this iterates to
+target depth $N \in \{5, 6\}$.
+
+\subsection{Event Graph Extraction}
+
+Extracting causal event graphs from narrative prose is the most
+technically novel phase of the pipeline. No existing system targets
+literary, mythological, or sacred-text event extraction with the
+specificity Rukha requires. We adopt the \emph{code-as-schema} prompting
+pattern validated by GoLLIE at \textsc{iclr} 2024 \cite{gollie} and
+PyCode-TextEE at \textsc{acl} 2025 \cite{pycodetexteed}: schemas are
+expressed as typed Python dataclasses with docstring guidelines, and the
+model emits a structured \texttt{result = [\dots]} list. The empirical
+finding from these two papers is that code-as-schema prompting forces
+the model to follow the explicit definitions rather than fall back on
+priors --- exactly the behavior Rukha needs.
+
+Li, Pan, and Pi at the \textsc{acl} 2025 Workshop on Narrative
+Understanding \cite{lihybrid} demonstrated that a hybrid linguistic
+pipeline (RoBERTa + Expert Index + \emph{stac} classification) outperforms
+GPT-4o and Claude 3.5 on narrative causal-graph quality across 100
+chapters and short stories. The lesson, taken seriously, is that pure
+language-model extraction is suboptimal for narrative causal graphs;
+Rukha's extraction layer therefore combines constrained-decoding language-model
+event extraction (Stages 2–3) with a deterministic
+graph-validation pass (Stage 4) that prunes weakly-supported edges and
+enforces acyclicity.
+
+The Pydantic schema for an event is given in Appendix A. The key
+fields are: \texttt{id}, \texttt{trigger}, \texttt{summary},
+\texttt{event\_type} (one of \textsc{action}, \textsc{state\_change},
+\textsc{decision}, \textsc{divine\_action}, \textsc{communication}),
+\texttt{stac\_label} (Situation, Task, Action, Consequence),
+\texttt{agents}, \texttt{location}, \texttt{verse\_ref}.
+
+\subsection{Load-Bearing Scores}
+
+Not every event is structurally critical. The chiastic structure of
+Jonah does not depend on whether the storm in chapter 1 is described as
+``mighty'' or ``great''; it depends on whether God commissioned Jonah at
+the beginning. Identifying which nodes carry the graph's structural
+load is the perturbation engine's first task.
+
+We compute a composite load-bearing score:
+\[
+  \text{load}(v) = 0.40 \cdot \text{BC}(v) + 0.30 \cdot \text{PR}(v) + 0.30 \cdot \text{OD}(v)
+\]
+where $\text{BC}(v)$ is Freeman's betweenness centrality
+\cite{freemanbetweenness}, computed via Brandes's $O(VE)$ algorithm;
+$\text{PR}(v)$ is PageRank \cite{pagerank}; and $\text{OD}(v)$ is
+out-degree, normalized to the unit interval. Events scoring above the
+80th percentile are classified as \emph{Critical}; between the 40th and
+80th, \emph{Significant}; below 40th, \emph{Decorative}. The
+perturbation engine targets Critical and Significant nodes.
+
+These weights are heuristic. A real ablation study --- correlating
+$\text{load}(v)$ with empirical post-\textsc{aap} graph-edit distance ---
+is part of the evaluation protocol described in Section 6. Halpern–Pearl
+actual causality \cite{halpernpearlcausality} provides the principled
+alternative: $v$ is load-bearing if and only if changing $v$ via
+$\text{do}(\cdot)$ changes a substantial fraction of downstream events
+under counterfactual evaluation. The composite score is a topological
+proxy for this; the proxy is testable.
+
+\subsection{Perturbation Strategies}
+
+The perturbation engine generates plausible counterfactual alternatives
+at each load-bearing node. Six strategies, each targeting a distinct
+narrative operation:
+
+\begin{center}\small
+\begin{tabular}{@{}l p{2.4in} l@{}}
+  \toprule
+  \sceq{Strategy} & \sceq{Description} & \sceq{Example (Jonah E2)} \\
+  \midrule
+  \textsc{inversion}        & Event replaced by its opposite           & Jonah obeys immediately \\
+  \textsc{replacement}      & Event replaced by a different action     & Jonah flees to Egypt instead \\
+  \textsc{removal}          & Event deleted                            & No flight; Jonah deliberates \\
+  \textsc{intensification}  & Event amplified                          & Jonah leads armed rebellion \\
+  \textsc{temporal\_shift}  & Event occurs at a different time         & Jonah flees \emph{after} seeing Nineveh \\
+  \textsc{transplant}       & Event grafted from another text          & Jonah's crisis mirrors Arjuna's \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+Each perturbation must satisfy four coherence constraints: world
+consistency (the alternative must be physically and logically possible
+within the established world-rules), character consistency (characters
+must act compatibly with their established traits, unless the
+perturbation explicitly targets character), causal validity (no
+contradictions with non-perturbed upstream events), and
+counterfactual invariance (events $d$-separated from the perturbation
+remain unchanged --- the \textsc{TimeTravel} principle, that on average
+1.5 of 5 sentences change \cite{timetravel}).
+
+\subsection{Structural Sharing: Why Depth-Six Is Tractable}
+
+Naive depth-$N$ counterfactual exploration branches combinatorially.
+With branching factor $b = 5$ alternatives per critical node, depth 5
+yields $5^5 = 3{,}125$ universes; depth 6 yields $15{,}625$. Each
+universe is itself a 16-event narrative graph. The naive storage
+requirement is intractable.
+
+The argument that it is in fact tractable rests on a structural
+observation: sibling counterfactual universes share most of their
+sub-structure. Most events do not change downstream of most
+perturbations. The actual divergence between any two universes is
+small, and the storage requirement scales with divergence, not with
+universe count.
+
+The mechanism is borrowed from the persistent-data-structures literature
+\cite{driscolltarjan, okasakipfds}. Three layers compose:
+
+\begin{itemize}
+  \item \emph{Hash consing} \cite{filliatreconchon}: structurally
+    identical objects share a single representation. Equality testing
+    becomes pointer comparison ($O(1)$); de-duplication is global.
+  \item \emph{Hash array mapped tries} \cite{bagwellhamt}: 32-way
+    branching with bitmap+popcount compression; expected depth
+    $\log_{32}(n)$. Each universe's per-character or per-event state is
+    a \textsc{hamt}; updates copy approximately four nodes while sharing
+    the remaining structure.
+  \item \emph{Merkle-\textsc{dag}s}: as deployed in Git and
+    \textsc{ipfs} \cite{ipfsmerkledag}. Each graph node is keyed by the
+    hash of its content (\texttt{cid}). Forking a universe is $O(1)$;
+    structural-equality between two sub-graphs is $O(1)$; locating
+    the differences between two universes is $O(\log n)$.
+  \item \emph{Zero-suppressed decision diagrams} \cite{knuthzdd},
+    Knuth's \textsc{zdd}, for cross-universe set queries. The famous
+    benchmark: 437 billion paths from California to Maine on the US
+    capitals graph compress into 7,850 \textsc{zdd} nodes --- a
+    ratio of $5.6 \times 10^7$.
+\end{itemize}
+
+In aggregate: storage scales not with the apparent
+$O(b^d)$ but with the actual edit distance between universes, which
+empirical observation suggests is small. We will report the achieved
+compression ratio in the evaluation.
+
+\diamondrule
+
+\section{The Jonah Demonstration}
+
+\subsection{Why Jonah}
+
+The Book of Jonah is the optimal proof-of-concept target. It has 48
+verses, approximately 1{,}273 Hebrew words, and decomposes into 16
+consensus load-bearing events. It is self-contained, narratively dense,
+and possesses a quantified chiastic structure that gives Rukha a hard
+ground-truth target: any extraction algorithm worth its weight should
+discover the chiasm.
+
+\subsection{The Sixteen Events}
+
+\begin{center}\small
+\begin{tabular}{@{}c c p{2.6in} l l@{}}
+  \toprule
+  \sceq{ID} & \sceq{Verse} & \sceq{Event} & \sceq{Type} & \sceq{Weight} \\
+  \midrule
+  E1  & 1:1–2  & God commissions Jonah to preach against Nineveh & \textsc{divine}  & Critical \\
+  E2  & 1:3    & Jonah flees to Tarshish                         & \textsc{decision}  & Critical \\
+  E3  & 1:4    & God sends a great storm                         & \textsc{divine}    & Significant \\
+  E4  & 1:7    & Lots cast; Jonah identified                     & \textsc{action}    & Significant \\
+  E5  & 1:15   & Jonah thrown overboard                          & \textsc{action}    & Significant \\
+  E6  & 1:17   & Great fish swallows Jonah                       & \textsc{divine}    & Significant \\
+  E7  & 2:1–9  & Jonah's prayer from the deep                    & \textsc{communication} & Decorative \\
+  E8  & 2:10   & Fish vomits Jonah onto land                     & \textsc{divine}    & Significant \\
+  \midrule
+  E9  & 3:1–2  & God's second commission                         & \textsc{divine}    & Critical \\
+  E10 & 3:4    & Jonah preaches in Nineveh                       & \textsc{action}    & Significant \\
+  E11 & 3:5–9  & Nineveh repents                                  & \textsc{state\_change} & Critical \\
+  E12 & 3:10   & God relents from destruction                    & \textsc{divine}    & Critical \\
+  E13 & 4:1–3  & Jonah's anger at God's mercy                    & \textsc{state\_change} & Significant \\
+  E14 & 4:6    & God appoints a plant for shade                  & \textsc{divine}    & Decorative \\
+  E15 & 4:7    & Worm destroys the plant                         & \textsc{divine}    & Decorative \\
+  E16 & 4:10–11 & God's final rhetorical question                & \textsc{communication} & Critical \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{The Chiastic Structure}
+
+The book exhibits a macro-chiastic mirror structure. Movement 1
+(chapters 1–2: Jonah and the sailors and the fish) parallels Movement 2
+(chapters 3–4: Jonah and the Ninevites and the plant): E1 mirrors E9
+(two commissions), E2 mirrors E10 (flight versus obedience), E5 mirrors
+E11 (thrown to sea versus thrown to repentance), E6 mirrors E12 (fish
+saves Jonah versus God saves Nineveh), E7 mirrors E13 (prayer versus
+anger). The structure is recognized across major commentaries
+\cite{trible, sasson, magonet}.
+
+The Hebrew text quantifies the symmetry. Magonet \cite{magonet}
+demonstrates that Jonah 4:2–3 (Jonah's complaint after Nineveh repents)
+contains exactly 39 Hebrew words, and Jonah 4:10–11 (God's reply about
+the qiqayon plant) contains exactly 39 Hebrew words. Counting maqqef-joined
+clusters as single units yields 30 in both passages. The dual identity
+across both counting conventions is what makes the parallel structurally
+striking and what indicates intentional artistry rather than accident
+\cite{magonettorah}.
+
+This count is machine-verifiable. The Open Scriptures Hebrew Bible
+project \cite{oshb} provides the Westminster Leningrad Codex in OSIS
+\textsc{xml} with each \texttt{<w>} element marking a graphic word.
+Iterating over the verses 4:2–3 and 4:10–11 of Jonah and counting
+\texttt{<w>} elements --- with maqqef-joined sequences either treated as
+two words or collapsed --- reproduces Magonet's figures exactly.
+The verification script and methodology are given in Appendix B; the
+script-derived count is what we report in the paper, with Magonet cited as
+the originating literary observation.
+
+\subsection{The Demonstration Perturbation}
+
+The most theologically charged depth-one perturbation is the
+\textsc{inversion} at E1: \emph{What if Jonah obeyed at the first
+commission?}
+
+The naive expectation is that obedience eliminates the entire sea
+adventure. Events E2 through E8 collapse: no flight, no storm, no
+sailors, no fish, no prayer from the deep. The story jumps directly
+from E1 to E10 (Jonah preaching in Nineveh).
+
+But here Jonah 4:2 reveals the theological irony that makes the demo
+non-trivial. After Nineveh repents and God relents, Jonah complains:
+``\emph{This is what I said when I was still in my own country; that
+is why I fled to Tarshish at the beginning. For I knew that you are a
+gracious God and merciful, slow to anger, and abounding in steadfast
+love, and ready to relent from punishing.}'' Jonah did not flee from
+prophetic failure; he fled \emph{because he knew God would show mercy}
+and he could not bear it. The expected counterfactual is exactly what
+happens canonically, just without the detour through the sea.
+
+The depth-one perturbation therefore poses the test question: \emph{does
+Jonah still rage at God's mercy in the world where he did not suffer
+first?}
+
+The depth-five and depth-six perturbations recurse on this question.
+\textsc{do(E1, obeys-immediately)} produces $G^{(1)}$. Within $G^{(1)}$,
+perturbing E11 (\textsc{do(E11, Nineveh-does-not-repent)}) produces
+$G^{(2)}$: Jonah preaches as commanded but the Ninevites refuse.
+Within $G^{(2)}$, perturbing the implicit divine-response node
+(\textsc{do(E12, God-destroys-Nineveh-anyway)}) produces $G^{(3)}$.
+At each recursion level the model must abduct the new exogenous priors,
+sever the appropriate causal edges, and propagate. By depth five we are
+asking about a world in which Jonah obeyed, Nineveh refused, God
+destroyed, the survivors fled to Tarshish, the survivors' prophet
+returned, and so on. The empirical question is whether the depth-five
+narrative remains coherent --- in particular, whether Jonah's
+psychological architecture (the rage at mercy he did not extend himself)
+remains recognizable.
+
+\diamondrule
+
+\section{Evaluation Methodology}
+
+A claim about depth-five recursive coherence is empirically vacuous
+without a measurement protocol. We propose triangulation across four
+methodological registers.
+
+\subsection{Per-Depth Consistency Error Density}
+
+The first register is automatic: ConStory-Bench \cite{constory}
+introduces Consistency Error Density (\textsc{ced}) as the canonical
+metric for long-form narrative consistency, and ConStory-Checker
+operationalizes it as an \textsc{llm}-judge protocol with grounded
+evidence quotation across a 19-subtype error taxonomy. We adopt
+\textsc{ced} but compute it \emph{at each recursion level
+independently}: $\text{CED}(G^{(k)})$ for $k \in \{0, 1, 2, 3, 4, 5, 6\}$.
+
+The hypothesis Rukha must defend is that $\text{CED}$ does \emph{not}
+grow super-linearly with $k$. A linear or sub-linear curve, even with a
+non-trivial intercept, vindicates the structural-sharing thesis.
+Super-linear growth --- particularly an inflection between depth 3 and 4
+--- would indicate that the \textsc{aap} protocol is not in fact
+preserving abduction across recursion levels and the depth claim
+collapses.
+
+\subsection{Minimal-Pair Discrimination}
+
+The second register is comparative: the NoCha protocol
+\cite{nocha} evaluates whether a model can distinguish minimally-different
+True/False claims about a long narrative. We adapt the protocol: for
+each generated branch $G^{(k)}$, we generate a sibling branch $G^{(k)}_{\text{sib}}$
+by perturbing a different node at the same recursion level, and ask the
+model to discriminate factual claims about the two. A successful
+demonstration of Rukha at depth $k$ requires that the model's
+discrimination accuracy on $(G^{(k)}, G^{(k)}_{\text{sib}})$ pairs be
+substantially above chance.
+
+Discrimination accuracy at depth $k$ is therefore the most direct test
+of whether ``the depth-$k$ counterfactuals are actually different
+stories'' or ``the depth-$k$ counterfactuals are the same story with
+labels swapped.''
+
+\subsection{Character-State Knowledge-Graph Consistency}
+
+The third register is structural: NarrativeFactScore \cite{narrativefactscore}
+introduces the Character Knowledge Graph as an Agent-as-Judge oracle for
+narrative factuality. We extend the methodology: for each generated
+branch, a separate model maintains a per-character state graph
+(beliefs, locations, possessions, intentions) updated incrementally as
+events unfold. Consistency violations --- a character believing $X$ at
+event $E_i$ and $\neg X$ at event $E_{i+1}$ without a state-change
+event --- are flagged and counted.
+
+This is the symbolic-state-tracking approach validated by SCORE
+\cite{scorestory}, which reports a 23.6\% improvement in coherence and a
+41.8\% reduction in hallucinations against unscaffolded baselines.
+Rukha's bet is that depth-five recursive generation \emph{requires}
+this scaffolding; we report the per-depth consistency-violation rate as
+a function of recursion level.
+
+\subsection{Human Evaluation}
+
+The fourth register is human. Automatic metrics --- even agent-as-judge
+ones --- have known correlation gaps with human judgment on long-form
+narrative. We adopt a pairwise-preference protocol at depths 3, 5, and 6:
+human evaluators are presented with $(G^{(k)}, G^{(k)}_{\text{sib}})$
+pairs and asked to assess which branch is (a) more internally coherent,
+(b) more recognizably a continuation of Jonah, and (c) more
+interpretively interesting. The third question is the most important
+and the least quantifiable; it is also the question Rukha is actually
+trying to answer.
+
+\subsection{The Cultural-Attractor Diagnostic}
+
+A separate evaluation strand probes the narrative-attractor hypothesis.
+Perez et al. \cite{perezattractors} demonstrate that iterated
+language-model transmission converges to attractor states for
+toxicity, positivity, difficulty, and length. We adapt their
+methodology to ask: do Rukha's depth-six counterfactual variants of
+Jonah cluster into archetypal shapes (Reagan's six emotional arcs;
+Hogan's heroic / romantic / sacrificial prototypes; Propp's morphological
+functions \cite{proppmorphology}), or do they distribute uniformly?
+
+Operationally, we embed each depth-six variant via sentence-transformers,
+project into the six-arc emotional-trajectory space following Reagan et
+al. \cite{reagansixarcs}, and cluster. If clusters form along
+archetypal lines, narrative attractors are real and computationally
+visible. If they do not, the attractor hypothesis fails empirically.
+
+This is the single most novel empirical contribution Rukha makes
+beyond the depth claim itself: a quantitative test of whether narrative
+archetypes are basins of attraction in counterfactual space. The
+narratological tradition (Propp, Campbell, Hogan) has asserted this for
+a century; Rukha is the first system in a position to falsify it.
+
+\diamondrule
+
+\section{What Rukha Is For}
+
+\subsection{The Immediate Output}
+
+The immediate output of a Rukha campaign is a structured corpus.
+Each entry is a complete causally-coherent alternate trajectory
+through a foundational text, indexed by its perturbation path,
+content-addressed by Merkle \textsc{cid}, and quality-scored by the
+evaluation pipeline.
+
+The corpus has obvious applications. Training data for models that need
+to understand causal narrative reasoning --- not just predict the next
+word but model the consequences of structural change to a fixed
+narrative. Comparative-mythology research at scales no single scholar
+could undertake: every permutation of every perturbation of every
+foundational text in the seed corpus, queryable by archetype and by
+edit-distance from canonical. Psychological research on counterfactual
+thinking with controlled stimuli that vary in exactly the dimensions a
+researcher cares about. A living, extensible dataset that grows as new
+texts are added and new perturbation strategies are validated.
+
+\subsection{The Mediated Output: Narrative Physics}
+
+A more interesting output is the empirical map of narrative possibility
+that Rukha makes visible. Stories are not arbitrary high-dimensional
+walks. Patterns recur: the descent and ascent, the prodigal return, the
+sacrifice that fails, the mercy that wounds the merciful. Whether these
+patterns are universal cognitive features (Hogan), Jungian archetypes
+(Campbell), folkloristic functions (Propp), or simply emotional-arc
+attractors (Reagan) has been a century-long humanistic question
+without empirical traction. Rukha provides the traction.
+
+\begin{claim}[The Narrative-Physics Hypothesis]
+Under recursive counterfactual perturbation of foundational texts at
+depth $\geq 4$, the resulting variant trajectories cluster into a small
+number of recurrent shapes with measurable basins of attraction in
+emotional-arc space.
+\end{claim}
+
+The claim is testable. Rukha is the test apparatus. If the claim is
+true, an entire branch of narratology becomes computational and
+quantitative. If it is false, an entire branch of narratology has been
+falsified.
+
+\subsection{The Reflexive Output: What Counterfactuals Reveal}
+
+The deepest output is interpretive. A counterfactual is not a
+hypothetical; it is a tool for reading. The question
+\emph{``what if Jonah obeyed at chapter 1?''} produces a story about
+Nineveh. But the question \emph{``what if Jonah had been unable to flee
+in the first place?''} produces a story about Jonah's psychology. And
+the recursive question --- \emph{what if Jonah obeyed, Nineveh repented,
+Jonah raged anyway, God responded with the same rhetorical question
+about mercy} --- produces a story about how stubborn human resistance to
+grace is, even when stripped of its operational excuses.
+
+Each perturbation reveals what the canonical text was actually about.
+Depth-one tells you what the events depend on; depth-three tells you
+what the characters depend on; depth-five tells you what the
+\emph{theology} depends on. This is the same operation that midrash
+performs: by asking what \emph{could have been}, the tradition surfaces
+what \emph{is}.
+
+\diamondrule
+
+\section{Computational Midrash: Ethics and Framing}
+
+A system that generates counterfactual versions of sacred texts will
+generate strong reactions. We do not pretend otherwise. We argue that
+the framing matters, and we propose three.
+
+\subsection{The Midrashic Tradition}
+
+Rabbinic midrash is a 2,000-year scholarly tradition of generating
+textual counterfactuals as interpretive practice. Aggadic midrash in
+particular routinely asks \emph{what if} questions of biblical
+narrative: what was Jonah doing in the fish's belly; what did Sarah
+think when Abraham took Isaac up the mountain; what did the angels say
+when humans were created. These questions are not transgressions; they
+are the textual tradition's standard interpretive method. \emph{Pirkei
+Avot} 5:22 instructs the reader of Torah to \emph{``turn it and turn it,
+for everything is in it''} --- a 2,000-year-old endorsement of recursive
+re-interpretation.
+
+Rukha is computational midrash. It is the same operation, made
+algorithmic and made recursive. The objection that ``you should not
+generate counterfactual versions of sacred texts'' has an answer: this
+is what the tradition has always done. The novelty is in the tooling,
+not the question.
+
+\subsection{Counterfactual History as Methodological Precedent}
+
+A second framing comes from outside theology. Niall Ferguson's
+\emph{Virtual History} \cite{virtualhistory} establishes counterfactual
+history as a methodologically rigorous practice in the humanities. The
+constraint Ferguson imposes --- that the counterfactual must be one
+\emph{contemporaries actually considered} --- is the right constraint for
+Rukha to engage. We do not perturb arbitrarily; we perturb at
+nodes where the text itself foregrounds alternative possibilities. Jonah
+4:2 explicitly states that Jonah \emph{contemplated} obedience and chose
+flight. The Ninevites \emph{considered} not repenting. The
+counterfactuals are the text's own residual possibilities, not external
+impositions.
+
+\subsection{Ryan's Possible-Worlds Theory as Theoretical Backdrop}
+
+A third framing is narratological. Ryan's possible-worlds theory
+\cite{ryan} treats every narrative as already a multiverse: the
+\textsc{taw} surrounded by the satellite worlds of every character's
+beliefs, wishes, obligations, and intentions. Stories are textual
+multiverses by their nature. Rukha makes the multiverse explicit and
+computational, but it does not introduce the multiverse; it inherits it
+from the text.
+
+\subsection{What Rukha Will Not Do}
+
+Rukha will not generate sexually explicit, violent, or theologically
+inflammatory variants for shock value. The \textsc{transplant}
+strategy in particular is gated: cross-tradition transplants will be
+flagged and require explicit interpretive justification before
+inclusion in the public corpus. The release will include explicit
+interpretive framing language, consultation with religious-studies
+scholars, and opt-in mechanisms for tradition-specific texts.
+
+We acknowledge that this is not sufficient to address every possible
+objection. We claim only that it is sufficient to do the work
+honestly.
+
+\diamondrule
+
+\section{Related Work}
+
+\subsection{Counterfactual Story Generation}
+
+Qin et al.'s \textsc{TimeTravel} \cite{timetravel} is the foundational
+single-step counterfactual rewriting dataset: 29,849 supervised rewrites
+of \textsc{rocstories} narratives, with the empirical observation that
+human rewriters change roughly 1.5 of 5 sentences. Chen et al.'s
+\textsc{educat} \cite{educat} achieves unsupervised single-step
+rewriting via causal-effect-localized minimal-edit estimation. The
+\textsc{pasta} dataset \cite{pasta} introduces participant-state
+counterfactual perturbations as a cleaner formalism than free-form
+rewrites. Sketch-and-Customize \cite{sketchcustomize} provides a
+two-stage architecture for counterfactual story generation. Chatzi et al.
+\cite{chatzi} formalize counterfactual reasoning at the
+token-generation level via Gumbel-Max \textsc{scm}s.
+
+None of this work operates recursively. Each system performs a single
+counterfactual against a canonical original. Rukha is the first system
+to chain counterfactuals to depth $\geq 3$.
+
+\subsection{Causal Reasoning in Language Models}
+
+Kıcıman et al. \cite{kiciman} establish that language-model-built causal
+graphs achieve high accuracy on benchmark causal-discovery tasks.
+Vashishtha et al.'s \emph{Executable Counterfactuals}
+\cite{executablecounterfactuals} decomposes counterfactual reasoning
+into Pearl's three steps and reports that prior benchmarks routinely
+\emph{skip the abduction step}, overestimating model performance.
+Tang et al. \cite{tangcounterfactual} provide a decompositional study
+across eleven datasets, with the cautionary finding that Tree-of-Thoughts
+\emph{over-qualifies} on counterfactual reasoning by diverting the model
+from contextually-supported causal pathways. \textsc{counterbench}
+\cite{counterbench} is the canonical 2025 benchmark; its Nested subset
+is the closest published analog to Rukha's depth-$\geq 2$ regime, and
+the near-random baseline performance on Nested is the gap Rukha targets.
+
+\subsection{Long-Form Narrative Consistency}
+
+The long-form narrative-consistency literature has matured rapidly.
+ConStory-Bench \cite{constory} establishes Consistency Error Density as
+the canonical metric; NoCha \cite{nocha} establishes minimal-pair
+True/False discrimination on book-length narratives;
+NarrativeFactScore \cite{narrativefactscore} introduces the Character
+Knowledge Graph as factuality oracle; SCORE \cite{scorestory} reports
+substantial coherence improvements from explicit dynamic-state tracking;
+\textsc{lostinstories} \cite{lostinstories} catalogs the empirical
+failure modes (errors cluster in factual and temporal dimensions, around
+the middle of long generations, in higher-entropy segments).
+
+This literature defines the methodological terrain Rukha must operate
+on. Our protocol (Section 6) inherits its metrics and adapts them to
+recursion depth.
+
+\subsection{Narrative Possible-Worlds Theory}
+
+Ryan's \emph{Possible Worlds, Artificial Intelligence, and Narrative
+Theory} \cite{ryan} is the canonical narratological framework. Lewis's
+\emph{Counterfactuals} \cite{lewiscounterfactuals} grounds the modal
+semantics. Doležel's \emph{Heterocosmica} and Pavel's \emph{Fictional
+Worlds} provide complementary Prague-school readings. The 2019 Bell-Ryan
+handbook \emph{Possible Worlds Theory and Contemporary Narratology}
+gathers the recent state of the field.
+
+The narratological tradition has long modeled narrative as a multiverse;
+Rukha makes the multiverse computational.
+
+\subsection{Industry and Patent Landscape}
+
+A patent and grey-literature sweep covering USPTO, Google Patents, EPO,
+and the major industrial research labs (Anthropic, OpenAI, AllenAI,
+Microsoft Research, Google DeepMind, Meta FAIR, Cohere, Mistral, AI21,
+Together) returned no system that combines Pearl-\textsc{aap}-grounded
+narrative perturbation, recursive depth $\geq 3$, structural-sharing
+infrastructure, and foundational-text seeding. The closest patents
+(US 7{,}246{,}315 on personal narrative agents; US 10{,}657{,}201 on
+configurable narrative generation; US 10{,}599{,}700 on narrative
+detection) are genre-distinct.
+
+The closest industry precedents are: AllenAI's
+counterfactual-story-rewriting program (Qin and collaborators);
+Microsoft Research's Pearl-\textsc{llm} causal program (Kıcıman,
+Vashishtha); Google DeepMind's Genie 3 \cite{genie3} (counterfactual
+\emph{visual} world models for agent training, distinct in modality);
+and the MIT Media Lab thesis ``Next Week Tonight: Simulating
+Counterfactual Narratives'' \cite{nextweektonight} (counterfactual
+narrative simulation via \textsc{rag}-and-agents, architecturally
+distinct from Pearl-do-calculus). Each addresses a component of Rukha;
+none addresses the integrated whole.
+
+\subsection{Cultural Attractors and Iterated Generation}
+
+Perez et al. \cite{perezattractors} document that iterated language-model
+transmission converges to attractor states for measurable
+properties (toxicity, positivity, difficulty, length). The result is the
+single most relevant empirical precedent for Rukha's
+narrative-attractor hypothesis. The crucial distinction:
+Perez et al. measure \emph{property-level} attractors over iterated
+paraphrase chains; Rukha tests \emph{archetype-level} attractors over
+structured perturbation graphs. The methodological inheritance is
+explicit; the empirical question is distinct.
+
+\diamondrule
+
+\section{Limitations and Open Questions}
+
+The paper makes a strong claim --- recursive counterfactual reasoning
+at depth five and six on narrative event graphs is tractable with
+appropriate scaffolding --- and the strength of the claim demands
+forthright limitations.
+
+\subsection{The Depth Claim Is Not Yet Empirically Demonstrated}
+
+Section 6 specifies the evaluation protocol; we have not yet executed
+it. The argument that depth five and six \emph{should} be tractable
+under \textsc{aap} scaffolding rests on (a) Pearl-Robins decomposition
+in acyclic \textsc{scm}s, (b) the structural-sharing storage argument,
+and (c) the Reasoning Horizon and \textsc{counterbench} results
+indirectly. None of these is the same as a demonstration. The paper
+should be read as a research program with methodological commitments,
+not as a results paper.
+
+\subsection{Coherence Collapse Modes Are Not Fully Characterized}
+
+We expect two failure modes at deep recursion: \emph{attractor
+reversion}, where each recursion step pulls the narrative back toward
+the canonical Jonah story (the language model's strongest prior), and
+\emph{coherence drift}, where each rewrite introduces small
+inconsistencies that compound. Our anti-attractor mechanism is
+\textsc{xgrammar}-constrained \textsc{aap} prompting plus retrieval
+anchoring against the perturbed-graph state. Whether this suffices for
+depth six is the open empirical question.
+
+\subsection{Load-Bearing Score Validation}
+
+The composite load-bearing score $0.40 \cdot \text{BC} + 0.30 \cdot
+\text{PR} + 0.30 \cdot \text{OD}$ is heuristic. The principled
+alternative --- Halpern–Pearl actual causality \cite{halpernpearlcausality}
+--- requires, for each candidate node $v$, computing the post-\textsc{aap}
+graph-edit distance under perturbation. The composite score is a
+topological proxy. Whether the proxy correlates with the principled
+metric is testable; we will test it on the Jonah graph and report.
+
+\subsection{Sacred-Text Counterfactuals Will Be Disorienting}
+
+We have argued the case for computational midrash; we recognize that
+the argument will not satisfy every reader. Some perturbations of Jonah
+will produce trajectories that are theologically unsettling. We do not
+think this is a reason not to do the work, but we also do not think it
+is a reason to be careless about it. Public release will include
+interpretive framing language, scholarly consultation, and opt-in
+mechanisms for tradition-specific texts.
+
+\subsection{Throughput and Compute Budget}
+
+A full Rukha campaign on Jonah (depth six, branching factor five)
+requires on the order of $5^6 = 15{,}625$ \textsc{aap}
+forward-propagations, each producing a 16-event trajectory. With
+4× NVIDIA \textsc{rtx pro} 6000 Blackwell cards (96\,GB \textsc{vram}
+each, 384\,GB total) running Llama 3.3 70B via \textsc{vllm} tensor
+parallelism, throughput is approximately 20--30 tokens per second per
+replica. After deduplication via \textsc{faiss} cosine
+similarity at the 0.92 threshold, the actual unique trajectory count is
+expected to be substantially smaller than $15{,}625$ --- the
+structural-sharing argument predicts compression ratios on the order of
+$10^2$ to $10^3$ in this regime. Wall-clock for a full Jonah depth-six
+campaign: weeks, not months. For longer texts (Mahābhārata, Iliad), the
+sliding-context-with-causal-summary mechanism described in the original
+manifesto applies.
+
+\subsection{What Would Falsify Rukha}
+
+The paper should specify what evidence would falsify its central claim.
+Three findings would do so:
+
+\begin{enumerate}
+  \item Per-depth Consistency Error Density grows super-linearly with
+    recursion depth, with a clear inflection between depth 3 and 4 ---
+    indicating that the \textsc{aap} protocol is not in fact preserving
+    abduction across recursion levels.
+  \item Depth-six variants of Jonah do \emph{not} cluster in
+    archetype space; instead they distribute uniformly. This would
+    falsify the narrative-physics hypothesis.
+  \item Depth-six variants are indistinguishable from depth-three
+    variants under the NoCha minimal-pair protocol --- indicating that
+    the model is treating recursion as a no-op, generating the same
+    story with relabeled nodes.
+\end{enumerate}
+
+We commit to reporting these results regardless of outcome.
+
+\diamondrule
+
+\section{Coda}
+
+In the multiverse of every story humanity ever told itself, there exist
+trajectories where things went better. Where the sacrifice was not
+required. Where the exile ended sooner. Where the prophet did not need
+to be swallowed before he could be heard.
+
+Rukha exists to make those trajectories visible. Not because we believe
+the canonical text was wrong --- the canonical text is the trajectory
+that survived, and there are good reasons it survived --- but because
+the canonical text was always one trajectory among many, and what it
+\emph{means} is partly defined by what it \emph{could have been}.
+
+A counterfactual is not a hypothetical. It is a tool for reading. To
+ask what would have happened if Jonah had obeyed is to read Jonah more
+carefully than the canonical text alone allows. To ask the question
+recursively, to depth five and six, is to read with the tradition's full
+midrashic depth made computational and made shareable.
+
+The output of a Rukha campaign is a corpus, yes. It is also a map of
+narrative possibility, yes. But the deepest output is interpretive: it
+is the topology of grace, the architecture of mercy made visible at
+scale. Stories are how humans process the gap between what was and
+what could have been. That gap is what mercy lives in. Rukha makes the
+gap explorable.
+
+\emph{Rukha doesn't just generate counterfactuals --- it generates
+mercy.}
+
+\vspace{1.4em}
+\taperedrule
+\vspace{0.4em}
+\begin{center}\itshape\small
+Returning books to breath.
+\end{center}
+
+\clearpage
+
+% ─── Appendix A: Schema ──────────────────────────────────────────────
+\appendix
+\section*{\sceq{Appendix A.\ The Pydantic Schema}}
+\addcontentsline{toc}{section}{Appendix A. The Pydantic Schema}
+
+The event-extraction schema, expressed as Python dataclasses with
+docstring guidelines per the GoLLIE / PyCode-TextEE convention:
+
+\begin{small}\ttfamily\setstretch{1.05}
+\noindent
+@dataclass\\
+class NarrativeEvent:\\
+\hspace*{2em}id: str\hfill\# Unique ID, e.g. 'E01'\\
+\hspace*{2em}trigger: str\hfill\# The word(s) triggering the event\\
+\hspace*{2em}summary: str\hfill\# One-sentence description\\
+\hspace*{2em}event\_type: str\hfill\# ACTION | STATE\_CHANGE | DECISION\\
+\hspace*{2em}\hspace*{2em}\hspace*{6em}\hfill\# DIVINE\_ACTION | COMMUNICATION\\
+\hspace*{2em}stac\_label: str\hfill\# Situation | Task | Action | Consequence\\
+\hspace*{2em}agents: list[str]\hfill\# Characters involved\\
+\hspace*{2em}location: str\hfill\# Where it occurs\\
+\hspace*{2em}verse\_ref: str\hfill\# Source reference\\[0.4em]
+@dataclass\\
+class CausalEdge:\\
+\hspace*{2em}source\_id: str\\
+\hspace*{2em}target\_id: str\\
+\hspace*{2em}causal\_type: str\hfill\# DIRECT\_CAUSE | ENABLES\\
+\hspace*{2em}\hspace*{2em}\hspace*{6em}\hfill\# MOTIVATES | PREVENTS\\
+\hspace*{2em}strength: float\hfill\# 0.0–1.0\\
+\hspace*{2em}evidence: str\hfill\# Text span supporting this
+\end{small}
+
+\vspace{1em}
+
+\section*{\sceq{Appendix B.\ Verifying the 39-Word Parallel}}
+\addcontentsline{toc}{section}{Appendix B. Verifying the 39-Word Parallel}
+
+The Magonet observation (39 Hebrew words in Jonah 4:2--3 and 4:10--11;
+30 if maqqef-joined clusters are counted as single units) is
+machine-verifiable against the Open Scriptures Hebrew Bible
+\cite{oshb}, which provides the Westminster Leningrad Codex in OSIS
+\textsc{xml} with each \texttt{<w>} element marking a graphic word. The
+verification methodology, in pseudocode:
+
+\begin{small}\ttfamily\setstretch{1.05}
+\noindent
+load oshb-jonah.xml\\
+for verses in [(4,2), (4,3), (4,10), (4,11)]:\\
+\hspace*{2em}words = xml.findall('.//w[@verse=verses]')\\
+\hspace*{2em}graphic\_count = len(words)\\
+\hspace*{2em}clusters = collapse\_maqqef\_joined(words)\\
+\hspace*{2em}lexical\_count = len(clusters)\\
+sum graphic\_count over (4,2) and (4,3): expect 39\\
+sum graphic\_count over (4,10) and (4,11): expect 39\\
+sum lexical\_count over (4,2) and (4,3): expect 30\\
+sum lexical\_count over (4,10) and (4,11): expect 30
+\end{small}
+
+\vspace{0.6em}
+
+\noindent
+The published version of this paper will contain the script-derived
+counts as primary evidence and will document any deviation from
+Magonet's figures with the methodological reason
+(maqqef-treatment edge cases, ketiv/qere variants, BHS apparatus
+footnotes). The literary-critical observation remains Magonet's; the
+machine verification establishes its mechanical reproducibility.
+
+\vspace{1.4em}
+
+% ─── Bibliography ────────────────────────────────────────────────────
+\renewcommand{\refname}{\sceq{References}}
+\addcontentsline{toc}{section}{References}
+
+\begin{small}\setstretch{1.08}\setlength{\parskip}{0.4ex}
+
+\begin{thebibliography}{99}
+
+\bibitem{aaronsonwatrous}
+S.\,Aaronson and J.\,Watrous.
+\newblock Closed timelike curves make quantum and classical computing equivalent.
+\newblock \emph{Proceedings of the Royal Society A} 465 (2009): 631–647.
+\newblock arXiv:0808.2669.
+
+\bibitem{bagwellhamt}
+P.\,Bagwell.
+\newblock Ideal hash trees.
+\newblock EPFL technical report, 2001.
+
+\bibitem{chatzi}
+K.\,Chatzi et al.
+\newblock Counterfactual token generation in large language models.
+\newblock arXiv:2409.17027, 2024.
+
+\bibitem{constory}
+ConStory-Bench / ConStory-Checker.
+\newblock Lost in stories: Consistency bugs in long story generation by \textsc{llm}s.
+\newblock arXiv:2603.05890, 2026.
+
+\bibitem{counterbench}
+J.\,Chen et al.
+\newblock CounterBench: Evaluating and improving counterfactual reasoning in large language models.
+\newblock arXiv:2502.11008, 2025.
+
+\bibitem{correaleebareinboim}
+J.\,Correa, S.\,Lee, and E.\,Bareinboim.
+\newblock Nested counterfactual identification from arbitrary surrogate experiments.
+\newblock \emph{NeurIPS} 2021.
+\newblock arXiv:2107.03190.
+
+\bibitem{deepimagine}
+DeepImagine: Learning biomedical reasoning via successive counterfactual imagining.
+\newblock arXiv:2604.23054, 2026.
+
+\bibitem{depthgeneralization}
+Exploring depth generalization in large language models for solving recursive logic tasks.
+\newblock arXiv:2512.02677, AAAI 2026.
+
+\bibitem{driscolltarjan}
+J.\,R.\,Driscoll, N.\,Sarnak, D.\,D.\,Sleator, and R.\,E.\,Tarjan.
+\newblock Making data structures persistent.
+\newblock \emph{Journal of Computer and System Sciences} 38 (1989): 86–124.
+
+\bibitem{educat}
+J.\,Chen et al.
+\newblock \textsc{educat}: Unsupervised editing for counterfactual stories.
+\newblock \emph{AAAI} 2022.
+\newblock arXiv:2112.05417.
+
+\bibitem{executablecounterfactuals}
+A.\,Vashishtha et al.
+\newblock Executable counterfactuals: Improving \textsc{llm}s' causal reasoning through code.
+\newblock \emph{ICLR} 2026.
+\newblock arXiv:2510.01539.
+
+\bibitem{faithfulnessdecay}
+Y.\,Ye et al.
+\newblock Mechanistic evidence for faithfulness decay in chain-of-thought reasoning.
+\newblock arXiv:2602.11201, 2026.
+
+\bibitem{filliatreconchon}
+J.-C.\,Filliâtre and S.\,Conchon.
+\newblock Type-safe modular hash-consing.
+\newblock \emph{ML Workshop}, 2006.
+
+\bibitem{fivedbfmtt}
+5D Brainfuck With Multiverse Time Travel.
+\newblock \emph{Esolang Wiki}, esolangs.org, 2017.
+
+\bibitem{freemanbetweenness}
+L.\,C.\,Freeman.
+\newblock A set of measures of centrality based on betweenness.
+\newblock \emph{Sociometry} 40 (1977): 35–41.
+
+\bibitem{genie3}
+Google DeepMind.
+\newblock Genie 3: A new frontier for world models.
+\newblock Technical report, August 2025.
+
+\bibitem{gollie}
+O.\,Sainz, I.\,García-Ferrero, R.\,Agerri, O.\,Lopez de Lacalle, G.\,Rigau, and E.\,Agirre.
+\newblock GoLLIE: Annotation guidelines improve zero-shot information-extraction.
+\newblock \emph{ICLR} 2024.
+\newblock arXiv:2310.03668.
+
+\bibitem{halpernpearlcausality}
+J.\,Y.\,Halpern.
+\newblock \emph{Actual Causality}.
+\newblock MIT Press, 2016.
+
+\bibitem{ipfsmerkledag}
+J.\,Benet.
+\newblock IPFS — Content addressed, versioned, P2P file system.
+\newblock arXiv:1407.3561, 2014.
+
+\bibitem{kiciman}
+E.\,Kıcıman, R.\,Ness, A.\,Sharma, and C.\,Tan.
+\newblock Causal reasoning and large language models: Opening a new frontier for causality.
+\newblock arXiv:2305.00050, 2023.
+
+\bibitem{knuthzdd}
+D.\,E.\,Knuth.
+\newblock \emph{The Art of Computer Programming, Vol.~4, Fascicle 1: Bitwise Tricks \& Techniques; Binary Decision Diagrams}.
+\newblock Addison-Wesley, 2009.
+
+\bibitem{lewiscounterfactuals}
+D.\,Lewis.
+\newblock \emph{Counterfactuals}.
+\newblock Blackwell, 1973.
+
+\bibitem{lihybrid}
+J.\,Li, Y.\,Pan, and X.\,Pi.
+\newblock Beyond \textsc{llm}s: A linguistic approach to causal graph generation from narrative texts.
+\newblock \emph{ACL} 2025 Workshop on Narrative Understanding.
+
+\bibitem{lostinstories}
+Lost in stories: consistency bugs in long story generation by \textsc{llm}s.
+\newblock arXiv:2603.05890, 2026.
+
+\bibitem{magonet}
+J.\,Magonet.
+\newblock \emph{Form and Meaning: Studies in Literary Techniques in the Book of Jonah}.
+\newblock 2nd ed., Almond Press, Sheffield, 1983.
+
+\bibitem{magonettorah}
+J.\,Magonet.
+\newblock Jonah's recalcitrant prayer.
+\newblock TheTorah.com, 2014.
+
+\bibitem{narrativefactscore}
+NarrativeFactScore: Agent-as-a-judge for factual summarization of long narratives.
+\newblock arXiv:2501.09993, 2025.
+
+\bibitem{nextweektonight}
+A.\,Gauri.
+\newblock Next week tonight: Simulating counterfactual narratives.
+\newblock SM-MAS thesis, MIT Media Lab, 2025.
+
+\bibitem{nocha}
+M.\,Karpinska et al.
+\newblock One thousand and one pairs: A novel challenge for long-context language models.
+\newblock \emph{EMNLP} 2024.
+\newblock arXiv:2406.16264.
+
+\bibitem{okasakipfds}
+C.\,Okasaki.
+\newblock \emph{Purely Functional Data Structures}.
+\newblock Cambridge University Press, 1998.
+
+\bibitem{oshb}
+Open Scriptures Hebrew Bible (OSHB), version 2.0.
+\newblock github.com/openscriptures/morphhb. Westminster Leningrad Codex in OSIS \textsc{xml}.
+
+\bibitem{pagerank}
+S.\,Brin and L.\,Page.
+\newblock The anatomy of a large-scale hypertextual web search engine.
+\newblock \emph{Computer Networks and ISDN Systems} 30 (1998): 107–117.
+
+\bibitem{pasta}
+M.\,Ghazarian, T.\,Wolfson et al.
+\newblock \textsc{pasta}: A dataset for modeling participant states in narratives.
+\newblock \emph{EMNLP} 2022.
+\newblock arXiv:2208.00329.
+
+\bibitem{pearlcausality}
+J.\,Pearl.
+\newblock \emph{Causality: Models, Reasoning, and Inference}.
+\newblock 2nd ed., Cambridge University Press, 2009.
+
+\bibitem{pearlalgorithmization}
+J.\,Pearl.
+\newblock The algorithmization of counterfactuals.
+\newblock UCLA Technical Report R-360, 2013.
+
+\bibitem{pearlrobins}
+J.\,Pearl and J.\,Robins.
+\newblock Probabilistic evaluation of sequential plans from causal models with hidden variables.
+\newblock \emph{UAI} 1995.
+
+\bibitem{perezattractors}
+J.\,Perez et al.
+\newblock When \textsc{llm}s play the telephone game: Cultural attractors as conceptual tools to evaluate \textsc{llm}s in multi-turn settings.
+\newblock arXiv:2407.04503, 2024.
+
+\bibitem{proppmorphology}
+V.\,Propp.
+\newblock \emph{Morphology of the Folktale}.
+\newblock Russian original 1928; English translation, University of Texas Press, 1968.
+
+\bibitem{pycodetexteed}
+S.\,Srivastava et al.
+\newblock PyCode-TextEE: Instruction-tuning \textsc{llm}s for event extraction with annotation guidelines.
+\newblock \emph{ACL Findings} 2025.
+\newblock arXiv:2502.16377.
+
+\bibitem{reagansixarcs}
+A.\,J.\,Reagan, L.\,Mitchell, D.\,Kiley, C.\,M.\,Danforth, and P.\,S.\,Dodds.
+\newblock The emotional arcs of stories are dominated by six basic shapes.
+\newblock \emph{EPJ Data Science} 5 (2016): 31.
+
+\bibitem{ryan}
+M.-L.\,Ryan.
+\newblock \emph{Possible Worlds, Artificial Intelligence, and Narrative Theory}.
+\newblock Indiana University Press, 1991.
+
+\bibitem{sasson}
+J.\,M.\,Sasson.
+\newblock \emph{Jonah: A New Translation with Introduction, Commentary, and Interpretation}.
+\newblock Anchor Bible 24B, Doubleday, 1990.
+
+\bibitem{scorestory}
+SCORE: Story coherence and retrieval enhancement for AI narratives.
+\newblock arXiv:2503.23512, 2025.
+
+\bibitem{sketchcustomize}
+B.\,Hao, X.\,Pang et al.
+\newblock Sketch and customize: A counterfactual story generator.
+\newblock \emph{AAAI} 2021.
+
+\bibitem{stepflowbreaks}
+Reasoning fails where step flow breaks.
+\newblock arXiv:2604.06695, 2026.
+
+\bibitem{tangcounterfactual}
+W.\,Tang et al.
+\newblock On the eligibility of \textsc{llm}s for counterfactual reasoning: A decompositional study.
+\newblock arXiv:2505.11839, 2025.
+
+\bibitem{timetravel}
+L.\,Qin, A.\,Bosselut, A.\,Holtzman, C.\,Bhagavatula, E.\,Clark, and Y.\,Choi.
+\newblock Counterfactual story reasoning and generation.
+\newblock \emph{EMNLP} 2019.
+\newblock arXiv:1909.04076.
+
+\bibitem{trible}
+P.\,Trible.
+\newblock \emph{Rhetorical Criticism: Context, Method, and the Book of Jonah}.
+\newblock Fortress, 1994.
+
+\bibitem{virtualhistory}
+N.\,Ferguson, ed.
+\newblock \emph{Virtual History: Alternatives and Counterfactuals}.
+\newblock Macmillan, 1997.
+
+\bibitem{xgrammar}
+Y.\,Dong et al.
+\newblock \textsc{xgrammar}: Flexible and efficient structured generation.
+\newblock arXiv:2411.15100, 2024.
+
+\end{thebibliography}
+\end{small}
+
+\end{document}

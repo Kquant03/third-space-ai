@@ -3,18 +3,21 @@
 //  ─────────────────────────────────────────────────────────────────────────
 //  The centerpiece of the thesis and the single hardest design problem.
 //
-//  Reproduction is NOT a threshold on a bond counter. It is an emergent
-//  consequence of both fish, independently, reflecting each twilight
-//  that they are drawn to the other — and doing so on at least 3 of the
-//  last 7 sim-days. The LLMs do not know about this rule. They just
-//  reflect honestly, and the world responds when two honest reflections
-//  have aligned over time.
+//  Reproduction gates on **bond intensity** — a scalar ∈ [0, 1] derived
+//  from the relationship card via mechanisms/bond.ts, accumulating
+//  through proximity, witnessing, and survived events together. Two
+//  beings are reproduction-eligible when both directions of their card
+//  pair (a→b and b→a) clear BOND.reproductionThreshold. The LLMs do
+//  not know about this rule. They reflect honestly each twilight; the
+//  cards consolidate; the world responds when bond has formed.
 //
 //  This file enforces three conceptual layers cleanly:
 //
-//    1. DETECTION — a pure aggregation over the drawn_to_log that asks:
-//       "which pairs have mutual pointings in ≥3 of the last 7 sim-days?"
-//       Runs once per sim-day at a fixed phase (morning, t_day ≈ 0.05).
+//    1. DETECTION — `detectBondedPairs` scans relationship cards among
+//       living mature koi and returns those whose bidirectional bond
+//       intensity clears threshold. Runs once per sim-day at the
+//       morning boundary (t_day ≈ 0.05). Replaces the earlier 3-of-7
+//       drawn-to scan over `drawn_to_log`.
 //
 //    2. PERMISSION — a row in `reproduction_permission` granted to each
 //       detected pair, valid for 2 sim-days. Permission is NOT an
@@ -28,17 +31,30 @@
 //       tick are logged as co-present witnesses (biology is chaotic)
 //       but only the primary pair receives lineage credit.
 //
+//  Density gate: BOND.populationGate caps the alive count at which new
+//  permissions can be granted. The pond runs sparse on purpose — too
+//  many beings flatten the relational topology.
+//
 //  The kinematic bias toward the shelf when permission is active lives
 //  in meditation.ts — a small scoring bump on candidates that happen to
 //  trend shelfward. It is never a forced migration.
 //
 //  "Either fish can defect by swimming away; the condition enforces
 //   only permission, not act." (§ X)
+//
+//  Historical note: `DRAWN_TO`, `DrawnToLogRow`, and `countMutualDays`
+//  are deprecated and retained briefly for back-compat / migration.
+//  `drawn_to_log` continues to be written by twilight reflection (it
+//  feeds RelationshipCard.drawnCount7d, which contributes to the
+//  card's overall valence trajectory) — but reproduction no longer
+//  reads from it. Remove DRAWN_TO and the deprecated helpers when no
+//  caller remains.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { POND, DRAWN_TO, SIM, LIFE } from "./constants.js";
+import { POND, BOND, DRAWN_TO, SIM, LIFE } from "./constants.js";
 import { Rng } from "./rng.js";
-import type { KoiId, KoiState, SimTick, WorldState } from "./types.js";
+import type { KoiId, KoiState, RelationshipCard, SimTick, WorldState } from "./types.js";
+import { bondIntensity, isMutuallyBonded } from "./mechanisms/bond.js";
 
 // ───────────────────────────────────────────────────────────────────
 //  Constants — all derived from DRAWN_TO + geometry
@@ -135,16 +151,27 @@ export function pickEggCount(rng: Rng): number {
  *
  * Returns a Map from canonical pair-key → mutual-day count.
  */
+/**
+ * @deprecated Drawn-to log row shape. The drawn_to_log table still
+ * exists and is still written by twilight reflection (it feeds
+ * RelationshipCard.drawnCount7d), but reproduction no longer reads
+ * from it. Retained for migration compatibility.
+ */
 export interface DrawnToLogRow {
   actor_id: string;
   target_id: string;
   sim_day: number;
 }
 
+/**
+ * @deprecated Counts mutual days from a flat drawn_to_log row list.
+ * Replaced by bond-intensity detection in `detectBondedPairs`.
+ * Retained briefly so any migration code or analytics can still
+ * read the old signal until it's fully retired.
+ */
 export function countMutualDays(
   rows: readonly DrawnToLogRow[],
 ): Map<string, number> {
-  // Build: (actor, target) → set of sim_days it appeared on
   const seen = new Map<string, Set<number>>();
   for (const r of rows) {
     const key = `${r.actor_id}→${r.target_id}`;
@@ -153,11 +180,10 @@ export function countMutualDays(
     set.add(r.sim_day);
   }
 
-  // For each pair, mutual days = intersection of days(A→B) and days(B→A)
   const mutual = new Map<string, number>();
   for (const [key, aDays] of seen.entries()) {
     const [a, b] = key.split("→") as [string, string];
-    if (a >= b) continue;                  // canonical direction only
+    if (a >= b) continue;
     const bDays = seen.get(`${b}→${a}`);
     if (!bDays) continue;
     let count = 0;
@@ -170,38 +196,123 @@ export function countMutualDays(
 }
 
 // ───────────────────────────────────────────────────────────────────
-//  SQL — detection
+//  SQL — bond-based detection
 //
-//  Runs once per sim-day. Reads the last 7 sim-days of drawn_to_log.
-//  Returns pair keys eligible for permission grant.
+//  Runs once per sim-day at the morning boundary. Loads the relevant
+//  cards in a single query, filters mature/alive candidates, and
+//  returns the pairs whose bidirectional bond intensity clears
+//  BOND.reproductionThreshold.
 // ───────────────────────────────────────────────────────────────────
 
 export interface DetectedPair {
   pairKey: string;
   aId: KoiId;
   bId: KoiId;
-  mutualDays: number;
+  /** Bond intensity from a's card toward b. */
+  bondIntensityAB: number;
+  /** Bond intensity from b's card toward a. */
+  bondIntensityBA: number;
 }
 
-export function detectMutualPairs(
-  sql: SqlStorage,
-  nowSimDay: number,
-): DetectedPair[] {
-  const lowerBound = nowSimDay - DRAWN_TO.windowDays;
-  const rows = sql.exec(
-    `SELECT actor_id, target_id, sim_day
-       FROM drawn_to_log
-      WHERE sim_day > ? AND sim_day <= ?`,
-    lowerBound, nowSimDay,
-  ).toArray() as unknown as DrawnToLogRow[];
+/**
+ * Map a relationship_card row (snake_case SQL) to the subset of
+ * RelationshipCard fields bondIntensity actually reads. Inline rather
+ * than a full row→card mapper because we don't need the LLM-authored
+ * fields here, just the structural ones bond intensity weighs.
+ */
+function rowToBondCard(row: Record<string, unknown>): RelationshipCard {
+  return {
+    selfId: row["self_id"] as string,
+    otherId: row["other_id"] as string,
+    firstEncounterTick: (row["first_encounter_tick"] as number) ?? 0,
+    interactionCount: (row["interaction_count"] as number) ?? 0,
+    valence: (row["valence"] as number) ?? 0,
+    valenceTrajectory7d: [],
+    dominance: (row["dominance"] as number) ?? 0,
+    trust: (row["trust"] as number) ?? 0,
+    summary: (row["summary"] as string) ?? "",
+    notableMemoryIds: [],
+    drawnCount7d: (row["drawn_count_7d"] as number) ?? 0,
+    lastAuthoredTick: (row["last_authored_tick"] as number) ?? 0,
+    familiarityPrior: (row["familiarity_prior"] as number) ?? 0,
+  };
+}
 
-  const mutual = countMutualDays(rows);
+/**
+ * Detect pairs whose bidirectional bond intensity clears the
+ * reproduction threshold. Replaces `detectMutualPairs`.
+ *
+ * Returns one entry per unordered pair (a < b lexicographically).
+ * Only mature koi (adolescent / adult / elder) are candidates;
+ * fry/juveniles and eggs are excluded at the SQL filter.
+ *
+ * Witnessing density is currently 0 in the bond formula — see
+ * mechanisms/bond.ts for why. When the twilight-reflection pass
+ * computes and stores `witnessingDensity7d` on the card, this
+ * function should pass it to `bondIntensity` / `isMutuallyBonded`.
+ */
+export function detectBondedPairs(
+  sql: SqlStorage,
+  koi: readonly KoiState[],
+): DetectedPair[] {
+  const matureStages = new Set(["adolescent", "adult", "elder"]);
+  const candidates = koi.filter((k) => matureStages.has(k.stage));
+  if (candidates.length < 2) return [];
+
+  const ids = candidates.map((k) => k.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const rows = sql.exec(
+    `SELECT * FROM relationship_card
+       WHERE self_id IN (${placeholders})
+         AND other_id IN (${placeholders})`,
+    ...ids, ...ids,
+  ).toArray() as unknown as Record<string, unknown>[];
+
+  // Build directional card map: "selfId→otherId" → card.
+  const cardByDir = new Map<string, RelationshipCard>();
+  for (const row of rows) {
+    const card = rowToBondCard(row);
+    cardByDir.set(`${card.selfId}→${card.otherId}`, card);
+  }
+
   const out: DetectedPair[] = [];
-  for (const [key, count] of mutual.entries()) {
-    const [a, b] = splitPairKey(key);
-    out.push({ pairKey: key, aId: a, bId: b, mutualDays: count });
+  for (let i = 0; i < candidates.length; i++) {
+    for (let j = i + 1; j < candidates.length; j++) {
+      const aId = candidates[i]!.id;
+      const bId = candidates[j]!.id;
+      const cardAB = cardByDir.get(`${aId}→${bId}`);
+      const cardBA = cardByDir.get(`${bId}→${aId}`);
+      if (!cardAB || !cardBA) continue;
+      if (!isMutuallyBonded(cardAB, cardBA)) continue;
+      out.push({
+        pairKey: canonicalPairKey(aId, bId),
+        aId, bId,
+        bondIntensityAB: bondIntensity(cardAB),
+        bondIntensityBA: bondIntensity(cardBA),
+      });
+    }
   }
   return out;
+}
+
+/**
+ * @deprecated Use `detectBondedPairs` instead. This shim accepts the
+ * same call signature pond-do.ts had pre-cleanup but routes through
+ * the new bond detection. The `nowSimDay` parameter is ignored. Kept
+ * one revision for migration; remove once all call sites switch.
+ */
+export function detectMutualPairs(
+  sql: SqlStorage,
+  _nowSimDay: number,
+  koi?: readonly KoiState[],
+): DetectedPair[] {
+  if (!koi) {
+    // Without the koi list we can't run bond detection. Old call sites
+    // must add the koi argument; until they do, return empty so we
+    // fail-safe rather than fall back to drawn-to scan.
+    return [];
+  }
+  return detectBondedPairs(sql, koi);
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -231,6 +342,11 @@ CREATE TABLE IF NOT EXISTS reproduction_permission (
   granted_at_tick  INTEGER NOT NULL,
   expires_at_tick  INTEGER NOT NULL,
   consumed_at_tick INTEGER,
+  -- Repurposed May 2026 from "drawn-to mutual day count" to bond
+  -- strength × 100 (rounded). Column name retained for migration
+  -- compat; semantic is now "average of bondIntensityAB and
+  -- bondIntensityBA at grant time, scaled to integer percent."
+  -- Rename to bond_strength_x100 in next schema migration.
   mutual_days      INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_permission_active
@@ -271,13 +387,13 @@ export function hasActivePermission(
   return rows.length > 0;
 }
 
-/** Check cooldown: either fish spawned in last COOLDOWN_SIM_DAYS? */
+/** Check cooldown: either fish spawned in last BOND.postSpawningCooldownDays? */
 function inCooldown(
   koi: Map<KoiId, KoiState>, aId: KoiId, bId: KoiId, nowTick: SimTick,
 ): boolean {
   const a = koi.get(aId), b = koi.get(bId);
   if (!a || !b) return true;              // missing fish => not eligible
-  const cooldownTicks = DRAWN_TO.cooldownDays * TICKS_PER_SIM_DAY;
+  const cooldownTicks = BOND.postSpawningCooldownDays * TICKS_PER_SIM_DAY;
   if (nowTick - a.lastSpawningTick < cooldownTicks) return true;
   if (nowTick - b.lastSpawningTick < cooldownTicks) return true;
   return false;
@@ -289,6 +405,7 @@ function inCooldown(
  *
  * Filters:
  *   - season is spring
+ *   - alive count below BOND.populationGate (density gate)
  *   - both fish alive (present in the koi map)
  *   - both at least adolescent (no fry reproduction; biology)
  *   - neither in cooldown from a recent spawning
@@ -302,6 +419,15 @@ export function filterEligible(
   nowTick: SimTick,
 ): DetectedPair[] {
   if (world.season !== "spring") return [];
+
+  // Population gate — the pond runs sparse on purpose. When the alive
+  // count is at or above the gate, no new permissions are granted; the
+  // existing colony plays out without further reproduction until
+  // attrition reopens the gate. (Stage transitions out of "egg" count
+  // toward the cap so we don't issue permissions that would push us
+  // past the gate by hatch time.)
+  const aliveCount = koi.filter((k) => k.stage !== "dead" && k.stage !== "dying").length;
+  if (aliveCount >= BOND.populationGate) return [];
 
   const koiById = new Map(koi.map((k) => [k.id, k]));
   const matureStages = new Set(["adolescent", "adult", "elder"]);
@@ -323,6 +449,11 @@ export function grantPermission(
   sql: SqlStorage, pair: DetectedPair, nowTick: SimTick,
 ): void {
   const expires = nowTick + PERMISSION_LIFETIME_SIM_DAYS * TICKS_PER_SIM_DAY;
+  // Repurposed mutual_days column: now stores bond strength × 100
+  // (rounded), averaged across the two directions. See DDL comment.
+  const bondStrengthX100 = Math.round(
+    (pair.bondIntensityAB + pair.bondIntensityBA) * 50,
+  );
   sql.exec(
     `INSERT INTO reproduction_permission
        (pair_key, a_id, b_id, granted_at_tick, expires_at_tick, mutual_days)
@@ -332,7 +463,7 @@ export function grantPermission(
        expires_at_tick = excluded.expires_at_tick,
        mutual_days = excluded.mutual_days,
        consumed_at_tick = NULL`,
-    pair.pairKey, pair.aId, pair.bId, nowTick, expires, pair.mutualDays,
+    pair.pairKey, pair.aId, pair.bId, nowTick, expires, bondStrengthX100,
   );
 }
 

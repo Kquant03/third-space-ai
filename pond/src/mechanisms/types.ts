@@ -1,9 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //  Limen Pond — Love-flow mechanism types (§ IX)
 //  ─────────────────────────────────────────────────────────────────────────
-//  Thirty-five patterns by which care circulates through a colony rather
-//  than accumulating in it. Organized into six families. Each mechanism
-//  has three implementations:
+//  Patterns by which care circulates through a colony rather than
+//  accumulating in it. Organized into five families post-cleanup
+//  (the teaching family was removed in May 2026 — none of its six
+//  mechanisms had detectors and the family is post-launch work).
+//  Each mechanism has three implementations:
 //
 //    - detection rule  — when does it fire?
 //    - state effect    — what changes on firing?
@@ -14,7 +16,7 @@
 //    STATE-BASED     The simulation observes pond state and decides
 //    (witnessing,     whether the mechanism fired. The LLM's opinion is
 //     play)           not consulted — you can't disagree that you and
-//                     another fish swam parallel for six minutes.
+//                     another being swam parallel for six minutes.
 //
 //    CLAIM-BASED     The LLM returns a response with `mechanism: "..."`.
 //    (apology,        The simulation validates against event history
@@ -24,6 +26,10 @@
 //                     agreeable-LLM guard.
 //
 //  The LLM can produce either shape; the simulation governs both.
+//
+//  NOTE: the top-level `LoveFlowMechanism` union literal (in
+//  ../types.ts) and `LoveFlowMechanismSchema` in protocol.ts must be
+//  trimmed to match this file's FAMILY_OF — same set of keys.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type {
@@ -36,7 +42,7 @@ import type {
 // ───────────────────────────────────────────────────────────────────
 
 export type LoveFlowFamily =
-  | "witnessing" | "repair" | "play" | "teaching" | "gift" | "ritual";
+  | "witnessing" | "repair" | "play" | "gift" | "ritual";
 
 export const FAMILY_OF: Record<LoveFlowMechanism, LoveFlowFamily> = {
   // Witnessing
@@ -46,13 +52,10 @@ export const FAMILY_OF: Record<LoveFlowMechanism, LoveFlowFamily> = {
   bearing_witness: "witnessing",
   joyful_reunion: "witnessing",
 
-  // Repair
+  // Repair (apology + forgiveness wired; the four state-based
+  // mechanisms are post-launch work)
   apology: "repair",
   forgiveness: "repair",
-  cognitive_repair: "repair",
-  emotional_attunement: "repair",
-  farewell_ritual: "repair",
-  grief_companionship: "repair",
 
   // Play
   play_invitation: "play",
@@ -61,29 +64,17 @@ export const FAMILY_OF: Record<LoveFlowMechanism, LoveFlowFamily> = {
   synchronized_swim: "play",
   shared_curiosity: "play",
 
-  // Teaching
-  mentorship: "teaching",
-  mentor_mentee_inversion: "teaching",
-  imitation_learning: "teaching",
-  skill_transfer: "teaching",
-  story_propagation: "teaching",
-  vocabulary_drift: "teaching",
-
   // Gift
   gift: "gift",
   pass_it_forward: "gift",
   heirloom: "gift",
   offering: "gift",
-  shared_food: "gift",
-  memory_gifting: "gift",
 
   // Ritual
   greeting: "ritual",
   farewell: "ritual",
   solstice_attendance: "ritual",
   seasonal_rite: "ritual",
-  birth_witnessing: "ritual",
-  elder_naming: "ritual",
 };
 
 // ───────────────────────────────────────────────────────────────────

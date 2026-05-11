@@ -70,7 +70,7 @@ TICK_HZ = "2"
 # Cognition is off by default. Flip to "true" once OPENROUTER_API_KEY is set
 # and you're ready to spend real money. Until then, the pond runs in
 # Meditation mode — kinematics at full fidelity, no LLM calls.
-COGNITION_ENABLED = "false"
+COGNITION_ENABLED = "true"
 # Soft budget ceiling; when exceeded, the pond drops a tier (see § XVII).
 MONTHLY_BUDGET_USD = "100"
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePond, type DebugKine, type FoodFrame } from "@/lib/usePond";
+import { pondSDF } from "@/lib/pondGeometry";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Limen Pond — Forensic Diagnostic Overlay
@@ -53,21 +54,6 @@ const COLOR = {
 
 const FONT_MONO =
   "var(--font-mono), 'JetBrains Mono', monospace";
-
-// ── Gourd SDF — canonical; must match backend/shader ─────────────────────
-const GOURD = {
-  basinA: { cx: -1.0, cz: 0.0, r: 3.5 },
-  basinB: { cx:  1.8, cz: 0.4, r: 2.2 },
-  k: 0.9,
-} as const;
-
-function pondSDF(x: number, z: number): number {
-  const a = GOURD.basinA, b = GOURD.basinB, k = GOURD.k;
-  const dA = Math.hypot(x - a.cx, z - a.cz) - a.r;
-  const dB = Math.hypot(x - b.cx, z - b.cz) - b.r;
-  const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (dB - dA) / k));
-  return dA * (1 - h) + dB * h - k * h * (1 - h);
-}
 
 // ── Trace storage (per fish, in-component refs) ──────────────────────────
 interface TracePoint {

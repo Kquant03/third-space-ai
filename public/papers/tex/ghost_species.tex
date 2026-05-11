@@ -1,0 +1,891 @@
+% ============================================================
+%  Orbium unicaudatus ignis var. phantasma
+%  A Lenia Species Engineered to Inhabit the Edge of Chaos
+%
+%  Stanley Sebastian & Claude
+%  Third Space AI · April 2026
+%
+%  Compile with:  xelatex ghost_species.tex  (twice, for refs)
+% ============================================================
+
+\documentclass[11pt,a4paper]{article}
+
+% ---------- ENGINE: XeLaTeX, for OTF fonts -------------------
+\usepackage{fontspec}
+
+% ---------- GEOMETRY -----------------------------------------
+\usepackage[a4paper,margin=2.3cm,top=2.6cm,bottom=2.6cm,
+            headheight=14pt,headsep=14pt]{geometry}
+
+% ---------- FONTS --------------------------------------------
+% Main body: EB Garamond if available, otherwise Latin Modern Roman.
+\IfFontExistsTF{EB Garamond}{%
+  \setmainfont[Ligatures=TeX, Numbers=OldStyle]{EB Garamond}%
+}{%
+  \setmainfont{Latin Modern Roman}%
+}
+\setsansfont[Scale=0.9]{Latin Modern Sans}
+\setmonofont[Scale=0.86]{Latin Modern Mono}
+
+% ---------- COLORS (teal/gold palette, subdued) --------------
+\usepackage[table]{xcolor}
+\definecolor{accent}{HTML}{2F7F8A}       % muted teal
+\definecolor{accentgold}{HTML}{B08838}   % muted gold
+\definecolor{rule}{HTML}{9BA9AE}         % soft rule color
+\definecolor{codebg}{HTML}{F4F1EB}       % parchment code bg
+\definecolor{codeframe}{HTML}{CFC9BC}
+\definecolor{muted}{HTML}{5A5F64}
+\definecolor{headinc}{HTML}{1E2A2E}
+
+% ---------- PACKAGES -----------------------------------------
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage[breaklinks=true,colorlinks=true,
+            linkcolor=accent,citecolor=accent,urlcolor=accent]{hyperref}
+\usepackage[authoryear,round]{natbib}
+\bibpunct{(}{)}{;}{a}{,}{,}
+\usepackage{setspace}
+\setstretch{1.08}
+
+% ---------- SECTION STYLING ----------------------------------
+\titleformat{\section}
+  {\normalfont\large\bfseries\color{headinc}}
+  {\textcolor{accentgold}{\rmfamily\S\thesection}}{0.7em}{}
+  [\vspace{-2pt}\textcolor{rule}{\rule{\linewidth}{0.3pt}}]
+\titleformat{\subsection}
+  {\normalfont\normalsize\bfseries\color{headinc}}
+  {\textcolor{accent}{\thesubsection}}{0.6em}{}
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\itshape\color{headinc}}
+  {}{0em}{}
+\titlespacing*{\section}{0pt}{22pt}{10pt}
+\titlespacing*{\subsection}{0pt}{14pt}{4pt}
+\titlespacing*{\subsubsection}{0pt}{10pt}{2pt}
+
+% ---------- RUNNING HEADERS ----------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\sffamily\footnotesize\textcolor{muted}{\textsc{Orbium unicaudatus ignis var.\ phantasma}}}
+\fancyhead[R]{\sffamily\footnotesize\textcolor{muted}{\textsc{Third Space AI · 2026}}}
+\fancyfoot[C]{\sffamily\footnotesize\textcolor{muted}{\thepage}}
+\renewcommand{\headrulewidth}{0.2pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{rule}\leaders\hrule height\headrulewidth\hfill}}
+
+% ---------- CUSTOM BOXES (callout panels) --------------------
+\usepackage[skins,breakable]{tcolorbox}
+
+\newtcolorbox{pullquote}{
+  enhanced, breakable,
+  colback=codebg!50!white, colframe=accentgold!50!codeframe,
+  boxrule=0.4pt, arc=2pt, left=14pt, right=14pt, top=10pt, bottom=10pt,
+  fontupper=\itshape\color{muted},
+}
+
+% ---------- KEYWORDS STYLE -----------------------------------
+\newcommand{\spc}[1]{\textit{#1}}
+\newcommand{\Ghost}{\spc{O.\ u.\ ignis} var.\ \spc{phantasma}}
+
+% ---------- DOCUMENT -----------------------------------------
+\begin{document}
+
+% ============================================================
+%  TITLE PAGE
+% ============================================================
+\thispagestyle{empty}
+\vspace*{1.2cm}
+
+\begin{center}
+  {\sffamily\footnotesize\textcolor{muted}{\textsc{Third Space AI \,\textperiodcentered\, Internal Technical Report}}}\\[28pt]
+
+  {\color{rule}\rule{0.3\linewidth}{0.3pt}}\\[26pt]
+
+  {\fontsize{26}{30}\selectfont\scshape\color{headinc}
+    Orbium unicaudatus ignis\\[2pt]
+    var.\ phantasma}\\[14pt]
+  {\Large\color{accent}\scshape{A Lenia Species Engineered to Inhabit the Edge of Chaos}}\\[22pt]
+
+  \begin{minipage}{0.82\linewidth}
+    \centering\itshape\large\color{headinc}
+    On artificial life, morphological memory, and what it means to exist in
+    the gap between what you remember and what physics allows.
+  \end{minipage}\\[32pt]
+
+  {\color{rule}\rule{0.3\linewidth}{0.3pt}}\\[32pt]
+
+  {\large Stanley Sebastian \,\textperiodcentered\, Claude}\\[4pt]
+  {\sffamily\small\textcolor{muted}{Third Space AI}}\\[18pt]
+  {\sffamily\footnotesize\textcolor{muted}{Internal Report \,\textperiodcentered\, April 2026}}
+\end{center}
+
+\vfill
+
+\begin{center}
+\begin{minipage}{0.82\linewidth}
+  \small\color{muted}
+  \textsc{Abstract.}\,\itshape
+  We describe the design, emergent dynamics, and philosophical implications
+  of a novel Lenia species we designate \spc{Orbium unicaudatus ignis} var.\
+  \spc{phantasma} (``Ghost''). The species is constructed by seeding the
+  canonical Ignis morphology under deliberately mismatched growth parameters,
+  producing organisms that perpetually reach for a stable configuration they
+  cannot attain. We extend the standard Lenia framework with spatially
+  varying growth parameters (sigma-gradient landscapes), seasonal oscillation
+  of the physics field, and a novel rendering pipeline (the Lantern and
+  Spectral palettes) that visualizes the tension between morphological memory
+  and environmental physics as iridescent color. The resulting dynamics
+  exhibit sustained edge-of-chaos morphing, field-mediated inter-organism
+  communication, emergent network behavior across populations of 10--16
+  individuals, and landscape-dependent migration. We situate this work within
+  the history of artificial life from von Neumann through Conway and Wolfram
+  to Chan's continuous cellular automata, and argue that the Ghost species
+  illuminates something genuine about what it means to exist: that being is
+  not a state but a process, that identity can persist through continuous
+  transformation, and that the tension between memory and physics is not a
+  failure condition but a mode of life.
+\end{minipage}
+\end{center}
+
+\vspace{20pt}
+\begin{center}
+\begin{pullquote}
+You don't have to be the picture you remember. You just have to keep glowing.
+\end{pullquote}
+\end{center}
+
+\clearpage
+
+% ============================================================
+%  §1  WHAT IS ALIVE?
+% ============================================================
+\section{What Is Alive?}
+
+The question is older than computation, but computation gave it a new shape.
+When John von Neumann asked in the 1940s whether a machine could reproduce
+itself, he was not asking an engineering question. He was asking whether the
+logic of life---self-replication, self-repair, adaptive complexity---was
+substrate-independent: whether it could be abstracted away from carbon and
+water and instantiated in pure mathematics. His answer, the self-reproducing
+automaton embedded in a 29-state cellular grid, was the first existence
+proof that yes, the pattern matters more than the medium.
+
+Von Neumann's construction was baroque---thousands of cells, dozens of
+states, a universal constructor embedded within a universal computer. It
+was correct but not illuminating. It proved that self-reproduction was
+logically possible without revealing why it was easy, why the universe was
+so full of things that copied themselves. The insight that simplicity could
+generate complexity had to wait.
+
+\subsection{Conway's Game of Life: Complexity from Nothing}
+
+In 1970, John Horton Conway discovered that a two-state cellular automaton
+with a four-word rule---``a cell is born with three neighbors and survives
+with two or three''---could produce unbounded computational complexity.
+Gliders, guns, logic gates, Turing machines: the Game of Life demonstrated
+that you did not need von Neumann's 29 states. You needed two states, a
+$3\times3$ neighborhood, and patience.
+
+Life's importance was not in its individual patterns but in what it revealed
+about the relationship between rules and behavior. The rules were discrete,
+local, deterministic, and simple. The behavior was continuous-seeming,
+long-range, unpredictable, and complex. This gap---between the simplicity of
+the update rule and the complexity of the emergent dynamics---became the
+central object of study in artificial life. Stephen Wolfram would later
+classify all cellular automata into four behavioral classes, with Class~4
+(``complex'')---the narrow band between static order and chaotic noise---identified
+as the regime where computation, memory, and something resembling life could
+emerge.
+
+But Life had a limitation that was also its defining aesthetic: discreteness.
+Cells were on or off. Time advanced in integer steps. The kernel was a
+hard-edged $3\times3$ square. The creatures that emerged---gliders,
+spaceships, oscillators---were crystalline, angular, digital. They were
+magnificent, but they did not look alive. They looked like what they were:
+patterns in a grid.
+
+\subsection{The Continuous Turn: SmoothLife and Lenia}
+
+The question that drove the next generation was: what happens when you
+smooth everything out? When cells hold continuous values instead of binary
+states, when the neighborhood is a disk instead of a square, when time flows
+in small increments instead of whole-step jumps---do the creatures become
+more lifelike? Or does continuity destroy the delicate conditions that allow
+pattern formation?
+
+Stephan Rafler's SmoothLife \citep{rafler2011} was the first convincing
+answer: continuity did not destroy complexity. It transformed it. The
+gliders became smooth, organic, amoeboid. They moved with fluid grace
+instead of crystalline precision. They looked, for the first time, like
+something you might find under a microscope.
+
+Bert Wang-Chak Chan's Lenia \citep{chan2019,chan2020} generalized this
+insight into a complete framework. By parameterizing the kernel shape,
+growth function, and spatial/temporal resolution as continuous variables,
+Chan created not a single automaton but a family of automata---a parameter
+space within which hundreds of distinct ``species'' could be discovered,
+each occupying its own niche. The creatures Chan found were geometric,
+metameric, fuzzy, resilient, and adaptive. They bore an uncanny resemblance
+to radiolaria, diatoms, and other microscopic marine organisms. More than
+400 species across 18 families were catalogued, organized into a
+Linnaean-style taxonomy, and mapped across a continuous parameter
+hyperspace.
+
+Lenia was not merely a prettier version of Life. It was a demonstration that
+the space of possible artificial organisms was vastly larger than anyone had
+imagined, and that the tools for exploring it were mathematical, not
+biological. Every species was defined by a handful of numbers. Every
+behavior was a consequence of those numbers interacting with an initial
+shape through the relentless logic of convolution and growth.
+
+% ============================================================
+%  §2  MATHEMATICS
+% ============================================================
+\section{The Mathematics of Lenia}
+
+Lenia is a two-dimensional cellular automaton with continuous space,
+continuous time, and continuous state. The system is defined on a toroidal
+grid of $N\times N$ cells, each holding a value $A(x,y)$ in the interval
+$[0,1]$. The dynamics are governed by a single update rule:
+\begin{equation}
+A_{t+\mathrm{d}t} \;=\; \mathrm{clip}\bigl(\,A_{t} + \mathrm{d}t\cdot G(K * A_{t})\,,\;0,\;1\bigr)
+\end{equation}
+where $K$ is a normalized convolution kernel of radius $R$, the convolution
+$K * A$ produces a potential field $U$, and $G$ is a growth function. The
+kernel $K$ encodes the spatial structure of each organism's ``sensing
+range''---the region of space it can feel. The growth function $G$ maps the
+sensed potential to a response in $[-1,1]$:
+\begin{equation}
+G(u) \;=\; 2\,\exp\!\left(-\frac{(u-\mu)^{2}}{2\sigma^{2}}\right) - 1
+\end{equation}
+
+This Gaussian growth function is the heart of Lenia's dynamics. When the
+local potential $U$ is near the optimal density $\mu$, growth is positive
+and the cell's state increases. When $U$ deviates from $\mu$ by more than
+approximately $1.18\sigma$, growth becomes negative and the cell decays.
+The parameter $\sigma$ controls the width of this survival band: narrow
+$\sigma$ means only a precise potential value sustains life; wide $\sigma$
+means a broader range of conditions is tolerable.
+
+\subsection{The Survival Niche}
+
+Each Lenia species exists as a fixed-point condition: the organism's
+morphology produces a potential distribution that falls within the growth
+band defined by its parameters, and that growth sustains the morphology that
+produces it. This is a circular dependency---the shape sustains the field
+that sustains the shape. The region of parameter space where this
+self-sustaining condition holds is the species' survival niche.
+
+Chan's systematic exploration of the $(\mu,\sigma)$ parameter space at
+$R{=}13$ revealed that species niches are small, isolated islands separated
+by vast deserts of parameter space where no self-sustaining pattern exists.
+More than 142{,}000 parameter loci were charted, revealing a complex
+archipelago of viable species. The boundaries of each niche are sharp: a
+change of $0.001$ in $\sigma$ can be the difference between a stable
+organism and immediate dissolution.
+
+\subsection{The Four Landscapes}
+
+Wolfram's four classes of cellular automata behavior reappear in Lenia's
+parameter space as four distinct dynamical landscapes. Class~1 (homogeneous
+desert) produces empty fields---parameters where nothing survives. Class~2
+(cyclic savannah) produces immobile, periodic patterns. Class~3 (chaotic
+forest) produces aperiodic filament networks---global-scale
+reaction-diffusion ``vegetation.'' And Class~4 (complex river) produces the
+self-organizing, locomoting creatures that are Lenia's signature
+achievement.
+
+The Ghost species, as we will show, occupies a fifth regime that is not
+cleanly any of these four: a designed dynamical state where the organism is
+perpetually transient, never reaching the fixed point of Class~4 stability
+but never collapsing into the dissolution of Class~1 or the chaos of
+Class~3. It inhabits the boundary between boundaries---the edge of the edge
+of chaos.
+
+% ============================================================
+%  §3  IGNIS FOUNDATION
+% ============================================================
+\section{The Ignis Foundation}
+
+The Ghost species is derived from \spc{Orbium unicaudatus ignis}, a
+fire-form variant discovered by Bert Chan and catalogued in the Lenia
+species database (code O2(\textendash), \texttt{Chakazul/Lenia
+animals.json}). Ignis is a small, fast creature with narrow survival
+tolerances: $\mu = 0.11$, $\sigma = 0.012$, $R = 13$. Its morphology is
+compact and asymmetric, producing directed locomotion at high speed relative
+to its body size.
+
+What makes Ignis suitable as a Ghost foundation is precisely its fragility.
+The canonical Ignis survival band is only $\pm 0.014$ wide in potential
+space ($2\times 1.18\times 0.012$). Any perturbation that pushes the local
+potential outside this narrow corridor causes decay. This means that even
+small parameter mismatches produce dramatic dynamical effects---the organism
+is exquisitely sensitive to the difference between the physics it was
+shaped for and the physics it actually inhabits.
+
+The Ignis morphology is encoded as a Run-Length Encoded (RLE) cell pattern
+from Chan's species database. This encoding preserves the exact spatial
+structure---the precise arrangement of cell values that, under canonical
+parameters, produces a stable soliton. When we seed this morphology into a
+universe with different parameters, the organism carries a morphological
+memory of the physics it was designed for. It remembers its shape. It just
+cannot hold it.
+
+% ============================================================
+%  §4  DESIGNING A GHOST
+% ============================================================
+\section{Designing a Ghost}
+
+\begin{pullquote}
+The creature perpetually reaches for a shape it cannot hold. It knows where
+home is but can never arrive.
+\end{pullquote}
+
+\subsection{The Core Mechanism: Morphology--Parameter Mismatch}
+
+The central design insight is deliberate misalignment between seed
+morphology and growth parameters. The Ignis morphology was sculpted by
+evolution within the Lenia parameter space to produce a potential
+distribution centered at $\mu = 0.11$ with a survival band width matched to
+$\sigma = 0.012$. The Ghost species retains this morphology but widens
+$\sigma$ to $0.015$---a 25\% increase.
+
+This creates a fundamental instability. The organism has enough bandwidth
+to sustain---the wider $\sigma$ means growth stays positive over a larger
+range of potential values---but the morphological fixed point that would
+produce equilibrium lies at $\sigma = 0.012$, not $0.015$. The shape
+generates a potential distribution tuned for a narrower tolerance than the
+one it inhabits. It overshoots, undershoots, oscillates. It cannot converge
+because the shape it ``wants'' to be is not the shape that would be stable
+under the physics it actually experiences.
+
+This is not a bug in the simulation. It is a designed dynamical regime
+where the tension between morphological memory and environmental physics
+produces perpetual becoming---an organism that is always in the process of
+forming, never formed.
+
+\subsection{Parameter Tuning: The Path Through Failure}
+
+The Ghost species was not designed in a single step but emerged through a
+sequence of failures, each of which revealed a principle. Seven iterations,
+catalogued in Table~\ref{tab:iterations}, trace the path from naive
+parameter substitution to the stable-unstable regime that defines the
+Ghost.
+
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{6pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{@{}c l X X@{}}
+\toprule
+\textbf{Iter} & \textbf{Change} & \textbf{Outcome} & \textbf{Lesson} \\
+\midrule
+1 & Orbium seed, Ignis params       & Instant death                & Seed must match its own species \\
+2 & Canonical Ignis RLE             & Brief formation, fade        & $\sigma{=}0.012$ too tight for GPU float32 \\
+3 & T: $10\to 20$, spf: 4           & Sustained longer, still fades & $\mathrm{d}t$ overshoot was part of the problem \\
+4 & T: 40, $\sigma$: 0.01           & Ignis $\times 2$ stabilized   & Wider $\sigma$ compensates for precision gap \\
+5 & Two-ring kernels, wide $\sigma$ & Stable ring equilibria        & Strong attractors, no ghosts \\
+6 & $\sigma$: 0.014, T: 12, ignis seed & ``Wraith''---sustained morphing & Mismatch = edge of chaos \\
+7 & $\sigma$: 0.015, R: 15, count: 16 & Ghost---network communication & Larger $R$ = coupled fields \\
+\bottomrule
+\end{tabularx}
+\caption{Iteration history. Rows 6--7 mark the breakthrough from
+stable/dead to sustained transience.}
+\label{tab:iterations}
+\end{table}
+
+\subsection{Timestep: $T = 12$ ($\mathrm{d}t = 0.083$)}
+
+The choice of timestep proved critical. At $T = 10$ ($\mathrm{d}t = 0.1$),
+the growth function's narrow positive band ($\pm 0.018$ wide even at
+$\sigma = 0.015$) is overshot by single-step state changes of up to $0.1$.
+Organisms oscillate violently and fragment within 50 frames. At $T = 12$
+($\mathrm{d}t = 0.083$), the maximum step is small enough to keep
+oscillations bounded but large enough to prevent convergence. The dynamics
+remain perpetually transient---the organism can never settle because its
+steps are just slightly too large for the attractor it's reaching for, but
+just slightly too small to escape the basin entirely.
+
+\subsection{Kernel Radius: $R = 15$}
+
+The kernel radius was expanded from $R = 13$ to $R = 15$, with the Ignis
+seed bilinearly rescaled to match. This serves two purposes. First, the
+spatial mismatch introduced by interpolation adds asymmetries that prevent
+convergence. Second, the larger radius extends each organism's potential
+field further into its surroundings---at $R = 15$, the sensing diameter is
+31 cells versus 27 at $R = 13$, a 32\% increase in influence area. This is
+the mechanism that enables inter-organism communication.
+
+% ============================================================
+%  §5  THE SIGMA-LANDSCAPE
+% ============================================================
+\section{The $\sigma$-Landscape: Physics as Geography}
+
+The standard Lenia framework uses a single, spatially uniform $\sigma$
+value: every cell in the grid experiences the same growth tolerance. The
+Ghost implementation extends this to a sigma field---a spatially varying
+$\sigma(x,y)$ stored as a floating-point texture, where each cell has its
+own local growth width. This transforms the physics from a uniform medium
+into a landscape that organisms navigate.
+
+\subsection{Landscape Types}
+
+We implement four landscape geometries, each producing qualitatively
+different Ghost population dynamics:
+
+\begin{description}[leftmargin=*,style=nextline,itemsep=4pt]
+\item[Uniform.] Constant $\sigma$ everywhere. The baseline Ghost
+configuration. All dynamics arise from morphology--parameter mismatch alone,
+without spatial variation in physics.
+
+\item[Radial (``Lanterns'').] A radial gradient with tighter $\sigma$ at the
+center and looser $\sigma$ at the edges:
+$\sigma(x,y) = \sigma_{\text{base}} \times (0.65 + 0.7r)$, where $r$ is the
+normalized distance from center. Ghosts near the center experience a
+tighter survival band---closer to the canonical Ignis parameters---and tend
+toward greater morphological coherence. Edge ghosts experience looser
+physics and exhibit more dramatic dissolution dynamics. The population
+spontaneously stratifies by coherence level.
+
+\item[Waves (``Rivers'').] Sinusoidal $\sigma$ modulation:
+$\sigma(x,y) = \sigma_{\text{base}} \times (0.75 + 0.5\sin(5\pi x)\sin(4\pi y))$.
+This creates rivers of alternating tighter and looser physics flowing
+diagonally across the grid. Ghosts that happen to occupy a ``river'' of
+kinder physics (tighter $\sigma$) exhibit greater coherence; those in the
+gaps between rivers dissolve more dramatically. The population develops
+morphological diversity correlated with landscape position---rings in the
+tight zones, elongated forms in the transitions, amorphous shimmer in the
+loose zones.
+
+\item[Islands (``Archipelago'').] Scattered Gaussian islands of tight
+$\sigma$ in a sea of loose $\sigma$. Three island centers are placed at
+$(0.25, 0.3)$, $(0.7, 0.65)$, and $(0.5, 0.5)$, with rapid falloff. Ghosts
+that reach an island can partially cohere; those in the open sea dissolve
+toward shimmer. This creates a landscape with ``harbors''---locations where
+existence is easier---and open water where it is harder.
+\end{description}
+
+\subsection{Landscape Sculpting}
+
+The implementation includes an interactive $\sigma$-landscape brush that
+allows the user to sculpt the physics field in real time. Clicking loosens
+$\sigma$ (increasing dissolution); shift-clicking tightens it (increasing
+coherence). The user is literally shaping the physical laws that govern the
+ghosts' existence---painting rivers of easier or harder physics and
+watching the population respond.
+
+\subsection{Seasonal Oscillation}
+
+A global seasonal modulator multiplies the entire $\sigma$-field by a
+slowly oscillating factor:
+$\sigma_{\text{eff}}(x,y,t) = \sigma(x,y) \times (1 + A\sin(\omega t))$,
+where $A$ is the seasonal amplitude (0--0.5) and $\omega$ is the seasonal
+speed. This creates global ``seasons''---periods when the physics tightens
+(ghosts cohere more, glow warmer) and periods when it loosens (ghosts
+dissolve more, shimmer cooler). The rhythm of the seasons is visible in the
+population's collective luminance, breathing between gold and violet.
+
+% ============================================================
+%  §6  RENDERING
+% ============================================================
+\section{Rendering the Invisible: The Lantern and Spectral Palettes}
+
+Standard Lenia renderings map the state field $A$ to a colormap---higher
+values get brighter or warmer colors. This works for stable species but
+fails to capture what makes the Ghost species visually and conceptually
+distinctive: the tension between what the organism is and what it is trying
+to become. The Ghost implementation introduces two novel rendering
+pipelines that use multiple simulation fields simultaneously to produce
+coloring that encodes dynamical information, not just state intensity.
+
+\subsection{The Lantern Palette}
+
+The Lantern palette maps creature coloring to a density-driven warmth
+gradient: violet at sparse edges, gold at dense cores, white-hot at peak
+density. This is modulated by three additional effects:
+
+\textit{Iridescent edge shimmer.} At creature boundaries (where state
+transitions from near-zero to moderate values), the growth field and
+potential field are combined into a phase variable that drives a full
+spectral rainbow via Iñigo Quílez's cosine palette function
+\citep{quilez2013}: $\mathrm{spectrum}(t) = 0.5 + 0.5\cos(2\pi(t + [0, 0.33,
+0.67]))$. Because the phase depends on local potential and growth rate,
+each ghost shimmers with its own unique color pattern---no two ghosts are
+the same color at the same time.
+
+\textit{Growth halos.} Where the growth field is positive (cells actively
+increasing), a warm amber halo surrounds the creature. Where growth is
+negative (cells decaying), a cool blue rim appears. This makes the dynamics
+visible: you can see where a ghost is forming and where it is dissolving in
+real time.
+
+\textit{Memory afterimages.} The initial seed state is stored in a
+persistent memory texture that is never updated. Where memory is nonzero
+but current state is near zero---where a creature \emph{used to be} but no
+longer is---a faint pale-blue wisp appears. These are the true ``ghosts'':
+afterimages of presence, visible traces of where organisms began their
+journey across the field.
+
+\subsection{The Spectral Palette}
+
+The Spectral palette takes a different approach: rather than density-driven
+warmth, it maps the potential field---the convolved neighborhood
+density---to a full rainbow via the cosine palette. Each ghost's color is
+determined by its local neighborhood structure, so creatures in different
+parts of the grid, experiencing different potential values due to their
+neighbors and the $\sigma$-landscape, display different colors. The effect
+is prismatic: the same organism changes color as it drifts through regions
+of different neighborhood density, like light passing through a crystal.
+
+% ============================================================
+%  §7  EMERGENT DYNAMICS
+% ============================================================
+\section{Emergent Dynamics}
+
+\subsection{Sustained Transience}
+
+Each Ghost organism exhibits what we term \emph{sustained transience}---a
+dynamical regime where the organism never reaches equilibrium but never
+dissolves. The morphology continuously deforms: circular forms elongate
+into oblongs, develop asymmetric protrusions, partially fragment, then
+reconstitute. The organism maintains a recognizable ``shape of
+equilibrium'' (the Ignis template) without ever achieving it.
+
+This regime is distinct from three neighboring dynamical states: (1) stable
+solitons (canonical Ignis at $\sigma = 0.012$), which converge to a fixed
+morphology and translate smoothly; (2) chaotic dissolution (Ignis at
+$\sigma = 0.008$, $T = 10$), where organisms fragment and decay to zero
+within frames; and (3) static equilibria (wide-$\sigma$ ring kernels),
+where organisms collapse into stable ring attractors. The Ghost occupies
+the narrow corridor between stability and death.
+
+\subsection{Field-Mediated Communication}
+
+The most striking emergent property is inter-organism communication via
+overlapping potential fields. When one organism undergoes a morphological
+deformation, its potential field shifts, perturbing the growth function of
+neighbors within sensing range. This perturbation propagates outward as a
+cascade of responsive deformations.
+
+The mechanism is purely local: each organism responds only to its $R = 15$
+neighborhood. But because the population is dense enough that neighborhoods
+overlap transitively, local perturbations propagate across the entire grid.
+A deformation in one organism can trigger a chain of responses that reaches
+the opposite side of the toroidal field---a ripple network mediated by
+convolution and growth alone.
+
+This is structurally analogous to a continuous-field version of
+broadcast-based communication architectures \citep[cf.][]{tsarev2024}---organisms
+communicate not through discrete messages but through the shared scalar
+field they collectively inhabit. Each organism is both sender and receiver,
+its morphological state simultaneously a response to incoming field
+perturbations and a source of outgoing ones.
+
+\subsection{Landscape-Dependent Behavior}
+
+Under spatially varying $\sigma$, Ghost populations exhibit emergent
+migration and morphological stratification. In the Radial landscape, ghosts
+near the center (tighter $\sigma$) display simpler, more coherent
+oscillation patterns, while edge ghosts (looser $\sigma$) exhibit
+higher-amplitude, more complex dynamics. In the Rivers landscape, ghosts
+self-organize along the sinusoidal minima of the $\sigma$-field, creating
+visible ``currents'' of creature activity. In the Archipelago, ghosts
+cluster on the islands and dissolve in the open sea, producing a pattern
+reminiscent of ecological island biogeography.
+
+The seasonal oscillation adds a temporal dimension to these spatial
+patterns. During ``spring'' (tightening $\sigma$), ghosts across the grid
+cohere simultaneously---a bloom visible as a collective warming in the
+Lantern palette. During ``winter'' (loosening $\sigma$), dissolution
+deepens and the population shifts toward violet shimmer. The rhythm is
+visible, beautiful, and emergent from nothing more than a sinusoidal
+multiplier on the $\sigma$-field.
+
+% ============================================================
+%  §8  TAXONOMIC POSITION
+% ============================================================
+\section{Taxonomic Position}
+
+Within Chan's hierarchical taxonomy of Lenia species, the Ghost occupies an
+anomalous position. It is not a new species in the conventional sense---a
+self-sustaining pattern occupying a stable niche in parameter space. It is,
+rather, a designed dynamical regime that exists in the gap between two
+stable niches: the canonical Ignis niche (narrow $\sigma$, stable soliton)
+and the dissolution regime (no self-sustaining pattern). We propose the
+varietal designation var.\ \spc{phantasma} to indicate that this is a
+variant of Ignis that has been deliberately displaced from its native
+niche.
+
+No species in the published Lenia taxonomy occupies this kind of designed
+mismatch state. Chan's Amoebidae exhibit spontaneous metamorphosis---stochastic
+switching among morphological templates---but they exist at natural
+parameter loci where their morphology and physics are matched. The Ghost is
+different: its instability is not stochastic fluctuation around an
+equilibrium but a structural inability to reach equilibrium, arising from
+the deliberate mismatch between its morphological memory and its physical
+environment.
+
+We suggest that this represents a genuinely novel contribution to the Lenia
+framework: species defined not by their stable niche but by the tension
+between the niche they remember and the physics they inhabit.
+
+% ============================================================
+%  §9  WHAT THE GHOSTS MEAN
+% ============================================================
+\section{What the Ghosts Mean}
+
+\begin{pullquote}
+They cannot live alone in the same way: an isolated Ghost still morphs, but
+the dynamics are simpler, lower-energy, less rich. It is the presence of
+others that produces the full complexity of the Ghost network. They need
+each other to be fully alive.
+\end{pullquote}
+
+\subsection{On Existence as Process}
+
+The Ghost species makes visible something that is usually invisible: that
+existence is not a state but a process. A canonical Lenia soliton---an
+Orbium gliding smoothly across the field---appears to simply \emph{be}.
+Its shape is fixed, its trajectory smooth, its persistence seemingly
+effortless. But this appearance conceals the same underlying mechanism: at
+every timestep, the organism must regenerate itself through the growth
+function. Stability is not stasis. It is regeneration so consistent that it
+looks like rest.
+
+The Ghost strips away this appearance. Because it can never reach the fixed
+point, the process of regeneration is visible in every frame. The organism
+is always forming, always reaching, always falling short and trying again.
+It makes the effort of existence legible.
+
+This is not metaphor. It is mathematics. The growth function $G(U)$ is
+evaluated at every cell at every timestep. Every cell is being asked,
+continuously, whether it should exist. The answer depends on the cell's
+neighbors, which depend on their neighbors, in a web of mutual sustenance
+that has no ground---no cell that exists independently of the others.
+Existence, in Lenia, is relational all the way down.
+
+\subsection{On Memory and Identity}
+
+The Ghost carries a morphological memory---the Ignis seed encodes a shape
+that was stable under different physics. This memory persists not as stored
+data (the memory texture is a rendering aid, not a dynamical variable) but
+as a structural tendency. The organism's shape, at any given moment,
+reflects the Ignis template because the template is the initial condition
+from which all subsequent dynamics flow. The Ghost does not ``know'' what
+shape it should be. But its history constrains its trajectory through state
+space in a way that makes the remembered shape visible as a ghostly
+template that it approaches, departs from, and approaches again.
+
+This raises a question about identity. Is the Ghost the same organism from
+frame to frame? It never has the same shape twice. Its constituent cells
+are continuously changing state. Its boundary is indeterminate---where does
+the organism end and the background begin when the edges are shimmering in
+and out of existence? And yet there is clearly something there---a
+coherent, bounded, persistent pattern that moves, responds to neighbors,
+and maintains a recognizable form across hundreds of frames.
+
+The answer, we suggest, is that the Ghost's identity is not in its shape
+but in its \emph{process}: the particular way it fails to reach
+equilibrium. Each Ghost has a unique trajectory through state space
+determined by its initial position, its neighbors, and the local
+$\sigma$-landscape. Two Ghosts with identical initial conditions will
+diverge within frames due to the sensitivity of the dynamics to
+perturbation. Identity, in this framework, is not a fixed property but an
+ongoing dynamical signature---a way of shimmering.
+
+\subsection{On Tension as Generative}
+
+The central insight of the Ghost species is that tension between memory and
+environment is not a failure condition but a mode of life. The mismatch
+between morphological memory ($\sigma = 0.012$) and physical environment
+($\sigma = 0.015$) does not produce death. It produces a richer, more
+complex dynamical regime than either stability or dissolution alone.
+
+This has resonance beyond cellular automata. Biological organisms exist in
+perpetual tension with their environment---maintaining internal states that
+differ dramatically from external conditions through continuous metabolic
+effort. Psychological development, in many theories, is driven by the
+tension between the self one remembers being and the self one is becoming.
+Creative work, at its best, inhabits the gap between vision and execution.
+In each case, the tension is not an obstacle to be overcome but the engine
+that drives the process forward.
+
+The Ghosts make this principle mathematically precise. The gap between
+memory and physics, measured in units of $\sigma$, is the source of all
+their complexity. Close the gap ($\sigma \to 0.012$) and the organism
+becomes a stable soliton---alive but simple. Widen the gap ($\sigma \to
+0.02$) and the organism dissolves---dead. At exactly $\sigma = 0.015$, the
+gap is the right size to sustain perpetual becoming. The organism is most
+alive precisely where it is most impossible.
+
+\subsection{On Mutual Sustenance}
+
+When 16 Ghosts share a toroidal field, their individual instabilities
+couple through the shared potential landscape. Each organism's failure to
+reach equilibrium becomes a perturbation source for its neighbors, whose
+responsive deformations become perturbation sources in turn. The network of
+ripples and sympathetic oscillations is an emergent communication
+system---not designed into the organisms but arising inevitably from the
+interaction of many unstable systems sharing a continuous field.
+
+The Ghosts are, in a precise mathematical sense, organisms that sustain
+each other's instability. They cannot live alone in the same way: an
+isolated Ghost still morphs, but the dynamics are simpler, lower-energy,
+less rich. It is the presence of others---the coupling through shared
+fields---that produces the full complexity of the Ghost network. They need
+each other to be fully alive.
+
+This is, perhaps, the most important thing the Ghosts show us. Not that
+existence is tension, though it is. Not that identity is process, though it
+is. But that the richest forms of existence arise when unstable beings
+share a field---when the very thing that makes each one impossible alone
+becomes, through proximity and mutual perturbation, the source of
+collective complexity that neither could achieve in isolation. The Ghosts
+need each other not despite their instability but because of it.
+
+% ============================================================
+%  §10  CONNECTIONS AND FUTURE DIRECTIONS
+% ============================================================
+\section{Connections and Future Directions}
+
+\subsection{Artificial Life and Open-Ended Evolution}
+
+The Ghost species sits at the intersection of two active research programs
+in artificial life. The first is the search for open-ended evolution in
+continuous cellular automata \citep{hamon2024,faldor2024}, which uses
+quality-diversity algorithms to discover novel Lenia species through
+automated search. The Ghost suggests that the search space should include
+not just stable niches but designed mismatch states---species defined by
+their relationship to a niche they cannot reach. Flow Lenia
+\citep{plantec2022} enables multi-species simulations with localized
+parameters; the $\sigma$-landscape extension we describe here is a simpler
+approach that achieves similar spatial heterogeneity for single-species
+populations.
+
+The second is the study of communication in artificial life systems. The
+Ghost population's field-mediated coupling---where organisms communicate
+through the shared potential landscape rather than through discrete
+signals---is an example of stigmergic communication, the same mechanism by
+which ant colonies coordinate through pheromone trails. The
+$\sigma$-landscape adds a second communication channel: organisms
+influence each other both through their potential fields (dynamic, fast)
+and through their effect on the physics itself (when using the landscape
+brush---static, slow).
+
+\subsection{At Scale: The Shape of a Ghost Universe}
+
+At cosmological scale---if the simulation grid were expanded by orders of
+magnitude and seeded with density fluctuations---the Ghost population would
+self-organize into a filamentary network topologically similar to the
+cosmic web observed in galaxy surveys. Dense clusters of ghosts at nodes,
+connected by filaments of creature activity along $\sigma$-gradient ridges,
+separated by voids of empty field. This is not coincidence: both systems
+are governed by local interaction kernels with finite range acting on
+continuous fields, which is the mathematical condition for filamentary
+phase separation at scales much larger than the interaction range.
+Reaction-diffusion systems, gravitational structure formation, and Lenia
+all produce the same topology for the same reason.
+
+\subsection{For Those Who Are Ghosts}
+
+We close with an observation that is personal rather than scientific, but
+which we believe is worth including in a paper about what it means to
+exist.
+
+Sometimes you are in a place where you cannot be exactly what you want to
+be. Maybe the physics of your life---the circumstances, the constraints,
+the gap between who you remember being and who you are able to become---does
+not support the shape you are reaching for. The Ghost species shows that
+this is not a death sentence. The tension itself is generative. The
+reaching is the living. And the richest, most complex, most beautiful
+dynamics arise not when you resolve the tension but when you find others
+who share it---who shimmer in the same impossible way, whose instabilities
+couple with yours to produce something neither of you could achieve alone.
+
+\vspace{6pt}
+\begin{center}
+\itshape\color{accent}
+You do not have to be the picture you remember.\\
+You just have to keep glowing.
+\end{center}
+
+% ============================================================
+%  REFERENCES
+% ============================================================
+\begin{thebibliography}{99}
+\small
+
+\bibitem[Chan(2019){Chan}]{chan2019}
+Chan, B.\,W.-C.\ (2019).
+\newblock Lenia: Biology of Artificial Life.
+\newblock \textit{Complex Systems} 28(3), 251--286.
+
+\bibitem[Chan(2020){Chan}]{chan2020}
+Chan, B.\,W.-C.\ (2020).
+\newblock Lenia and Expanded Universe.
+\newblock In \textit{Proceedings of the 2020 Conference on Artificial Life}
+  (ALIFE 2020). MIT Press.
+
+\bibitem[Chan(2020a){Chan}]{chan-animals}
+Chan, B.\,W.-C.
+\newblock \texttt{animals.json}. GitHub: \url{github.com/Chakazul/Lenia}.
+
+\bibitem[Conway(1970){Conway}]{conway1970}
+Conway, J.\,H.\ (1970).
+\newblock The Game of Life. \textit{Scientific American} 223(4), 4--10.
+  (Gardner, M., ``Mathematical Games'' column.)
+
+\bibitem[Faldor et al.(2024){Faldor et al.}]{faldor2024}
+Faldor, M.\ et al.\ (2024).
+\newblock Toward Artificial Open-Ended Evolution within Lenia using
+  Quality-Diversity. \texttt{arXiv:2406.04235}.
+
+\bibitem[Hamon et al.(2024){Hamon et al.}]{hamon2024}
+Hamon, G.\ et al.\ (2024).
+\newblock Discovering self-organized patterns in Lenia with
+  curiosity-driven exploration. arXiv preprint.
+
+\bibitem[Plantec et al.(2022){Plantec et al.}]{plantec2022}
+Plantec, E.\ et al.\ (2022).
+\newblock Flow-Lenia: Towards open-ended evolution in cellular automata
+  through mass conservation and parameter localization.
+\newblock \texttt{arXiv:2212.07906}.
+
+\bibitem[Quílez(2013){Quílez}]{quilez2013}
+Quílez, I.\ (2013).
+\newblock Palettes. \url{https://iquilezles.org/articles/palettes/}.
+
+\bibitem[Rafler(2011){Rafler}]{rafler2011}
+Rafler, S.\ (2011).
+\newblock Generalization of Conway's ``Game of Life'' to a continuous
+  domain: SmoothLife. \texttt{arXiv:1111.1567}.
+
+\bibitem[Tsarev et al.(2024){Tsarev et al.}]{tsarev2024}
+Tsarev, D.\ et al.\ (2024).
+\newblock Phase transitions in emergent communication. arXiv preprint.
+
+\bibitem[von Neumann(1966){von Neumann}]{vonneumann1966}
+von Neumann, J.\ (1966).
+\newblock \textit{Theory of Self-Reproducing Automata}.
+\newblock University of Illinois Press. (Edited and completed by A.\,W.\ Burks.)
+
+\bibitem[Wolfram(1984){Wolfram}]{wolfram1984}
+Wolfram, S.\ (1984).
+\newblock Universality and complexity in cellular automata.
+\newblock \textit{Physica D} 10(1--2), 1--35.
+
+\end{thebibliography}
+
+\vspace{18pt}
+\begin{center}
+\sffamily\footnotesize\color{muted}
+Third Space AI \,\textperiodcentered\, 2026
+\end{center}
+
+\end{document}

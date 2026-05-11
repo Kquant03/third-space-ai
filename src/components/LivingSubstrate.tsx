@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePond } from "../lib/usePond";
+import { POND_SDF_GLSL } from "../lib/pondGeometry";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  LIMEN · Living Substrate · v13 · "Pond, coherent"
@@ -194,7 +195,7 @@ const CAMERA_GLSL = /* glsl */ `
     float fx = fy * aspect;
     // vp.y in [-0.5, 0.5] maps to clip_y in [-1, 1]:
     vec3 dirCam = normalize(vec3(
-      vp.x * 2.0 * fx,
+      vp.x * 2.0 * fy,
       vp.y * 2.0 * fy,
       -1.0
     ));
@@ -329,20 +330,17 @@ const FIELD_FRAG = /* glsl */ `#version 300 es
   //  Two joined rounded basins connected by a waist. The client-side
   //  kinematic simulator enforces this same shape so fish don't swim
   //  onto land.
+  //
+  //  Canonical SDF lives in lib/pondGeometry.ts and is template-
+  //  substituted below. Math:
+  //    pondSDF(p) = mix(dB, dA, h) - k*h*(1-h)
+  //  where dA, dB are signed distances to the two basin circles and
+  //  h is the smooth-min interpolant. Negative inside, positive
+  //  outside, zero at the rim. Constants GOURD_A_C, GOURD_A_R,
+  //  GOURD_B_C, GOURD_B_R, GOURD_K declared by POND_SDF_GLSL.
   // ─────────────────────────────────────────────────────────────────
 
-  float pondSDF(vec2 p) {
-    // Large basin at (-1.0, 0.0), radius 3.5
-    vec2 cA = vec2(-1.0, 0.0);
-    float dA = length(p - cA) - 3.5;
-    // Small basin at (+1.8, 0.4), radius 2.2
-    vec2 cB = vec2(1.8, 0.4);
-    float dB = length(p - cB) - 2.2;
-    // Smooth union — waist softness 0.9
-    float k = 0.9;
-    float h = clamp(0.5 + 0.5 * (dB - dA) / k, 0.0, 1.0);
-    return mix(dB, dA, h) - k * h * (1.0 - h);
-  }
+  ${POND_SDF_GLSL}
 
   // ─────────────────────────────────────────────────────────────────
   //  Screen-to-pond projection (inverse of the 25° tilt)
@@ -904,7 +902,7 @@ const FIELD_FRAG = /* glsl */ `#version 300 es
     vec3 col = floorCol * floorVis + volumeCol;
 
     // ─── Basin wall band — the sunken sloped wall ───
-    float wallBand = smoothstep(-1.3, -0.05, effSdf);
+    float wallBand = smoothstep(-0.3, -0.05, effSdf);
     if (wallBand > 0.01) {
       // Warm dark stone, wet at the foot, drier higher — but this is
       // underwater so "dry" is relative. Sheen diminishes with depth.
@@ -921,14 +919,14 @@ const FIELD_FRAG = /* glsl */ `#version 300 es
       vec3 wallWithMoss = mix(wallStone, vec3(0.038, 0.058, 0.040), wallMoss * 0.38);
       // Deeper parts of the wall are more water-column-filtered — cooler
       wallWithMoss *= mix(vec3(1.0), vec3(0.75, 0.88, 1.05), 1.0 - wallBand);
-      col = mix(col, wallWithMoss, wallBand * 0.82);
+      col = mix(col, wallWithMoss, wallBand * 0.55);
     }
 
     // ─── Submerged shadow line — darker rim right at the waterline ───
     // This is the shadow cast by the bank overhang just above the
     // water surface. Thin dark band just inside the pond SDF.
-    float submergedShadow = smoothstep(0.0, -0.15, effSdf) *
-                           smoothstep(-0.40, -0.18, effSdf);
+    float submergedShadow = smoothstep(0.0, -0.05, effSdf) *
+                       smoothstep(-0.15, -0.07, effSdf);
     col *= mix(1.0, 0.55, submergedShadow);
 
     // Particulates

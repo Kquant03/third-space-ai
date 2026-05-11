@@ -80,9 +80,6 @@ export const SIZE_BY_STAGE: Record<LifeStage, number> = {
 //  Vector helpers
 // ───────────────────────────────────────────────────────────────────
 
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v));
-}
 
 function mag(x: number, z: number): number {
   return Math.sqrt(x * x + z * z);
@@ -563,8 +560,11 @@ export function stepKoi(
   }
 
   // Depth clamps
+  const sdfNow = pondSDF(self.x, self.z);
+  const sdfClamped = Math.max(0, Math.min(1, -sdfNow / 3.5));
+  const localFloorDepth = 0.2 + (3.0 - 0.2) * sdfClamped;
   if (self.y > -0.1) self.y = -0.1;
-  if (self.y < -POND.maxDepth + 0.05) self.y = -POND.maxDepth + 0.05;
+  if (self.y < -localFloorDepth + 0.1) self.y = -localFloorDepth + 0.1;
 
   self.ageTicks += 1;
 }

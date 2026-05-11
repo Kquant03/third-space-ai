@@ -12,6 +12,7 @@ function fresh(id: string, x: number, z: number) {
     hatchedAtTick: 0,
     legendary: false,
     color: "kohaku",
+    sex: "female",
     spawn: { x, y: -1.2, z, h: 0 },
   }, new Rng(42 + id.charCodeAt(0)));
   return k;
@@ -58,6 +59,7 @@ describe("kinematics", () => {
       id: "egg1", name: "egg1",
       ageTicks: 0, hatchedAtTick: 0,
       legendary: false, color: "kohaku",
+      sex: "male",
       spawn: { x: 3, y: -0.4, z: 0, h: 0 },
     }, new Rng(1));
     const start = { x: egg.x, z: egg.z };

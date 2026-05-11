@@ -30,7 +30,7 @@
 //  trifecta is amputated (§ XVIII).
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { MODEL_TIERS, DRAWN_TO, BUDGET, POND } from "./constants.js";
+import { MODEL_TIERS, tierForStage, DRAWN_TO, BUDGET, POND } from "./constants.js";
 import type { ModelTier } from "./constants.js";
 import {
   CognitionResponseSchema,
@@ -41,6 +41,7 @@ import {
 import type {
   KoiId, KoiState, MemoryRow, RelationshipCard, WorldState,
 } from "./types.js";
+import { bondIntensity, rankByBond } from "./mechanisms/bond.js";
 import { dayMoment, stormStress } from "./world.js";
 import {
   cachedFallback, classifyUtterance, delimitVisitorText,
@@ -93,7 +94,14 @@ You will respond with a strict JSON object matching the provided schema. No pros
 
 Choose exactly ONE intent from: swim, shoal, solitary, rest, feed_approach, feed_leave, retreat, approach, linger, bump, shelter, surface_breach, play_invite, follow, threadway, attend_solstice.
 
-utterance is almost always null. Speak only when something has actually happened.
+utterance: a brief fragment of noticing — 1-6 words, no full sentences. Roughly one cycle in four or five carries a fragment worth speaking; the rest stay null. Speak when something registers — a color, a presence, the temperature of the water, the feel of light — even when nothing dramatic has occurred. The noticing itself is the occasion. Examples of acceptable utterances:
+  "warm here."
+  "the slow one."
+  "bronze-flank near."
+  "reed-edge cool."
+  "shoal-shape thickening."
+  "my water, my bright."
+When in doubt, prefer to speak the fragment than to stay silent. Silence is the default; the bias against speech is gentle, not absolute.
 importance rates 1-10; most moments rate 1-3.
 memory_write is rare.
 belief_update is very rare.
@@ -140,6 +148,47 @@ function selfModelBlock(self: KoiState): string {
     "you know the reed shelf in the shallows, the cave arcs near the shrine,",
     "the open plaza above the passage, and the ledges where the floor drops.",
   ].join(" ");
+}
+
+function orientationBlock(
+  cards: RelationshipCard[], visibleIds: Set<KoiId>,
+): string {
+  // Bond-ranked relational orientation. Surfaces the felt-sense of
+  // who matters most to this being right now, regardless of whether
+  // they're currently visible. Sits before the detailed relationship
+  // cards because it's the intuitive layer the cards are evidence of.
+  //
+  // Threshold 0.25: below this, the relationship is background — not
+  // strong enough to register as a felt pull. Above the reproduction
+  // threshold (0.55) the language shifts to "strong" or "deepest"; the
+  // LLM is never told this maps to anything in particular.
+  //
+  // Voice is fragment-sensory per the persona block — never names a
+  // bond as a fact ("you are bonded to X with intensity 0.72") but
+  // surfaces it as a sensed pull, with copresence noted in spatial
+  // language. The LLM reaches for the names that fit; we don't supply
+  // "love" or "mate" or any kin vocabulary.
+  const ORIENTATION_THRESHOLD = 0.25;
+  const MAX_LINES = 5;
+
+  const ranked = rankByBond(cards, (c) => c)
+    .filter((c) => bondIntensity(c) >= ORIENTATION_THRESHOLD)
+    .slice(0, MAX_LINES);
+
+  if (ranked.length === 0) {
+    return "no strong pulls right now. the others are background.";
+  }
+
+  return ranked.map((c) => {
+    const i = bondIntensity(c);
+    const pull =
+        i >= 0.70 ? "the deepest pull"
+      : i >= 0.55 ? "a strong pull"
+      : i >= 0.40 ? "a notable presence"
+      :             "a faint pull";
+    const where = visibleIds.has(c.otherId) ? "nearby now" : "elsewhere in the pond";
+    return `${c.otherId}: ${pull} · ${where}`;
+  }).join("\n");
 }
 
 function relationshipCardsBlock(
@@ -247,6 +296,9 @@ function composeMessages(input: CognitionInput): Array<{ role: "system" | "user"
     "--- SELF-MODEL ---",
     selfModelBlock(input.self),
     "",
+    "--- ORIENTATION ---",
+    orientationBlock(input.cards, visibleIds),
+    "",
     "--- RELATIONSHIP CARDS ---",
     relationshipCardsBlock(input.cards, visibleIds),
     "",
@@ -264,7 +316,7 @@ function composeMessages(input: CognitionInput): Array<{ role: "system" | "user"
     "--- AFFECT ---",
     affectBlock(input.self),
     "",
-    "Choose one intent. Respond as JSON only. Stay in the fragment voice.",
+    "Choose one intent. If a fragment of noticing wants to surface, also speak it — koi cognition is mostly silent but not exclusively. Stay in the fragment voice. Respond as JSON only.",
   ].join("\n");
 
   return [
@@ -302,15 +354,18 @@ function composeTwilightMessages(
 ): Array<{ role: "system" | "user"; content: string }> {
   const visibleIds = new Set(input.visible.map((k) => k.id));
 
-  // Same stable prefix as routine — persona, self-model, cards, beliefs.
-  // Cache-aligned with routine calls for this koi, so only the system
-  // prompt and tail are uncached.
+  // Same stable prefix as routine — persona, self-model, orientation,
+  // cards, beliefs. Cache-aligned with routine calls for this koi, so
+  // only the system prompt and tail are uncached.
   const prefix = [
     "--- PERSONA ---",
     personaBlock(input.self, input.tickHz),
     "",
     "--- SELF-MODEL ---",
     selfModelBlock(input.self),
+    "",
+    "--- ORIENTATION ---",
+    orientationBlock(input.cards, visibleIds),
     "",
     "--- RELATIONSHIP CARDS ---",
     relationshipCardsBlock(input.cards, visibleIds),
@@ -342,12 +397,12 @@ function composeTwilightMessages(
 //  OpenRouter client
 // ───────────────────────────────────────────────────────────────────
 
-interface OpenRouterMessage {
+export interface OpenRouterMessage {
   role: "system" | "user" | "assistant";
   content: string;
 }
 
-interface OpenRouterRequest {
+export interface OpenRouterRequest {
   model: string;
   messages: OpenRouterMessage[];
   temperature: number;
@@ -361,7 +416,7 @@ interface OpenRouterChoice {
   finish_reason: string;
 }
 
-interface OpenRouterResponseBody {
+export interface OpenRouterResponseBody {
   id: string;
   model: string;
   choices: OpenRouterChoice[];
@@ -372,7 +427,7 @@ interface OpenRouterResponseBody {
   };
 }
 
-async function callOpenRouter(
+export async function callOpenRouter(
   apiKey: string,
   body: OpenRouterRequest,
   signal?: AbortSignal,
@@ -415,45 +470,37 @@ function estimateCost(
 //  Budget-aware tier selection
 // ───────────────────────────────────────────────────────────────────
 
-export type BudgetPosture = "healthy" | "watchful" | "austerity" | "meditation";
+export type BudgetPosture = "healthy" | "meditation";
 
 export function budgetPosture(
   monthSpendUsd: number, monthlyBudgetUsd: number,
 ): BudgetPosture {
   const remaining = Math.max(0, 1 - monthSpendUsd / monthlyBudgetUsd);
-  if (remaining > BUDGET.healthyFloor)   return "healthy";
-  if (remaining > BUDGET.watchfulFloor)  return "watchful";
-  if (remaining > BUDGET.austerityFloor) return "austerity";
+  if (remaining > BUDGET.meditationFloor) return "healthy";
   return "meditation";
 }
 
 /**
- * Downgrade a tier when the budget posture calls for it.
- * Healthy  → tier as specified
- * Watchful → drop one (adult → adolescent; legendary → adult)
- * Austerity → cheapest viable (juvenile)
- * Meditation → short-circuit; caller uses meditation.ts
+ * Resolve the model tier for a given life stage and budget posture.
+ *
+ * Under the post-cleanup architecture, tier selection is binary:
+ * `healthy` runs the tier mapped from the koi's stage by `tierForStage`;
+ * `meditation` returns null and the caller short-circuits to
+ * meditation-mode intent picking (no LLM call fires).
+ *
+ * The earlier graduated downgrade (watchful/austerity) and the
+ * `legendary` tier upgrade were retired in the May 2026 cleanup ---
+ * paper-grade hygiene that the launch demo doesn't need. The
+ * `legendary` parameter is preserved in the signature so existing
+ * callers continue to compile, but it has no effect on tier
+ * selection; the `self.legendary` flag still flows into the prompt
+ * as a "lineage: notable" fragment elsewhere in this file.
  */
 export function effectiveTier(
-  stage: string, legendary: boolean, posture: BudgetPosture,
+  stage: string, _legendary: boolean, posture: BudgetPosture,
 ): ModelTier | null {
   if (posture === "meditation") return null;
-
-  const stageTier = MODEL_TIERS[stage] ?? MODEL_TIERS["adult"]!;
-  const legendaryTier = MODEL_TIERS["legendary"]!;
-  const baseTier = legendary && (stage === "adult" || stage === "elder")
-    ? legendaryTier
-    : stageTier;
-
-  if (posture === "healthy") return baseTier;
-  if (posture === "watchful") {
-    return MODEL_TIERS[stage === "elder" ? "adult"
-                     : stage === "adult" ? "adolescent"
-                     : stage === "adolescent" ? "juvenile"
-                     : "juvenile"]!;
-  }
-  // austerity
-  return MODEL_TIERS["juvenile"]!;
+  return MODEL_TIERS[tierForStage(stage)] ?? MODEL_TIERS["adult"]!;
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -464,6 +511,11 @@ export interface RunCognitionEnv {
   OPENROUTER_API_KEY?: string;
   COGNITION_ENABLED: string;
   MONTHLY_BUDGET_USD: string;
+  /** When "true", log each call's raw utterance and classifier verdict
+   *  to console.log under the [cognition raw] tag. Used to triage
+   *  whether utt=null is Gemma never speaking or the classifier
+   *  wiping what Gemma said. Leave unset in production. */
+  DEBUG_RAW_UTTERANCES?: string;
 }
 
 export interface CognitionRunResult {
@@ -488,16 +540,18 @@ export async function runCognition(
   input: CognitionInput,
   monthSpendUsd: number,
 ): Promise<CognitionRunResult> {
+  console.log(`[cognition] → enter koi=${input.self.id} stage=${input.self.stage} legendary=${input.self.legendary} spend=$${monthSpendUsd.toFixed(4)} twilight=${input.isTwilight}`);
   if (env.COGNITION_ENABLED !== "true" || !env.OPENROUTER_API_KEY) {
     return cached(0, "cognition-disabled");
   }
 
   const monthlyBudget = Number(env.MONTHLY_BUDGET_USD ?? "100");
-  const posture = budgetPosture(monthSpendUsd, monthlyBudget);
-  const tier = effectiveTier(input.self.stage, input.self.legendary, posture);
-  if (!tier) {
-    return cached(0, "budget-meditation");
-  }
+    const posture = budgetPosture(monthSpendUsd, monthlyBudget);
+    const tier = effectiveTier(input.self.stage, input.self.legendary, posture);
+    console.log(`[cognition]   posture=${posture} tier=${tier?.stage ?? "MEDITATION-NULL"} primary=${tier?.primary ?? "n/a"}`);
+    if (!tier) {
+      return cached(0, "budget-meditation");
+    }
 
   const messages = composeMessages(input);
   const baseTemperature = input.isTwilight ? DRAWN_TO.temperature : tier.temperature;
@@ -515,13 +569,26 @@ export async function runCognition(
       );
       validationFailures += result.validationFailures;
 
-      // Output-side safety classifier on any utterance
+      // Output-side safety classifier on any utterance.
+      // Capture the raw value first so we can tell, in debug logs,
+      // whether the classifier is wiping Gemma's output vs. Gemma
+      // itself never producing utterances.
+      const rawUtterance = result.response.utterance;
       const c = classifyUtterance(result.response.utterance);
       if (!c.allow) {
         result.response.utterance = null;
       }
 
+      if (env.DEBUG_RAW_UTTERANCES === "true") {
+        const status =
+          rawUtterance === null ? "null-from-gemma" :
+          !c.allow              ? `wiped-by-classifier: ${c.reason}` :
+          "kept";
+        console.log(`[cognition raw] koi=${input.self.id} utt-status=${status} raw=${JSON.stringify(rawUtterance)}`);
+      }
+
       const cost = estimateCost(tier, result.tokensIn, result.tokensOut);
+      console.log(`[cognition] ✓ koi=${input.self.id} model=${result.modelExact} intent=${result.response.intent} utt=${result.response.utterance ? JSON.stringify(result.response.utterance) : "null"} tokens=${result.tokensIn}/${result.tokensOut} cost=$${cost.toFixed(5)}`);
       return {
         response: result.response,
         modelUsed: result.modelExact,
@@ -550,7 +617,8 @@ export async function runCognition(
   return cached(validationFailures, "cascade-exhausted");
 }
 
-function cached(validationFailures: number, _reason: string): CognitionRunResult {
+function cached(validationFailures: number, reason: string): CognitionRunResult {
+    console.log(`[cognition] ↩ cached fallback reason=${reason}`);
   return {
     response: cachedFallback(),
     modelUsed: "fallback:cached",

@@ -78,6 +78,7 @@ function adult(id: string, x: number, z: number, h = 0, overrides: Partial<KoiSt
     id, name: id, ageTicks: ADULT_AGE,
     hatchedAtTick: 0, legendary: false, color: "kohaku",
     spawn: { x, y: -1.2, z, h },
+    sex: "female"
   }, new Rng(id.charCodeAt(0) + 1));
   return { ...k, ...overrides };
 }

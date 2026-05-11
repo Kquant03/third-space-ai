@@ -506,7 +506,7 @@ export default function SiteAudio() {
         // first time a track loads mid-playback there's no click.
         (
           ghostGainRef.current as InstanceType<typeof Tone.Gain>
-        ).gain.rampTo(mix, 1);
+        ).gain.rampTo(mix, 0.1);
       } catch (err) {
         console.warn(
           `[SiteAudio] ghost layer failed to load (${track.ghostLayer.src}): ${err}. The piano layer will play alone.`,

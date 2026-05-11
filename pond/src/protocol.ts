@@ -210,6 +210,20 @@ export const FoodMessageSchema = z.object({
   t: z.literal("food"),
   x: z.number(),
   z: z.number(),
+  /** Developer-only bypass for visitor rate limiting. When provided and
+   *  matching the worker's DEV_FEED_KEY env, the 3/min rate limit is
+   *  skipped. Intended for keeping founder koi alive during local/dev
+   *  work without going through the payment flow. */
+  devKey: z.string().optional(),
+});
+
+/** Drop one pellet at every alive koi's current position. Requires a
+ *  valid devKey. Intended for "Kokutou and Shiki are starving while I'm
+ *  debugging" recovery; produces a burst of feeding events that the
+ *  natural nutrition pipeline then handles normally. */
+export const DevFeedAllMessageSchema = z.object({
+  t: z.literal("dev_feed_all"),
+  devKey: z.string(),
 });
 
 export const NicknameMessageSchema = z.object({
@@ -221,6 +235,7 @@ export const NicknameMessageSchema = z.object({
 export const ClientToServerSchema = z.discriminatedUnion("t", [
   PebbleMessageSchema,
   FoodMessageSchema,
+  DevFeedAllMessageSchema,
   NicknameMessageSchema,
 ]);
 

@@ -11,6 +11,7 @@ import LimenLoader from "@/components/LimenLoader";
 import PondDiagnostic from "@/components/PondDiagnostic";
 import SiteAudio from "@/components/SiteAudio";
 import { MiniPlayer } from "@/components/AudioControl";
+import PondWhispers from "@/components/PondWhispers";
 
 const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
@@ -88,6 +89,8 @@ export default function RootLayout({
         <LimenLoader />
 
         <LivingSubstrate />
+
+        <PondWhispers />
 
         <PondDiagnostic />
 
