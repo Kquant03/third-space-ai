@@ -4,6 +4,8 @@ import {
   Source_Serif_4,
   JetBrains_Mono,
 } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import LivingSubstrate from "@/components/LivingSubstrate";
 import SiteChrome from "@/components/SiteChrome";
@@ -122,6 +124,17 @@ export default function RootLayout({
         />
 
         <SiteChrome>{children}</SiteChrome>
+
+        {/* Vercel telemetry. Both are invisible components that ship
+            data to the Vercel dashboard. Analytics counts pageviews and
+            custom events; SpeedInsights captures Core Web Vitals (LCP,
+            INP, CLS) from real visitors on real devices. Given the
+            WebGL substrate at layout root and the WebSocket-driven
+            continuous re-renders downstream, Speed Insights is the
+            actually-load-bearing one — it'll tell us which devices
+            choke on the rendering pipeline. */}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
