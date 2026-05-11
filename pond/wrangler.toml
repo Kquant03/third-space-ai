@@ -85,3 +85,12 @@ name = "limen-pond"
 # Routes are set in the dashboard; we expose via a subdomain and the
 # Next.js app proxies WebSocket upgrades. No custom domain here — the
 # canonical surface is thirdspace.ai.
+
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+persist = true
+invocation_logs = true
