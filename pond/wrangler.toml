@@ -18,7 +18,7 @@
 #  this scale, in-DO SQLite is faster than Vectorize and costs nothing.
 # ══════════════════════════════════════════════════════════════════════════════
 
-name = "limen-pond"
+name = "limen-pondv2"
 main = "src/index.ts"
 compatibility_date = "2025-01-15"
 compatibility_flags = ["nodejs_compat"]
