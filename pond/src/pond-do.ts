@@ -84,7 +84,20 @@ import { runCognition } from "./cognition.js";
 import type { CognitionResponse } from "./protocol.js";
 import { embed } from "./embeddings.js";
 import { retrieveMemories, writeMemoryRow, pruneIfNeeded } from "./memory.js";
-import { fallbackUtterance } from "./safety.js";
+import { fallbackUtterance, classifyVisitorContent } from "./safety.js";
+import {
+  generateVisitorHandle,
+  ringBufferHandleSet,
+} from "./visitor-handles.js";
+import {
+  generatePondUtterance,
+  phaseFromTDay,
+} from "./pond-utterance.js";
+import type { ChatMessage } from "./protocol.js";
+import {
+  ChatMessageBroadcastSchema,
+  ChatRejectedSchema,
+} from "./protocol.js";
 import type {
   RelationshipCard, MemoryRow, LoveFlowMechanism,
 } from "./types.js";
@@ -122,7 +135,65 @@ export interface Env {
 interface SessionAttachment {
   visitorHash: string;
   connectedAtMs: number;
+  /** Liminal-Adjective-MythicFigure handle assigned at session open for
+   *  the chat surface. Sticky for the session; falls out of the
+   *  generator's namespace when the session closes AND the handle has
+   *  scrolled off the ring buffer. */
+  handle?: string;
+  /** Last ACCEPTED chat message timestamp. Drives the 15s "speaking
+   *  slower here" rate limit. Updated only on successful broadcasts.
+   *  Undefined / 0 means "never sent a chat message yet". */
+  lastChatMs?: number;
+  /** Last classifier ATTEMPT timestamp — success or fail. Drives the
+   *  short anti-spam cooldown (a couple of seconds) that prevents a
+   *  bot from machine-gunning the classifier with rejected messages.
+   *  Updated unconditionally before each classifier call, so transport
+   *  errors and rejections still bump it. Invisible to humans (no one
+   *  rewrites and resends in under 2 seconds). */
+  lastChatAttemptMs?: number;
 }
+
+// ───────────────────────────────────────────────────────────────────
+//  Chat tuning
+//
+//  Kept local to pond-do.ts because these are read by exactly one
+//  caller — the chat handler in webSocketMessage. If they ever need
+//  to be tuned per-environment or per-ablation they can migrate to
+//  constants.ts.
+// ───────────────────────────────────────────────────────────────────
+
+/** Maximum chat messages held in the in-memory ring buffer. Oldest
+ *  drop off as new ones arrive. Sized for "fresh visitor can see the
+ *  last few minutes of conversation in progress" not "permanent
+ *  archive." (§ XIV) */
+const CHAT_RING_BUFFER_SIZE = 50;
+
+/** Minimum interval between successive chat messages from one visitor.
+ *  Enforced server-side per-session via the lastChatMs in their
+ *  attachment. Strict by design — the pond is a contemplative space,
+ *  not a fast chat. Visitors who hit this limit get a chat_rejected
+ *  with a "speaking slower here" message and their text echoed back. */
+const CHAT_RATE_LIMIT_MS = 15_000;
+
+/** Minimum interval between any classifier-bound chat ATTEMPTS, success
+ *  or fail. Stops a bot from machine-gunning the moderation classifier
+ *  with rejected content (each rejection costs an AI call). Invisible
+ *  to humans — nobody types and resubmits in under 2 seconds. Sliding
+ *  window is per-session, tracked via lastChatAttemptMs on the
+ *  attachment. */
+const CHAT_ATTEMPT_COOLDOWN_MS = 2_000;
+
+/** Minimum interval between the pond's own observations. Strict — the
+ *  pond noticing things is meaningful only when it's rare. 25 minutes
+ *  feels right for a contemplative space; longer would feel absent,
+ *  shorter would feel chatty. */
+const POND_UTTERANCE_COOLDOWN_MS = 25 * 60_000;
+
+/** How quiet the visitor chat must be before the pond will speak.
+ *  Slightly less than the cooldown so the pond can drop in shortly
+ *  after a conversation winds down, without interrupting one in
+ *  progress. */
+const POND_UTTERANCE_QUIET_MS = 20 * 60_000;
 
 // ───────────────────────────────────────────────────────────────────
 //  Pond DO
@@ -147,6 +218,30 @@ export class Pond extends DurableObject<Env> {
    *  protection lives at the Cloudflare edge (Turnstile, per-IP limits,
    *  § XVIII). */
   private visitorFoodTimestamps = new Map<string, number[]>();
+
+  /** Chat ring buffer — ephemeral, in-memory. Visitor-to-visitor
+   *  messages, deliberately not persisted in SQL. Cleared on DO cold
+   *  start; this is by design (§ XIV — the pond is a place for liminal
+   *  exchange, not a chat log). Capped at CHAT_RING_BUFFER_SIZE
+   *  messages, oldest dropped on overflow. */
+  private chatRing: ChatMessage[] = [];
+
+  /** Cumulative count of chat messages this pond has ever accepted.
+   *  Monotonically increasing — independent of the ring buffer which
+   *  forgets older messages. Hydrated from ctx.storage on init,
+   *  persisted on every increment. Shown to visitors in the collapsed
+   *  chat pill ("chat · 1.2k") so the at-scale signal is preserved
+   *  even after the ring has rolled over many times. */
+  private chatTotal: number = 0;
+
+  /** Wall-clock ms of the most recent pond-voice utterance. The pond
+   *  itself occasionally speaks into the chat when visitors are quiet
+   *  or when light shifts at dawn/dusk; this throttles the rate so the
+   *  pond observing doesn't become the pond chattering. Persisted via
+   *  ctx.storage. 0 means "the pond has never spoken yet" — which is
+   *  fine for a fresh pond. See pond-utterance.ts and
+   *  maybeFirePondUtterance() below. */
+  private lastPondUtteranceMs: number = 0;
 
   /** Koi IDs whose cognition request is currently in-flight (fire-and-
    *  forget against OpenRouter / Anthropic). The async refactor decouples
@@ -208,6 +303,19 @@ export class Pond extends DurableObject<Env> {
       "[pond init] alarm: existing=" + (existingAlarm ?? "null") +
       " scheduled=" + when + " verified=" + (verified ?? "null"),
     );
+
+    // Hydrate the cumulative chat counter from DO storage. Survives
+    // hibernation and cold-start; missing key (fresh pond) → 0.
+    const storedChatTotal = await this.ctx.storage.get<number>("chat_total");
+    this.chatTotal = typeof storedChatTotal === "number" ? storedChatTotal : 0;
+
+    // Hydrate the pond-utterance timestamp. Missing key (fresh pond) → 0,
+    // which means the pond is allowed to speak immediately once the
+    // other trigger conditions are met.
+    const storedLastUttMs =
+      await this.ctx.storage.get<number>("last_pond_utterance_ms");
+    this.lastPondUtteranceMs =
+      typeof storedLastUttMs === "number" ? storedLastUttMs : 0;
 
     this.initialized = true;
     console.log("[pond init] ready tick=" + this.hot.tick);
@@ -566,9 +674,19 @@ export class Pond extends DurableObject<Env> {
     const visitorHash = simpleHash(ip);
 
     this.ctx.acceptWebSocket(server);
+
+    // Generate a session-sticky visitor handle for the chat surface.
+    // The generator avoids both currently-active handles AND handles
+    // present in the ring buffer — see visitor-handles.ts for why.
+    const activeHandles = this.collectActiveHandles();
+    const bufferHandles = ringBufferHandleSet(this.chatRing);
+    const handle = generateVisitorHandle(activeHandles, bufferHandles);
+
     const attachment: SessionAttachment = {
       visitorHash,
       connectedAtMs: Date.now(),
+      handle,
+      lastChatMs: 0,
     };
     server.serializeAttachment(attachment);
 
@@ -735,6 +853,131 @@ export class Pond extends DurableObject<Env> {
           visitorHash, parsed.data.koiId, parsed.data.nickname, Date.now(),
         );
         break;
+
+      case "chat": {
+        // Chat — visitor-to-visitor surface. Two strangers sit beside
+        // the pond and exchange a sentence. Every message passes through
+        // the Gemma 4 26B A4B classifier in safety.classifyVisitorContent
+        // before broadcast. (§ XIV, paper § 7)
+        const now = Date.now();
+        const handle = attachment?.handle;
+
+        // No handle means this socket connected pre-chat-deploy or the
+        // attachment was lost in a hibernation edge case. Silently drop —
+        // the snapshot path will reissue a handle on next reconnect.
+        if (!handle) break;
+
+        // First gate: short anti-spam cooldown on any attempt. Stops
+        // bots from machine-gunning the classifier with rejected content.
+        // Drop silently — gives a spammer no feedback to time their
+        // retries, and a human will never hit this window anyway.
+        const lastAttemptMs = attachment?.lastChatAttemptMs ?? 0;
+        if (now - lastAttemptMs < CHAT_ATTEMPT_COOLDOWN_MS) break;
+
+        // Second gate: 15s post-success rate limit. The visitor-facing
+        // "speaking slower here" path. Strict by design (§ XIV —
+        // contemplative pace). Updates lastChatMs only on success, so
+        // classifier rejections do NOT count against this window — a
+        // visitor whose message got unfairly rejected may immediately
+        // rewrite and try again (subject to the short attempt cooldown
+        // above).
+        const lastChatMs = attachment?.lastChatMs ?? 0;
+        if (now - lastChatMs < CHAT_RATE_LIMIT_MS) {
+          const wait = Math.ceil((CHAT_RATE_LIMIT_MS - (now - lastChatMs)) / 1000);
+          this.sendChatRejected(
+            ws,
+            parsed.data.text,
+            `speaking slower here — ${wait}s before another message`,
+          );
+          // Refresh attachment with the same lastChatMs so rate limit
+          // continues from the prior message. Bump the attempt
+          // timestamp so this rejection counts toward the short window.
+          ws.serializeAttachment({
+            ...attachment,
+            lastChatMs,
+            lastChatAttemptMs: now,
+          } satisfies SessionAttachment);
+          break;
+        }
+
+        // Commit the attempt timestamp BEFORE calling the classifier,
+        // so AI transport errors still consume the cooldown — otherwise
+        // a spammer could try during outages.
+        ws.serializeAttachment({
+          ...attachment,
+          lastChatAttemptMs: now,
+        } satisfies SessionAttachment);
+
+        // Classify. Fail-closed inside the function — transport errors,
+        // malformed responses, empty/oversize text all return welcome=false.
+        const verdict = await classifyVisitorContent(
+          this.env,
+          parsed.data.text,
+          "chat",
+        );
+
+        // Log the classification for research hygiene, regardless of outcome.
+        await emit(this.sql, this.env.AE_EVENTS,
+          { pondId: this.pondId, configHash: this.configHash },
+          {
+            tick: this.hot.tick,
+            actor: `visitor:${visitorHash}`,
+            type: "chat_classified",
+            payload: {
+              surface: "chat",
+              welcome: verdict.welcome,
+              reason: verdict.reason,
+              model_id: verdict.modelId,
+              handle,
+              text_length: parsed.data.text.length,
+            },
+          },
+        );
+
+        if (!verdict.welcome) {
+          // Reject path: send chat_rejected to just this socket. Do NOT
+          // update lastChatMs — visitor may immediately rewrite.
+          this.sendChatRejected(ws, parsed.data.text, verdict.reason);
+          break;
+        }
+
+        // Accept path: build the message, add to ring, broadcast, update
+        // rate-limit timestamp on the attachment.
+        const message: ChatMessage = {
+          id: crypto.randomUUID(),
+          handle,
+          text: parsed.data.text,
+          at: now,
+        };
+        this.addToChatRing(message);
+
+        // Increment the all-time counter and persist before broadcasting
+        // so the value clients see is durable across crashes.
+        this.chatTotal += 1;
+        await this.ctx.storage.put("chat_total", this.chatTotal);
+
+        this.broadcastChat(message);
+
+        ws.serializeAttachment({
+          ...attachment,
+          lastChatMs: now,
+        } satisfies SessionAttachment);
+
+        await emit(this.sql, this.env.AE_EVENTS,
+          { pondId: this.pondId, configHash: this.configHash },
+          {
+            tick: this.hot.tick,
+            actor: `visitor:${visitorHash}`,
+            type: "chat_message",
+            payload: {
+              message_id: message.id,
+              handle,
+              text_length: message.text.length,
+            },
+          },
+        );
+        break;
+      }
     }
   }
 
@@ -1238,6 +1481,12 @@ export class Pond extends DurableObject<Env> {
     if (newTick % broadcastEvery === 0) {
       this.broadcastTick(newTick, nowMs);
     }
+
+    // 9.5. Pond-voice check. The pond may drop a single observation
+    //      into the chat if visitors are present, the chat has been
+    //      quiet, and the cooldown has elapsed. All checks are cheap;
+    //      the AI call only fires when all conditions hold (rare).
+    await this.maybeFirePondUtterance(nowMs);
 
     // 10. Reschedule handled by the outer alarm() wrapper in its finally
     //     block — guarantees physics keeps running even if any step
@@ -2225,7 +2474,7 @@ export class Pond extends DurableObject<Env> {
   private insertKoiRow(k: KoiState): void {
     this.sql.exec(
       `INSERT INTO koi (id, name, stage, sex, age_ticks, hatched_at_tick,
-        legendary, color, x, y, z, vx, vz, h, size,
+        legendary, founder, color, x, y, z, vx, vz, h, size,
         pad_p, pad_a, pad_d, hunger,
         intent_kind, intent_target_id, intent_target_x, intent_target_y, intent_target_z,
         intent_at_tick, intent_mechanism, next_cognition_tick,
@@ -2233,9 +2482,9 @@ export class Pond extends DurableObject<Env> {
         drawn_target_id, drawn_noticing, drawn_at_tick,
         last_utterance, last_utterance_tick, last_spawning_tick,
         is_alive, died_at_tick)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       k.id, k.name, k.stage, k.sex, k.ageTicks, k.hatchedAtTick,
-      k.legendary ? 1 : 0, k.color,
+      k.legendary ? 1 : 0, k.founder ? 1 : 0, k.color,
       k.x, k.y, k.z, k.vx, k.vz, k.h, k.size,
       k.pad.p, k.pad.a, k.pad.d, k.hunger,
       k.intent.kind,
@@ -2323,6 +2572,15 @@ export class Pond extends DurableObject<Env> {
   private sendSnapshot(ws: WebSocket): void {
     const fish = this.hot.koi.map(toFrame);
     const food = this.hot.food.map(toFoodFrame);
+    // Read the session's handle for the chat surface. Older sessions
+    // (pre-chat deploy) may not have one; in that case the field is
+    // simply omitted from the snapshot and the client falls back to
+    // chat-disabled state.
+    let yourHandle: string | undefined;
+    try {
+      const att = ws.deserializeAttachment() as SessionAttachment | null;
+      yourHandle = att?.handle;
+    } catch { /* leave undefined */ }
     const msg = SnapshotMessageSchema.parse({
       t: "snapshot",
       tick: this.hot.tick,
@@ -2336,6 +2594,9 @@ export class Pond extends DurableObject<Env> {
         t_day: this.hot.world.tDay,
         season: this.hot.world.season,
       },
+      chat: this.chatRing.length > 0 ? this.chatRing.slice() : undefined,
+      yourHandle,
+      chatTotal: this.chatTotal,
     });
     try { ws.send(JSON.stringify(msg)); } catch { /* closed */ }
   }
@@ -2347,6 +2608,155 @@ export class Pond extends DurableObject<Env> {
     for (const ws of this.ctx.getWebSockets()) {
       try { ws.send(payload); } catch { /* closed */ }
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Chat — visitor-to-visitor surface
+  // ─────────────────────────────────────────────────────────────────
+
+  /** Collect the set of handles currently in use by active sessions. Reads
+   *  each WebSocket's attachment; handles that haven't been assigned yet
+   *  (older sessions, hibernation edge cases) are skipped. Used by the
+   *  handle generator on session open to avoid collisions. */
+  private collectActiveHandles(): Set<string> {
+    const handles = new Set<string>();
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        const att = ws.deserializeAttachment() as SessionAttachment | null;
+        if (att?.handle) handles.add(att.handle);
+      } catch { /* skip */ }
+    }
+    return handles;
+  }
+
+  /** Append a chat message to the in-memory ring buffer, dropping the
+   *  oldest when the buffer would exceed CHAT_RING_BUFFER_SIZE. */
+  private addToChatRing(msg: ChatMessage): void {
+    this.chatRing.push(msg);
+    while (this.chatRing.length > CHAT_RING_BUFFER_SIZE) {
+      this.chatRing.shift();
+    }
+  }
+
+  /** Broadcast a chat_message envelope to every connected session.
+   *  Same pattern as broadcastAmbient: serialize once, send to all,
+   *  swallow per-socket send errors. */
+  private broadcastChat(msg: ChatMessage): void {
+    const envelope = ChatMessageBroadcastSchema.parse({
+      t: "chat_message",
+      id: msg.id,
+      handle: msg.handle,
+      text: msg.text,
+      at: msg.at,
+      chatTotal: this.chatTotal,
+      kind: msg.kind ?? "visitor",
+    });
+    const payload = JSON.stringify(envelope);
+    for (const ws of this.ctx.getWebSockets()) {
+      try { ws.send(payload); } catch { /* closed */ }
+    }
+  }
+
+  /** Send a chat_rejected envelope back to the submitting socket only.
+   *  Includes the original text so the client can show "this was not
+   *  sent: <text>" and optionally offer a single rewrite. */
+  private sendChatRejected(ws: WebSocket, text: string, reason: string): void {
+    const envelope = ChatRejectedSchema.parse({
+      t: "chat_rejected",
+      text,
+      reason,
+      at: Date.now(),
+    });
+    try { ws.send(JSON.stringify(envelope)); } catch { /* closed */ }
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Pond-voice — the pond observes itself, sometimes
+  //
+  //  Trigger conditions (all must hold):
+  //    1. ≥ POND_UTTERANCE_COOLDOWN_MS since last pond utterance
+  //    2. ≥ POND_UTTERANCE_QUIET_MS since the last visitor chat message
+  //    3. ≥ 1 visitor present (at least one WebSocket open)
+  //
+  //  When all three hold during an alarm tick, the pond drops a single
+  //  observation generated by Gemma 4 26B A4B in its observational
+  //  voice (see pond-utterance.ts). Failure returns null → skip; the
+  //  pond is allowed to stay silent.
+  //
+  //  Pond utterances are broadcast like visitor messages and persist
+  //  in the ring buffer, but kind="pond" lets the client render them
+  //  differently (italic, ghost-soft handle). They do NOT count toward
+  //  chatTotal — that metric is about visitor activity, not pond voice.
+  // ─────────────────────────────────────────────────────────────────
+
+  private async maybeFirePondUtterance(nowMs: number): Promise<void> {
+    // (1) Cooldown — at least POND_UTTERANCE_COOLDOWN_MS since last
+    if (nowMs - this.lastPondUtteranceMs < POND_UTTERANCE_COOLDOWN_MS) return;
+
+    // (3) Visitors present
+    if (this.ctx.getWebSockets().length < 1) return;
+
+    // (2) Quiet — last visitor chat must be old or absent. Walk the
+    // ring backward looking for the most recent visitor-kind message.
+    let lastVisitorChatAt = 0;
+    for (let i = this.chatRing.length - 1; i >= 0; i--) {
+      const m = this.chatRing[i]!;
+      if (m.kind !== "pond") {
+        lastVisitorChatAt = m.at;
+        break;
+      }
+    }
+    if (lastVisitorChatAt > 0 &&
+        nowMs - lastVisitorChatAt < POND_UTTERANCE_QUIET_MS) {
+      return;
+    }
+
+    // All conditions met. Generate the observation.
+    const phase = phaseFromTDay(this.hot.world.tDay);
+    const season = this.hot.world.season as
+      "spring" | "summer" | "autumn" | "winter";
+    const text = await generatePondUtterance(this.env, { phase, season });
+    if (!text) {
+      // Generation failed — silently skip this beat. Still bump the
+      // timestamp partway so we don't hammer the model in a tight
+      // loop on persistent failures. Half-cooldown so retry isn't
+      // immediate but isn't a full silent period either.
+      this.lastPondUtteranceMs = nowMs - (POND_UTTERANCE_COOLDOWN_MS / 2);
+      await this.ctx.storage.put(
+        "last_pond_utterance_ms", this.lastPondUtteranceMs,
+      );
+      return;
+    }
+
+    // Build the message. Note: kind="pond" — the only place this is
+    // set on the server. Handle is "the pond" (lowercase, in voice).
+    const message: ChatMessage = {
+      id: crypto.randomUUID(),
+      handle: "the pond",
+      text,
+      at: nowMs,
+      kind: "pond",
+    };
+    this.addToChatRing(message);
+    this.broadcastChat(message);
+
+    this.lastPondUtteranceMs = nowMs;
+    await this.ctx.storage.put("last_pond_utterance_ms", nowMs);
+
+    await emit(this.sql, this.env.AE_EVENTS,
+      { pondId: this.pondId, configHash: this.configHash },
+      {
+        tick: this.hot.tick,
+        actor: "pond",
+        type: "pond_utterance",
+        payload: {
+          message_id: message.id,
+          phase,
+          season,
+          text_length: text.length,
+        },
+      },
+    );
   }
 }
 
@@ -2374,6 +2784,7 @@ function rowToKoi(r: Record<string, unknown>): KoiState {
     ageTicks: r["age_ticks"] as number,
     hatchedAtTick: r["hatched_at_tick"] as number,
     legendary: (r["legendary"] as number) === 1,
+    founder: (r["founder"] as number | undefined) === 1,
     color: r["color"] as KoiState["color"],
     x: r["x"] as number, y: r["y"] as number, z: r["z"] as number,
     vx: r["vx"] as number, vz: r["vz"] as number,

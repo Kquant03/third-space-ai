@@ -29,6 +29,7 @@ import {
   useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
 import { usePond, SHADER_SCALE } from "@/lib/usePond";
+import { PondChat } from "@/components/PondChat";
 
 // ───────────────────────────────────────────────────────────────────
 //  Palette
@@ -479,6 +480,8 @@ export default function LimenPondPage() {
       )}
 
       <ReadMoreDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+
+      <PondChat pond={pond} COLOR={COLOR} FONT={FONT} />
 
       <style>{`
         .pond-chip:hover {
