@@ -5,118 +5,160 @@
 //  a sticky handle for the duration of that session. The handle follows a
 //  two-word pattern distinct from the koi naming scheme:
 //
-//      <Liminal-Adjective>-<Niche-Mythological-Figure>
+//      <Mythic-Adjective>-<Mythic-Figure>
 //
-//  e.g., "Crepuscular-Heimdall", "Apophatic-Wepwawet", "Numinous-Geshtinanna"
+//  e.g., "Wandering-Odysseus", "Stormborn-Tiamat", "Drowning-Narcissus"
 //
 //  The pattern is deliberate. The koi have sensory fragmentary names
-//  ("Reed-Watcher", "Slow-Surface") — they are *of* the pond. Visitors are
-//  liminal entities passing through, so their handles reference
-//  thresholds, dusks, dreams, and the deities who attend boundaries,
-//  crossroads, and the spaces between. The figures are chosen from outside
-//  the usual Greco-Roman/Norse mainstream — Wepwawet (Egyptian, opener of
-//  the way), Hekate (Greek, crossroads), Eshu (Yoruba, threshold trickster),
-//  Vanth (Etruscan, winged psychopomp), Geshtinanna (Sumerian, dream
-//  interpretation). Most visitors will not recognize the references; that
-//  is part of the charm. The handles read as strange-but-beautiful sound
-//  shapes rather than as recognizable labels.
+//  ("Reed-Watcher", "Slow-Surface") — they are *of* the pond. Visitors
+//  arrive carrying the weight of human mythology: the heroes who sought
+//  immortality, the gods who attend depths and crossings, the figures
+//  whose stories you already half-know. The handle is meant to register
+//  as recognition rather than puzzle — a visitor seeing "Mourning-Orpheus"
+//  should feel the resonance, not have to look it up.
 //
-//  30 adjectives × 40 figures = 1,200 unique combinations. Collisions in
-//  any plausible visitor population are vanishingly rare.
+//  Mesopotamia is well-represented (Gilgamesh, Enkidu, Inanna, Tiamat,
+//  Ereshkigal, Lilith) because that mythology is where heroic seeking-the-
+//  unknown begins. Greek, Norse, Egyptian, Japanese, Hindu, Celtic,
+//  Aztec, Yoruban, and Polynesian figures fill out the field — drawn
+//  from the canon a literate person would recognize, not the scholarly
+//  deep cuts.
+//
+//  ~32 adjectives × ~55 figures ≈ 1,700 unique combinations. Plenty for
+//  any plausible concurrent visitor population.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Adjectives evoking liminality, threshold states, dusk, dawn, dream,
- *  depth, palimpsest. All cleanly hyphenable in the handle. */
+/** Adjectives evoking mythic motion, elemental state, or carried weight.
+ *  Mix of single words (Wandering, Burning, Hollow) and mythic compounds
+ *  (Stormborn, Wavebound, Bonewhite). Chosen to land with impact when
+ *  paired with a heroic or divine name — "Wandering-Odysseus" reads
+ *  as recognition, not riddle. */
 const LIMINAL_ADJECTIVES: readonly string[] = [
-  "Threshold",      // the door itself
-  "Liminal",        // root word
-  "Penumbral",      // partial shadow
-  "Interstitial",   // between things
-  "Crepuscular",    // dusk-active
-  "Vespertine",     // of the evening
-  "Auroral",        // of dawn
-  "Hypnagogic",     // entering sleep
-  "Apophatic",      // negative theology, defined by what it is not
-  "Anamnestic",     // recollection-based
-  "Asymptotic",     // approaching but never reaching
-  "Chthonic",       // of the underworld
-  "Numinous",       // mysteriously sacred
-  "Palimpsestic",   // layered with previous writings
-  "Pelagic",        // of the open sea
-  "Abyssal",        // of the deep
-  "Aphotic",        // without light, like deep ocean
-  "Diaphanous",     // translucent, gossamer
-  "Halcyon",        // calm, kingfisher-season
-  "Recursive",      // looping inward
-  "Apocryphal",     // of doubtful authenticity
-  "Spectral",       // ghost-like, of the visible spectrum
-  "Eidetic",        // vividly remembered
-  "Nepenthean",     // of the river of forgetting
-  "Sublunary",      // beneath the moon, earthly
-  "Postliminal",    // having crossed the threshold
-  "Tenebrous",      // shadowy
-  "Hierophantic",   // revealer of sacred things
-  "Hesperian",      // of the western evening
-  "Antemeridian",   // before midday
+  // Motion through the world
+  "Wandering",        // far from home, still moving
+  "Returning",        // the long way back
+  "Seeking",          // unfinished search
+  "Mourning",         // walking with loss
+  "Watching",         // the still-eyed observer
+
+  // Elemental and physical state
+  "Burning",          // lit from inside or out
+  "Drowning",         // submerged in something
+  "Sleeping",         // not yet woken
+  "Hollow",           // emptied, echoing
+  "Silent",           // refusing speech
+  "Stormborn",        // child of weather
+  "Wavebound",        // tied to tides
+  "Earthwalking",     // mortal and grounded
+  "Skywatching",      // attending the heavens
+  "Starcrowned",      // carrying the heavens
+
+  // Light and shadow
+  "Twilit",           // between day and night
+  "Moonlit",          // by the lesser light
+  "Sunlit",           // by the greater one
+  "Spectral",         // ghost-edged
+  "Tenebrous",        // shadowy
+  "Halcyon",          // calm before
+  "Penumbral",        // edge of shadow
+
+  // Material and weight
+  "Bronzeshod",       // armored at the foot
+  "Ironbound",        // weighted with iron
+  "Stonemouthed",     // refusing easy words
+  "Bonewhite",        // worn down to essence
+  "Goldhanded",       // touched by wealth or grace
+
+  // Threshold and depth
+  "Chthonic",         // of the underworld
+  "Abyssal",          // of the deep
+  "Numinous",         // sacred-strange
+
+  // Memory and return
+  "Halfremembered",   // surfacing into mind
+  "Remembered",       // held by someone
+  "Forgotten",        // released by all
 ];
 
-/** Niche mythological figures, grouped by thematic affinity. The
- *  groupings are for readability of this file; the generator picks
- *  uniformly across the whole list. Skips the most-recognizable figures
- *  (Zeus, Hermes, Loki, Anubis, Bastet, Quetzalcoatl, Amaterasu,
- *  Persephone, Morpheus) on purpose — the obscurity is half the charm. */
+/** Mythological figures across the recognizable canon. Grouped by
+ *  thematic affinity for readability; the generator picks uniformly
+ *  across the whole list. Leans into Mesopotamia (Gilgamesh, Enkidu,
+ *  Inanna, Tiamat, Ereshkigal, Lilith) because heroic seeking-of-the-
+ *  unknown originates there. The rest spans Greek, Norse, Egyptian,
+ *  Japanese, Hindu, Celtic, Aztec, Yoruban, Polynesian. */
 const MYTHIC_FIGURES: readonly string[] = [
-  // Crossroads / threshold / liminal deities
-  "Hekate",         // Greek — crossroads, witchcraft, the in-between
-  "Heimdall",       // Norse — guards Bifröst, the rainbow boundary
-  "Wepwawet",       // Egyptian — "Opener of the Way"
-  "Eshu",           // Yoruba — crossroads trickster, messenger
-  "Manannán",       // Celtic — sea god, between worlds
-  "Charun",         // Etruscan — psychopomp with a hammer
-  "Vanth",          // Etruscan — winged death attendant
-  "Janus",          // Roman — doors, transitions, two-faced
+  // Mesopotamian — heroic origin, the first stories
+  "Gilgamesh",      // Sumerian — king who sought immortality and lost it
+  "Enkidu",         // Sumerian — wild man, Gilgamesh's friend, dies first
+  "Inanna",         // Sumerian — descent into and return from the underworld
+  "Ishtar",         // Babylonian — Inanna's later name, war and love
+  "Tiamat",         // Babylonian — primordial saltwater, mother of dragons
+  "Ereshkigal",     // Sumerian — queen of the underworld, ruler of below
+  "Lilith",         // Mesopotamian — first refuser, exile, owl-winged
 
-  // Memory, dream, forgetting
-  "Mnemosyne",      // Greek — memory
-  "Mimir",          // Norse — wisdom in a well
-  "Phantasos",      // Greek — illusions in dreams
-  "Lethe",          // Greek — river of forgetting
-  "Geshtinanna",    // Sumerian — dream interpretation, vines, lament
+  // Greek — heroes, seekers, the looked-back
+  "Odysseus",       // long-wandering king, slow homecoming
+  "Penelope",       // the patient weaver who waited
+  "Persephone",     // pomegranate seeds, between two worlds
+  "Orpheus",        // sang to the underworld, looked back too soon
+  "Eurydice",       // almost-returned, lost to the glance
+  "Achilles",       // the heel, the rage, the choice
+  "Hector",         // the better man, the lost defender of Troy
+  "Cassandra",      // saw clearly, was never believed
+  "Atalanta",       // huntress, runner, lost to golden apples
+  "Sisyphus",       // the stone, the slope, eternity
+  "Echo",           // the voice without a self
+  "Narcissus",      // the reflection, the drowning
+  "Mnemosyne",      // mother of the Muses, memory itself
+  "Hekate",         // crossroads, three faces, torchbearer
+  "Charon",         // the ferryman, the obol-keeper
+  "Hermes",         // boundary crosser, messenger, guide of souls
+  "Pandora",        // who opened it, who closed it on hope
 
-  // Twilight, dawn, moon, stars
-  "Hesperos",       // Greek — evening star
-  "Eosphoros",      // Greek — dawn-bringer
-  "Khonsu",         // Egyptian — wandering moon
-  "Tsukuyomi",      // Japanese — moon, exiled
-  "Selene",         // Greek — moon, mortal lover
-  "Asteria",        // Greek — falling stars
-  "Hemera",         // Greek — day itself
-  "Ushas",          // Vedic — dawn, the bright one
+  // Norse — sky and saga
+  "Odin",           // one-eyed, hanged for runes, the wandering god
+  "Thor",           // thunder, hammer, simple strength
+  "Loki",           // shape-changer, mother of monsters, end-bringer
+  "Freya",          // amber tears, falcon-cloak, the chooser
+  "Heimdall",       // the watchman of the rainbow bridge
+  "Mimir",          // the severed head in the well of wisdom
+  "Baldur",         // beautiful, killed by mistletoe and Loki
+  "Hel",            // half-living, ruler of the unremarkable dead
 
-  // Underworld and rebirth (gentler aspects)
-  "Nephthys",       // Egyptian — death-rite mourner, sister of Isis
-  "Ereshkigal",     // Sumerian — queen of the under-realm
-  "Hel",            // Norse — half-living, half-dead
-  "Donn",           // Irish — dark god of ancestors
-  "Marzanna",       // Slavic — winter, death, drowned in spring
+  // Egyptian — the long durations
+  "Anubis",         // jackal-headed, weigher of hearts
+  "Thoth",          // ibis, writing, the moon
+  "Isis",           // who gathered the pieces, who would not give up
+  "Osiris",         // dismembered, restored, ruler of the silent
+  "Bastet",         // cat-headed, of joy and protection
+  "Sekhmet",        // lion-headed, of fierce healing
+  "Horus",          // falcon, the son who took his father's place
+  "Nephthys",       // mourner, sister, keeper of secrets
 
-  // Wild, threshold, intermediary
-  "Cernunnos",      // Celtic — horned god of wild between
-  "Brigid",         // Celtic — fire, poetry, hearth-and-anvil
-  "Aranyani",       // Vedic — forests and their hidden creatures
-  "Inari",          // Japanese — foxes, harvest, between worlds
-  "Jizo",           // Japanese — protector of travelers and the lost
-  "Veles",          // Slavic — contracts, magic, livestock
-  "Oya",            // Yoruba — storms, transitions, the marketplace
-  "Yemaya",         // Yoruba — ocean mother, salt-water gateways
+  // Japanese — sun, moon, storm
+  "Amaterasu",      // sun goddess who hid in the cave
+  "Tsukuyomi",      // moon, exiled across the sky
+  "Susanoo",        // storm, banished, slayer of serpents
+  "Izanami",        // first mother, who could not return
+  "Inari",          // foxes, harvest, the keeper of thresholds
 
-  // Stranger and rarer
-  "Anzu",           // Sumerian — storm-bird, stealer of tablets
-  "Pothos",         // Greek — longing for the absent
-  "Phanes",         // Orphic — primordial light, the firstborn
-  "Sokar",          // Egyptian — craftsman of the underworld
-  "Telipinu",       // Hittite — vegetation god who wandered off in fury
-  "Inara",          // Hittite — vanishing daughter, dragon-defeater
+  // Hindu — the dancing weight of the universe
+  "Shiva",          // destroyer who is also stillness
+  "Kali",           // black goddess of time, ferocious mother
+  "Ganesha",        // remover of obstacles, the beginning
+  "Saraswati",      // river goddess of knowledge, swan-borne
+  "Krishna",        // flute, blue, the lover, the charioteer
+
+  // Celtic — the in-between island
+  "Cernunnos",      // horned god of the wild
+  "Brigid",         // fire, poetry, the hearth and the smith
+  "Morrigan",       // crow goddess of war and prophecy
+
+  // Other — wide world
+  "Quetzalcoatl",   // Aztec — feathered serpent, the wind, the morning star
+  "Pele",           // Hawaiian — volcano goddess of creation and destruction
+  "Anansi",         // West African — spider trickster, keeper of stories
+  "Yemaya",         // Yoruban — ocean mother, salt-water gateways
 ];
 
 // ───────────────────────────────────────────────────────────────────
