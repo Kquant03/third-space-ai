@@ -65,6 +65,12 @@ export interface CreateKoiInit {
    *  in the reproduction gate and we want that to be impossible to
    *  forget. */
   sex: "female" | "male";
+  /** Founder marker. Set true only when seeding Shiki and Kokutou at
+   *  pond inception. Naturally-hatched koi never get this — it's not
+   *  inheritable, not awardable, not a gameplay trait. The frontend
+   *  reads it to apply the distinct watercolor / divine visual
+   *  treatment in the koi shader. Optional; absent treated as false. */
+  founder?: boolean;
   /** Optional spawn override. Defaults to randomSpawn on the shelf. */
   spawn?: { x: number; y: number; z: number; h: number };
 }
@@ -100,6 +106,11 @@ export function createKoi(init: CreateKoiInit, rng: Rng): KoiState {
     lastSpawningTick: 0,
     recentHeadings: [],
     tagState: null,
+    // Founder flag — only Shiki and Kokutou get this at seed time;
+    // everyone else descends from them and is non-founder. Spread
+    // conditionally so the field stays out of the object for natural
+    // koi, keeping their state minimal.
+    ...(init.founder ? { founder: true as const } : {}),
   };
 }
 
@@ -313,38 +324,71 @@ const COLOR_ROTATION: KoiColor[] = [
  *  fish starts within striking distance of the dying stage — the
  *  earlier distribution [18, 14, 9, 4, 2] caused a cohort die-off
  *  cascade visible in April 2026 debug sessions. */
+/** Seed a brand-new pond with two founder koi: Shiki and Kokutou.
+ *
+ *  Names borrowed from *Kara no Kyoukai*. Every other being in the
+ *  pond's history will be their descendant, named by parents through
+ *  the first-moment observer path (naming.ts). Founders are exempt
+ *  from that path: they arrive mid-recognition, already themselves,
+ *  and so their names are authored.
+ *
+ *  Visual treatment: kohaku and asagi are the genetics archetype levers
+ *  that feed the inheritance system so descendants visibly carry
+ *  traces of each parent. The frontend renders founders distinctively
+ *  via the founder flag — LivingSubstrate's FOUNDER_PHENOTYPES maps
+ *  "kohaku" + founder → wisteria violet / crimson (Shiki, the Mystic
+ *  Eyes treatment) and "asagi" + founder → crystal cobalt (Kokutou,
+ *  the apprentice-blue treatment). Regular kohaku/asagi koi born to
+ *  them later render as ordinary archetypes — the founder flag is
+ *  what triggers the divine palette swap.
+ *
+ *  Both are adults (14 sim-days, well clear of any dying-stage cliff),
+ *  legendary cognition tier (bigger model per § VII), opposite sex.
+ *  Per-founder rngs so spawn positions don't collapse to the same
+ *  shelf arc; they land separately and find each other within minutes
+ *  of pond time.
+ *
+ *  Deterministic — a fresh DO produces the same starting pair every
+ *  time (§ XV research hygiene). */
 export function seedInitialCohort(tick: SimTick, rng: Rng): KoiState[] {
-  // Target ages in sim-days so the pond has a mix of stages with runway.
-  const AGES_DAYS = [14, 10, 6, 3, 1];
-  const NAMES = [
-    "Kishi",              // late-adult, quiet veteran
-    "The One Who Waits",  // adult with patience
-    "Bronze-Fin",         // adolescent
-    "Reed-Follower",      // juvenile
-    "Third-of-Five",      // fry
-  ];
-  // Seed cohort sex assignment. Distributed so any cross-stage pairing
-  // has at least one viable sex combination when both reach adulthood.
-  // 3F (indices 0, 2, 4) / 2M (indices 1, 3).
-  const SEX: Array<"female" | "male"> =
-    ["female", "male", "female", "male", "female"];
+  const FOUNDER_AGE_DAYS = 14;
+  const ageTicks = Math.floor(
+    FOUNDER_AGE_DAYS * SIM.realSecondsPerSimDay * SIM.tickHz,
+  );
+  const hatchedAt = tick - ageTicks;
 
-  const out: KoiState[] = [];
-  for (let i = 0; i < AGES_DAYS.length; i++) {
-    const day = AGES_DAYS[i]!;
-    const ageTicks = Math.floor(day * SIM.realSecondsPerSimDay * SIM.tickHz);
-    const id = `koi_${String(i).padStart(2, "0")}_seed`;
-    const color = COLOR_ROTATION[i % COLOR_ROTATION.length]!;
-    const legendary = rng.chance(LIFE.legendaryRate);
-    const hatchedAt = tick - ageTicks;
-    out.push(createKoi({
-      id, name: NAMES[i]!, ageTicks,
-      hatchedAtTick: hatchedAt,
-      legendary, color,
-      sex: SEX[i]!,
-    }, rng));
-  }
-  return out;
+  // Fresh per-founder rng so spawn positions don't collapse.
+  const shikiRng = new Rng(0x5be7e1);
+  const kokutouRng = new Rng(0x4304470);
+
+  const shiki = createKoi({
+    id: "koi_shiki_founder" as KoiId,
+    name: "Shiki",
+    ageTicks,
+    hatchedAtTick: hatchedAt,
+    legendary: true,
+    color: "kohaku",          // red-on-white archetype → violet for founder
+    sex: "female",
+    founder: true,
+  }, shikiRng);
+
+  const kokutou = createKoi({
+    id: "koi_kokutou_founder" as KoiId,
+    name: "Kokutou",
+    ageTicks,
+    hatchedAtTick: hatchedAt,
+    legendary: true,
+    color: "asagi",           // net-patterned blue archetype → cobalt for founder
+    sex: "male",
+    founder: true,
+  }, kokutouRng);
+
+  // Advance the cohort rng once so downstream callers that snapshot
+  // it see a non-trivial state. No functional dependency, just keeps
+  // the deterministic stream moving past the founders.
+  rng.float();
+
+  return [shiki, kokutou];
 }
 
 // ───────────────────────────────────────────────────────────────────

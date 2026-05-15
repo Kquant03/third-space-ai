@@ -322,6 +322,11 @@ interface KineState {
   name?: string;
   color?: string;
   mood?: { v: number; a: number };
+  /** Founder flag — carried through the interpolation pipeline so
+   *  the renderer's hot path (kineToShader) can hand it to the koi
+   *  shader's a_founder instance attribute. Set once at makeKineState
+   *  time; founders never become non-founders and vice versa. */
+  founder?: boolean;
 
   // Stage-derived speed multiplier (used by visual flourishes)
   speedMult: number;
@@ -392,6 +397,7 @@ function makeKineState(f: KoiFrame, nowMs: number): KineState {
     name: f.name,
     color: f.c,
     mood: f.m,
+    founder: f.founder,
     speedMult: STAGE_SPEED_MULT[f.stage ?? "adult"] ?? 1.0,
     breachPhase: 0,
     lingerPhase: hashToUnit(f.id + ":lp") * Math.PI * 2,
@@ -436,6 +442,10 @@ function updateKineTarget(k: KineState, f: KoiFrame, nowMs: number): void {
   k.stage = f.stage ?? k.stage;
   k.color = f.c ?? k.color;
   k.mood = f.m ?? k.mood;
+  // Founder flag — only update when the wire actually carries it.
+  // Worker omits the field for non-founders to keep the wire minimal,
+  // so we treat absence as "no change" rather than "set false."
+  if (f.founder !== undefined) k.founder = f.founder;
   if (f.stage) k.speedMult = STAGE_SPEED_MULT[f.stage] ?? 1.0;
 }
 
@@ -1320,6 +1330,7 @@ function kineToShader(k: KineState): ShaderFish {
     name: k.name,
     color: k.color,
     mood: k.mood,
+    founder: k.founder,
     intent: k.intent,
     target: k.target,
     mechanism: k.mechanism,

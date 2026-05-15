@@ -59,7 +59,7 @@ export default {
           }
         );
       }
-      const id = env.POND.idFromName("primary_v3");
+      const id = env.POND.idFromName("primary_v4");
       const res = await env.POND.get(id).fetch(request);
       // Wrap with CORS headers so the dev console can read the response.
       const headers = new Headers(res.headers);
@@ -78,7 +78,7 @@ export default {
       url.pathname === "/lineage" ||
       url.pathname.startsWith("/events/")
     ) {
-      const id = env.POND.idFromName("primary_v3");
+      const id = env.POND.idFromName("primary_v4");
       return env.POND.get(id).fetch(request);
     }
 
@@ -94,7 +94,7 @@ export default {
       const forwardUrl = new URL(request.url);
       forwardUrl.pathname = url.pathname.replace(/^\/cog/, "");
       const forwarded = new Request(forwardUrl.toString(), request);
-      const id = env.COGNITION_LOG.idFromName("primary");
+      const id = env.COGNITION_LOG.idFromName("primary_v4");
       return env.COGNITION_LOG.get(id).fetch(forwarded);
     }
 

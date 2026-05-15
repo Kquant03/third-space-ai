@@ -46,7 +46,7 @@ DIRECTORY TREE
     📄 genetics.ts    311 loc  ~ 2.9k tok  [TypeScript]
     📄 index.ts    103 loc  ~  989 tok  [TypeScript]
     📄 kinematics.ts    607 loc  ~ 5.4k tok  [TypeScript]
-    📄 koi.ts    375 loc  ~ 3.5k tok  [TypeScript]
+    📄 koi.ts    419 loc  ~ 4.0k tok  [TypeScript]
     📄 meditation.ts    268 loc  ~ 2.3k tok  [TypeScript]
     📄 memory.ts    392 loc  ~ 3.4k tok  [TypeScript]
     📄 naming.ts    203 loc  ~ 2.1k tok  [TypeScript]
@@ -279,7 +279,7 @@ DIRECTORY TREE
 ========================================================================
 LOC + TOKENS BY LANGUAGE
 
-  TypeScript         28117 loc  ~  258k tok  172% ctx   90 files  █████████████
+  TypeScript         28161 loc  ~  259k tok  173% ctx   90 files  █████████████
   TypeScript/React   29035 loc  ~  239k tok  159% ctx   68 files  ████████████
   Markdown            1530 loc  ~   35k tok   23% ctx    7 files  █
   Python              2160 loc  ~   20k tok   14% ctx    7 files  █
@@ -290,9 +290,9 @@ LOC + TOKENS BY LANGUAGE
   Shell                 67 loc  ~   480 tok    0% ctx    1 files  
   JavaScript            25 loc  ~   140 tok    0% ctx    2 files  
 
-  TOTAL              61818 loc  ~  563k tok  376% of usable context
+  TOTAL              61862 loc  ~  564k tok  376% of usable context
 
-  ⚠️  EXCEEDS usable context by ~413k tokens.
+  ⚠️  EXCEEDS usable context by ~414k tokens.
      Share files selectively — do NOT paste the whole repo.
 
 ========================================================================
@@ -340,11 +340,11 @@ FILES BY TOKEN COST  (heaviest context cost first)
   ~  4.2k    440     3%  TypeScript              src/components/genesis/lenia/shaders.ts
   ~  4.0k    493     3%  TypeScript/React        src/components/genesis/filter/beats/Beat11_ReplicatorWave.tsx
   ~  4.0k    490     3%  TypeScript/React        src/components/genesis/particle-life/ParticleLifeExperience.tsx
+  ~  4.0k    419     3%  TypeScript              pond/src/koi.ts
   ~  3.9k    420     3%  TypeScript              pond/src/protocol.ts
   ~  3.6k    407     2%  TypeScript/React        pond/src/app/curate/sweep/page.tsx
   ~  3.6k    441     2%  TypeScript/React        src/components/SiteChrome.tsx
   ~  3.6k    372     2%  TypeScript              pond/src/sweep-contexts.ts
-  ~  3.5k    375     2%  TypeScript              pond/src/koi.ts
   ~  3.4k    392     2%  TypeScript              pond/src/memory.ts
   ~  3.4k    407     2%  TypeScript/React        src/components/LimenLoader.tsx
   ~  3.4k    393     2%  TypeScript              pond/src/sweep.ts
@@ -483,4 +483,4 @@ FILES BY TOKEN COST  (heaviest context cost first)
   ~    24      7     0%  JavaScript              postcss.config.mjs
   ~     3      1     0%  Markdown                CLAUDE.md
 
-  Cumulative if all pasted: ~563k (376% of usable context)
+  Cumulative if all pasted: ~564k (376% of usable context)
