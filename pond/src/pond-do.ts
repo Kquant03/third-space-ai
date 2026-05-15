@@ -555,7 +555,7 @@ export class Pond extends DurableObject<Env> {
       }
 
       const pairKey = canonicalPairKey(a.id, b.id);
-      const adminRng = new Rng(this.hot.rngState ^ 0xADAD_5A4A);
+      const adminRng = new Rng(this.hot.world.rngState ^ 0xADAD_5A4A);
       await this.fireSpawning(pairKey, a, b, this.hot.tick, adminRng);
 
       const eggsAfter = this.hot.koi.filter((k) => k.stage === "egg");
@@ -572,15 +572,32 @@ export class Pond extends DurableObject<Env> {
 
     if (url.pathname === "/admin/hatch-all") {
       // Force every egg to advance to fry immediately. Useful for
-      // testing the egg → fry visual transition without waiting
-      // for the ~1.2 sim-day hatch period to elapse.
+      // testing the egg → fry visual transition without waiting for
+      // the ~1 sim-day hatch period to elapse.
+      //
+      // The trick is matching the natural sim path. advanceStage(k)
+      // reads currentStage(k.ageTicks) and transitions only when the
+      // age-derived stage differs from k.stage. Previously this handler
+      // set k.stage = "fry" manually and bumped ageTicks to 1 — but
+      // currentStage(1) returns "egg" (fry.min is 1 sim-day, ~thousands
+      // of ticks, not 1 tick), so the next sim step's advanceStage call
+      // saw stage="fry" vs currentStage="egg" and reverted to "egg"
+      // (with a brief flicker of fry kinematics that read as "eggs move
+      // up a bit then do nothing").
+      //
+      // Correct path: bump age past the fry threshold, then let
+      // advanceStage do the transition. That updates stage, size, and
+      // PAD baseline together — same code path natural hatching uses.
+      const fryAgeTicks = Math.ceil(
+        LIFE.stages.fry.min * SIM.realSecondsPerSimDay * SIM.tickHz,
+      ) + 1;
       const eggs = this.hot.koi.filter((k) => k.stage === "egg");
       for (const e of eggs) {
-        e.stage = "fry";
-        e.ageTicks = Math.max(e.ageTicks, 1);
+        e.ageTicks = Math.max(e.ageTicks, fryAgeTicks);
+        advanceStage(e); // mutates stage, size, pad in place
         this.sql.exec(
-          `UPDATE koi SET stage = 'fry', age_ticks = ? WHERE id = ?`,
-          e.ageTicks, e.id,
+          `UPDATE koi SET stage = ?, age_ticks = ?, size = ? WHERE id = ?`,
+          e.stage, e.ageTicks, e.size, e.id,
         );
       }
       return Response.json(
@@ -1722,7 +1739,7 @@ export class Pond extends DurableObject<Env> {
     // Find living eggs this koi parented. Eggs have `parents: KoiId[]`
     // populated at creation by fireSpawning.
     const myEggs = this.hot.koi.filter(
-      (e) => e.stage === "egg" && (e.parents?.includes(k.id) ?? false),
+      (e) => e.stage === "egg" && e.parents.includes(k.id),
     );
     if (myEggs.length === 0) return;
 
@@ -2212,7 +2229,7 @@ export class Pond extends DurableObject<Env> {
         tick: f.tick,
         actor: `koi:${f.actor}`,
         type,
-        targets: f.participants.filter((p: string) => p !== f.actor),
+        targets: f.participants.filter((p) => p !== f.actor),
         mechanism: f.mechanism,
         affectDelta: f.actorDelta,
         payload: { family: f.family, ...f.payload },

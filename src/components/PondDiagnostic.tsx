@@ -87,27 +87,33 @@ function shouldShow(): boolean {
 }
 
 // ─── Dev console admin helpers ─────────────────────────────────────────
-// These talk to the worker's /admin/* HTTP endpoints. The shared secret
-// is stored client-side in localStorage under "pond_dev_secret"; on
-// first use, the user is prompted to paste it. The secret matches the
-// SHARED_SECRET env var on the Cloudflare worker.
+// The dev console is gated by a URL secret: ?dev=<SHARED_SECRET>. The
+// frontend compares the provided value against NEXT_PUBLIC_POND_DEV_SECRET
+// (which must be set to the same string as the worker's SHARED_SECRET
+// env var). When they match, the DEV tab renders and the URL secret
+// itself is used as the Bearer token for admin POSTs. When they don't,
+// the DEV tab doesn't exist at all and admin POSTs are blocked client-
+// side. The worker's own /admin/* gate still enforces auth on every
+// request — this client-side check is purely for UX (don't show buttons
+// that won't work), not for security.
+//
+// Why URL-as-credential: the previous design cached the secret in
+// localStorage after a one-time prompt, which meant any browser session
+// that had ever entered the secret stayed authorized forever, and there
+// was no way to share an admin-capable link without also sharing the
+// prompt-and-paste dance. With the secret in the URL, the link IS the
+// credential. Trade-off: the secret appears in browser history and is
+// vulnerable to shoulder-surfing. Acceptable for a research-pond
+// admin surface where the harm ceiling is "extra eggs in the pond."
 
-const DEV_SECRET_KEY = "pond_dev_secret";
-
-function getDevSecret(): string | null {
+function getDevSecretFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
   try {
-    let s = localStorage.getItem(DEV_SECRET_KEY);
-    if (!s) {
-      const entered = window.prompt(
-        "Paste the SHARED_SECRET from your Cloudflare worker env. " +
-        "Stored locally; never sent anywhere except the pond worker."
-      );
-      if (entered && entered.trim()) {
-        s = entered.trim();
-        localStorage.setItem(DEV_SECRET_KEY, s);
-      }
-    }
-    return s || null;
+    const expected = process.env.NEXT_PUBLIC_POND_DEV_SECRET ?? "";
+    if (!expected) return null;
+    const sp = new URLSearchParams(window.location.search);
+    const provided = sp.get("dev");
+    return provided === expected ? provided : null;
   } catch {
     return null;
   }
@@ -126,9 +132,13 @@ async function postAdmin(
   path: string,
   body: Record<string, unknown> = {},
 ): Promise<{ ok: boolean; status: number; body: string }> {
-  const secret = getDevSecret();
+  const secret = getDevSecretFromUrl();
   if (!secret) {
-    return { ok: false, status: 401, body: "no secret provided" };
+    return {
+      ok: false,
+      status: 401,
+      body: "no dev secret in URL — add ?dev=<SHARED_SECRET>",
+    };
   }
   const base = workerBaseUrl();
   try {
@@ -160,10 +170,11 @@ export default function PondDiagnostic() {
   // Tab state. STATUS is the original forensic panel; DEV is the test
   // console for triggering simulation events (spawning, bonds, time
   // jumps, etc.) without waiting for them to occur naturally. DEV is
-  // only shown when the URL has ?dev=1 — production visitors never
-  // see it. Admin endpoints check the SHARED_SECRET header on the
-  // worker side, so even if a visitor discovered ?dev=1, they could
-  // not trigger admin actions without the secret.
+  // only shown when the URL carries ?dev=<NEXT_PUBLIC_POND_DEV_SECRET>
+  // matching the build-time env var. Visitors without the secret in
+  // the URL never see the tab. Admin endpoints additionally check the
+  // SHARED_SECRET header on the worker side using the same value, so
+  // the gate is defended at both layers.
   const [tab, setTab] = useState<"status" | "dev">("status");
   const [devEnabled, setDevEnabled] = useState(false);
   const [adminBusy, setAdminBusy] = useState<string | null>(null);
@@ -186,13 +197,12 @@ export default function PondDiagnostic() {
   // Gate mount after first render so SSR and client agree.
   useEffect(() => { setEnabled(shouldShow()); }, []);
 
-  // Detect ?dev=1 query param. Done client-side so the static build
-  // doesn't bake dev exposure into the page.
+  // Gate the DEV tab on a URL secret match. getDevSecretFromUrl()
+  // returns non-null only when ?dev=<value> matches the build-time
+  // NEXT_PUBLIC_POND_DEV_SECRET. Without that match, the tab doesn't
+  // render and admin POSTs are short-circuited client-side.
   useEffect(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      if (sp.get("dev") === "1") setDevEnabled(true);
-    } catch { /* SSR or malformed URL — ignore */ }
+    setDevEnabled(getDevSecretFromUrl() !== null);
   }, []);
 
   // Match the SiteHeader's own scroll threshold (64px) so the panel
