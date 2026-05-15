@@ -305,6 +305,14 @@ export interface RetrieveOptions {
   nowTick: SimTick;
   tickHz: number;
   visibleKoi: KoiId[];
+  /** Optional set of koi ids the requester has a consolidated bond with.
+   *  When present, the retrieval scorer biases recall toward memories
+   *  referencing these partners — including bonded partners not
+   *  currently in visibleKoi, so memory is not gated on co-presence.
+   *  Built upstream from relationship_card rows whose bondIntensity
+   *  clears BOND_BIAS_THRESHOLD (0.4 in pond-do.ts). Absent means
+   *  "no bond bias applied" — the legacy behavior. */
+  bondedPartners?: Set<KoiId>;
 }
 
 export function retrieveMemories(

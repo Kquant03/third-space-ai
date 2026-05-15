@@ -21,7 +21,10 @@ export type KoiId = string;
 /** A sim-tick integer. At 2 Hz, one sim-day ≈ 162,000 ticks. */
 export type SimTick = number;
 
-/** Life stage — advances monotonically; "dying" is terminal. */
+/** Life stage — advances monotonically. "dying" is the senescent
+ *  end-of-life state; "dead" is the brief post-mortem stage during
+ *  which the koi row still exists in the hot set so emitters can
+ *  reference it before the cleanup pass removes it. */
 export type LifeStage =
   | "egg"
   | "fry"
@@ -29,7 +32,8 @@ export type LifeStage =
   | "adolescent"
   | "adult"
   | "elder"
-  | "dying";
+  | "dying"
+  | "dead";
 
 /** Season — compresses over the 30-day lifecycle. (§ XI) */
 export type Season = "spring" | "summer" | "autumn" | "winter";
@@ -91,6 +95,20 @@ export interface KoiState {
 
   /** Legendary koi get a larger model tier in adulthood; ~1 in 100. (§ VII) */
   legendary: boolean;
+
+  /** Founder flag — true for koi created at pond instantiation rather
+   *  than hatched from eggs. Founders (Shiki, Kokutou) anchor the pond
+   *  across the simulation's lifespan and receive special handling:
+   *  bypass natural-death probability, opt-out of cohort culls, get
+   *  distinct visual treatment in the client. Absent / false on every
+   *  naturally-hatched koi. */
+  founder?: boolean;
+
+  /** Parent koi ids. Set when the koi hatches from an egg —
+   *  `[mother, father]` in canonical order. Absent on founders and
+   *  on eggs themselves; eggs use this field to record their parents
+   *  before hatch so the hatcher can credit lineage. */
+  parents?: KoiId[];
 
   color: KoiColor;
 
@@ -188,7 +206,8 @@ export type IntentKind =
   | "play_invite"          // initiate play at target_koi
   | "follow"               // pace with target_koi
   | "threadway"            // swim through a named architectural passage
-  | "attend_solstice";     // the weekly shaft ritual
+  | "attend_solstice"      // the weekly shaft ritual
+  | "tend_eggs";           // parent checking on their developing eggs
 
 export interface Intent {
   kind: IntentKind;
@@ -306,11 +325,17 @@ export type EventType =
   | "spawning" | "egg_laid" | "fry_hatched"
   // world
   | "day_advanced" | "season_changed" | "weather_changed" | "storm_began"
+  // food & material
+  | "food_eaten" | "material_spawned"
   // artifacts
-  | "artifact_created" | "artifact_transferred" | "name_tile_placed" | "heirloom_passed"
-  // visitor
+  | "artifact_created" | "artifact_transferred" | "artifact_found" | "name_tile_placed" | "heirloom_passed"
+  // visitor & chat
   | "visitor_connected" | "visitor_pebble_placed" | "visitor_fed" | "visitor_nicknamed"
-  // operational
+  | "chat_classified" | "chat_message"
+  // pond voice
+  | "pond_utterance"
+  // dev / operational
+  | "dev_feed_all"
   | "tier_shifted" | "meditation_entered" | "meditation_exited" | "budget_alert"
   | "classifier_flagged" | "injection_attempt" | "provider_outage" | "recovery";
 

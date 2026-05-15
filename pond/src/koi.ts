@@ -367,5 +367,9 @@ export function toFrame(k: KoiState): KoiFrame {
     i: k.intent.kind,
     t: k.intent.targetId ?? null,
     mech: k.intent.mechanism,
+    // Founder flag — surfaces to the renderer so Shiki and Kokutou
+    // can be drawn with distinct treatment. Skipped when absent so
+    // the wire stays minimal for naturally-hatched koi.
+    ...(k.founder ? { founder: true } : {}),
   };
 }

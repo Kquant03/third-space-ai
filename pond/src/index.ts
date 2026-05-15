@@ -39,6 +39,38 @@ export default {
       });
     }
 
+    // ── Admin routes ────────────────────────────────────────────────
+    // Test-console entry points used by the dev tab in PondDiagnostic.
+    // Gated by SHARED_SECRET; never callable without the right header.
+    // All admin paths forward to the Pond DO, which performs the actual
+    // simulation mutation under its own consistency boundary.
+    if (url.pathname.startsWith("/admin/")) {
+      const auth = request.headers.get("Authorization") ?? "";
+      const expected = "Bearer " + env.SHARED_SECRET;
+      if (!env.SHARED_SECRET || auth !== expected) {
+        return new Response(
+          JSON.stringify({ error: "unauthorized" }),
+          {
+            status: 401,
+            headers: {
+              "Content-Type": "application/json",
+              "Access-Control-Allow-Origin": "*",
+            },
+          }
+        );
+      }
+      const id = env.POND.idFromName("primary_v3");
+      const res = await env.POND.get(id).fetch(request);
+      // Wrap with CORS headers so the dev console can read the response.
+      const headers = new Headers(res.headers);
+      headers.set("Access-Control-Allow-Origin", "*");
+      return new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
+        headers,
+      });
+    }
+
     // Pond DO — the live simulation, the visitor surface, the broadcast.
     if (
       url.pathname === "/ws" ||
@@ -46,7 +78,7 @@ export default {
       url.pathname === "/lineage" ||
       url.pathname.startsWith("/events/")
     ) {
-      const id = env.POND.idFromName("primary");
+      const id = env.POND.idFromName("primary_v3");
       return env.POND.get(id).fetch(request);
     }
 

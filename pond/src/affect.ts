@@ -35,6 +35,7 @@ const BASELINE_BY_STAGE: Record<LifeStage, PAD> = {
   adult:      { p:  0.05, a: 0.35, d:  0.1 },   // settled, moderate everything
   elder:      { p:  0.10, a: 0.25, d:  0.2 },   // calmer, higher status
   dying:      { p: -0.05, a: 0.15, d:  0.0 },
+  dead:       { p:  0.00, a: 0.00, d:  0.0 },   // null state; row pending cleanup
 };
 
 export function baselineFor(stage: LifeStage): PAD {

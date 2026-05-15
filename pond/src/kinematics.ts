@@ -52,6 +52,7 @@ const DEPTH_BY_STAGE: Record<LifeStage, number> = {
   adult:      -1.2,
   elder:      -1.5,
   dying:      -2.2,   // dying koi drift low
+  dead:       -2.5,   // dead koi sink to the floor before removal
 };
 
 /** Stage → base speed multiplier. Fry dart, elders drift. */
@@ -63,6 +64,7 @@ const SPEED_MULT_BY_STAGE: Record<LifeStage, number> = {
   adult:      1.00,
   elder:      0.70,
   dying:      0.35,
+  dead:       0.0,    // no propulsion; passive drift only
 };
 
 /** Stage → body size for shader scale. (§ VII) */
@@ -74,6 +76,7 @@ export const SIZE_BY_STAGE: Record<LifeStage, number> = {
   adult:      1.00,
   elder:      1.05,
   dying:      1.00,
+  dead:       1.00,   // same as dying; size doesn't change at death
 };
 
 // ───────────────────────────────────────────────────────────────────

@@ -42,6 +42,15 @@ export class Rng {
     return (this.nextU32() >>> 8) / 0x1000000;
   }
 
+  /** Alias for float() — uniform [0, 1). Provided so callers can write
+   *  `rng.next()` for the common "give me a unit float" case, matching
+   *  the conventional name in most RNG APIs. The float() name is kept
+   *  for existing call sites and reads more clearly in code that
+   *  enumerates draw types. */
+  next(): number {
+    return this.float();
+  }
+
   /** Uniform float in [min, max). */
   range(min: number, max: number): number {
     return min + (max - min) * this.float();

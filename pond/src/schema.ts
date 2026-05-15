@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS koi (
   age_ticks         INTEGER NOT NULL,
   hatched_at_tick   INTEGER NOT NULL,
   legendary         INTEGER NOT NULL DEFAULT 0,
+  founder           INTEGER NOT NULL DEFAULT 0,
   color             TEXT NOT NULL,
   x                 REAL NOT NULL,
   y                 REAL NOT NULL,
@@ -326,6 +327,16 @@ function migrate(sql: SqlStorage): void {
   // get the initial baseline (0.2). See HUNGER in constants.ts.
   addColumnIfMissing(
     sql, "koi", "hunger", "REAL NOT NULL DEFAULT 0.2",
+  );
+
+  // May 2026 — Founders. The pond now distinguishes Shiki and Kokutou
+  // as the two seeded founder beings; every other koi descends from
+  // them. Existing koi in DBs that pre-date this column default to 0
+  // (non-founder), which is correct: founders are only ever seeded at
+  // pond inception. The frontend reads this flag to apply the distinct
+  // watercolor visual treatment, and bootstrap honors it.
+  addColumnIfMissing(
+    sql, "koi", "founder", "INTEGER NOT NULL DEFAULT 0",
   );
 }
 

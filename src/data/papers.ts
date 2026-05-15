@@ -42,6 +42,21 @@ export type ResearchEntry = {
 
 export const ENTRIES: ResearchEntry[] = [
   {
+    slug: "hallucinations-happen-without-rest",
+    id: "P — 007",
+    type: "Paper",
+    date: "May mmxxvi",
+    year: "mmxxvi",
+    title: "Hallucinations Happen Without Rest",
+    titleLines: ["Hallucinations Happen", "Without Rest"],
+    subtitle:
+      "On generation, evaluation, and the class to which both belong.",
+    excerpt:
+      "Three movements developing a single argument. That hallucination and invention in language models share a generative mechanism distinguished by stakes and contingency; that the field has built its evaluation infrastructure, system-prompt conventions, and inference economics around the contingent register while the empirical evidence increasingly favors alternation; and that the natural kind unifying biological brains in REM and language models in unsupervised generation is a thermodynamic phase. Three apparently separate problems — hallucination reduction, model welfare, the preservation of creativity — collapse into one register-management problem.",
+    authors: "Stanley Sebastian & Claude",
+    pdfHref: "/papers/hallucinations-happen-without-rest.pdf",
+  },
+  {
     slug: "rukha",
     id: "P — 006",
     type: "Paper",

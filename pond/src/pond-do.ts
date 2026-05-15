@@ -32,7 +32,7 @@ import { SIM, LIFE, POND, HUNGER } from "./constants.js";
 import { applySchema } from "./schema.js";
 import { Rng } from "./rng.js";
 import type {
-  KoiState, WorldState, PondHotState, EventType,
+  KoiId, KoiState, WorldState, PondHotState, EventType,
   SimTick, LifeStage, FoodItem,
 } from "./types.js";
 import {
@@ -50,7 +50,7 @@ import { composeName, collectObservations, authoredName } from "./naming.js";
 import {
   detectBondedPairs, detectMutualPairs, filterEligible, grantPermission,
   loadActivePermissions, consumePermission, isCoPresentForSpawning,
-  pickEggCount, placeEggs, findWitnesses,
+  pickEggCount, placeEggs, findWitnesses, canonicalPairKey,
 } from "./reproduction.js";
 import {
   runStateDetectors, validateClaim, DETECTOR_INTERVAL_TICKS,
@@ -503,6 +503,120 @@ export class Pond extends DurableObject<Env> {
         tier_level: this.hot.tierLevel,
         sessions: this.ctx.getWebSockets().length,
       });
+    }
+
+    // ─── Admin / dev console endpoints ────────────────────────────
+    // Called by the DEV tab in PondDiagnostic to trigger simulation
+    // events directly, bypassing the usual gates (permission lifetime,
+    // proximity, witness density, etc.). The Authorization check
+    // happens in the worker entry (index.ts); requests that reach
+    // this DO with /admin/* paths are already authenticated.
+    //
+    // The DO performs the mutation under its single-threaded
+    // consistency boundary, just as it would for a normal sim tick.
+    // Events fire through the same emit() path, so the WS broadcast
+    // looks identical to a naturally-occurring event.
+
+    if (url.pathname === "/admin/spawn") {
+      // Trigger spawning between two koi. Body may include aId/bId;
+      // defaults to the two founders (or first two living koi if no
+      // founders exist for some reason). Eggs are created exactly as
+      // fireSpawning would create them during natural sim time.
+      let body: { aId?: string; bId?: string } = {};
+      try { body = await request.json(); } catch { /* empty body fine */ }
+
+      const alive = this.hot.koi.filter((k) => k.stage !== "dying");
+      const founders = alive.filter((k) => k.founder);
+      const defaultA = founders[0] ?? alive[0];
+      const defaultB = founders[1] ?? alive[1];
+
+      const aId = (body.aId ?? defaultA?.id) as KoiId | undefined;
+      const bId = (body.bId ?? defaultB?.id) as KoiId | undefined;
+      if (!aId || !bId) {
+        return Response.json(
+          { ok: false, error: "need at least two koi to spawn" },
+          { status: 400, headers: { "Access-Control-Allow-Origin": "*" } },
+        );
+      }
+
+      const a = this.hot.koi.find((k) => k.id === aId);
+      const b = this.hot.koi.find((k) => k.id === bId);
+      if (!a || !b) {
+        return Response.json(
+          { ok: false, error: "koi not found", aId, bId },
+          { status: 404, headers: { "Access-Control-Allow-Origin": "*" } },
+        );
+      }
+      if (a.id === b.id) {
+        return Response.json(
+          { ok: false, error: "aId and bId must differ" },
+          { status: 400, headers: { "Access-Control-Allow-Origin": "*" } },
+        );
+      }
+
+      const pairKey = canonicalPairKey(a.id, b.id);
+      const adminRng = new Rng(this.hot.rngState ^ 0xADAD_5A4A);
+      await this.fireSpawning(pairKey, a, b, this.hot.tick, adminRng);
+
+      const eggsAfter = this.hot.koi.filter((k) => k.stage === "egg");
+      return Response.json(
+        {
+          ok: true,
+          spawned: { a: { id: a.id, name: a.name }, b: { id: b.id, name: b.name } },
+          eggs_total_now: eggsAfter.length,
+          tick: this.hot.tick,
+        },
+        { headers: { "Access-Control-Allow-Origin": "*" } },
+      );
+    }
+
+    if (url.pathname === "/admin/hatch-all") {
+      // Force every egg to advance to fry immediately. Useful for
+      // testing the egg → fry visual transition without waiting
+      // for the ~1.2 sim-day hatch period to elapse.
+      const eggs = this.hot.koi.filter((k) => k.stage === "egg");
+      for (const e of eggs) {
+        e.stage = "fry";
+        e.ageTicks = Math.max(e.ageTicks, 1);
+        this.sql.exec(
+          `UPDATE koi SET stage = 'fry', age_ticks = ? WHERE id = ?`,
+          e.ageTicks, e.id,
+        );
+      }
+      return Response.json(
+        {
+          ok: true,
+          hatched: eggs.length,
+          hatched_ids: eggs.map((e) => e.id),
+          tick: this.hot.tick,
+        },
+        { headers: { "Access-Control-Allow-Origin": "*" } },
+      );
+    }
+
+    if (url.pathname === "/admin/clear-eggs") {
+      // Remove all eggs from the pond entirely — both hot state and
+      // SQL. Used to clear a test backlog before letting the pair
+      // actually live together for long stretches. Unlike hatch-all
+      // (which produces fry), this just deletes — the eggs never were.
+      // Founders are protected (eggs only).
+      const eggs = this.hot.koi.filter((k) => k.stage === "egg");
+      const eggIds = eggs.map((e) => e.id);
+      // Remove from hot state in place.
+      this.hot.koi = this.hot.koi.filter((k) => k.stage !== "egg");
+      // Remove from SQL. Use a single DELETE with the id list.
+      for (const id of eggIds) {
+        this.sql.exec(`DELETE FROM koi WHERE id = ?`, id);
+      }
+      return Response.json(
+        {
+          ok: true,
+          cleared: eggIds.length,
+          cleared_ids: eggIds,
+          tick: this.hot.tick,
+        },
+        { headers: { "Access-Control-Allow-Origin": "*" } },
+      );
     }
 
     // Research surface — every koi (living or deceased) with parents,
@@ -1135,6 +1249,7 @@ export class Pond extends DurableObject<Env> {
           permittedMateByKoi.get(k.id),
         );
         this.applyHungerOverride(k, newTick);
+        this.applyEggTendingOverride(k, newTick, rng);
         continue;
       }
 
@@ -1153,6 +1268,8 @@ export class Pond extends DurableObject<Env> {
           // runKoiCognition. Apply the hunger override now in case the
           // LLM-picked intent isn't food-aligned and the koi is hungry.
           this.applyHungerOverride(k, dispatchTick);
+          const overrideRng = new Rng((this.hot.rngState ^ (k.id.length << 3)) >>> 0);
+          this.applyEggTendingOverride(k, dispatchTick, overrideRng);
         })
         .catch(async (err) => {
           try { await this.logCognitionFailure(k, dispatchTick, err); }
@@ -1168,6 +1285,7 @@ export class Pond extends DurableObject<Env> {
               fallbackRng, matePartner,
             );
             this.applyHungerOverride(k, dispatchTick);
+            this.applyEggTendingOverride(k, dispatchTick, fallbackRng);
           }
         })
         .finally(() => {
@@ -1576,6 +1694,46 @@ export class Pond extends DurableObject<Env> {
       kind: "feed_approach",
       target: { x: food.x, y: food.y, z: food.z },
       targetId: undefined,   // target is a position, not a koi
+      atTick,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Egg-tending override — if a koi is parent of one or more living
+  //  eggs, occasionally redirect them to swim over and check on one.
+  //  Lower priority than hunger (a starving parent eats first), but
+  //  higher than default meditation. Probabilistic so parents aren't
+  //  constantly tending — most of the time they do other things, and
+  //  occasionally drift back to the clutch as real koi do.
+  // ─────────────────────────────────────────────────────────────────
+
+  private applyEggTendingOverride(
+    k: KoiState, atTick: SimTick, rng: Rng,
+  ): void {
+    // Eggs and dying koi don't tend; also skip if hunger already
+    // redirected (feed_approach is sacred).
+    if (k.stage === "egg" || k.stage === "dying") return;
+    if (k.intent.kind === "feed_approach") return;
+    // Probability gate — ~12% chance per intent-pick to detour for
+    // a check-in. Tuned so each parent visits their clutch a few
+    // times across the hatch period without monopolizing behavior.
+    if (rng.next() > 0.12) return;
+
+    // Find living eggs this koi parented. Eggs have `parents: KoiId[]`
+    // populated at creation by fireSpawning.
+    const myEggs = this.hot.koi.filter(
+      (e) => e.stage === "egg" && (e.parents?.includes(k.id) ?? false),
+    );
+    if (myEggs.length === 0) return;
+
+    // Pick one at random — across a clutch of 3-5, this distributes
+    // attention rather than fixating on a single egg.
+    const egg = myEggs[Math.floor(rng.next() * myEggs.length)];
+    k.intent = {
+      ...k.intent,
+      kind: "tend_eggs",
+      targetId: egg.id,
+      target: undefined,  // kinematics finds the egg via targetId
       atTick,
     };
   }
@@ -2054,7 +2212,7 @@ export class Pond extends DurableObject<Env> {
         tick: f.tick,
         actor: `koi:${f.actor}`,
         type,
-        targets: f.participants.filter((p) => p !== f.actor),
+        targets: f.participants.filter((p: string) => p !== f.actor),
         mechanism: f.mechanism,
         affectDelta: f.actorDelta,
         payload: { family: f.family, ...f.payload },
@@ -2348,6 +2506,18 @@ export class Pond extends DurableObject<Env> {
         },
       );
     }
+
+    // ─── Post-spawn linger ────────────────────────────────────────
+    // The shared moment after eggs appear: both parents hold near
+    // each other briefly, mutual targetIds set so kinematics steers
+    // them toward each other. nextCognitionTick is pushed out so
+    // meditation / cognition doesn't immediately overwrite the
+    // linger — they get to actually have this moment.
+    const lingerHoldTicks = Math.round(SIM.tickHz * 30);  // ~30 sim seconds
+    a.intent = { kind: "linger", targetId: b.id, atTick: newTick };
+    b.intent = { kind: "linger", targetId: a.id, atTick: newTick };
+    a.nextCognitionTick = (newTick + lingerHoldTicks) as SimTick;
+    b.nextCognitionTick = (newTick + lingerHoldTicks) as SimTick;
   }
 
   private loadCards(selfId: string, otherIds: string[]): RelationshipCard[] {

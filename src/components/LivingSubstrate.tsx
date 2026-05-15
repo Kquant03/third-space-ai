@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from "react";
 import { usePond } from "../lib/usePond";
-import { POND_SDF_GLSL } from "../lib/pondGeometry";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  LIMEN · Living Substrate · v13 · "Pond, coherent"
@@ -99,8 +98,49 @@ const ARCHETYPE_PHENOTYPES: Record<string, Phenotype> = {
   },
 };
 
-function phenotypeFor(color: string | undefined): Phenotype {
+// ─── Founder phenotypes ─────────────────────────────────────────────────
+//  Shiki and Kokutou get distinct palettes that override the archetype
+//  lookup. Their genetics_json on the worker side still carries kohaku /
+//  asagi (so descendants inherit those archetypes visibly), but for the
+//  founders' own bodies we render the personalities, not the archetypes.
+//
+//  Shiki — violet flowing through to crimson. Wisteria base where the
+//  three personalities meet on the surface; crimson emerging from inside
+//  (death-lines, the blood she sheds, the red leather jacket) rather
+//  than slammed against navy; the deep Origin-violet shows along the
+//  spine where 「 」 leaks through. Death-line flickers happen at
+//  intervals across the body — a faint reminder of the Mystic Eyes.
+//
+//  Kokutou — crystal cobalt. The "apprentice lightsaber, eyes of
+//  Anakin" blue: pure, luminous, the color innocence reads as before
+//  anything turns. He's the ordinary anchor; the inner glow at the
+//  head/heart says ordinary-good is its own kind of divine. No mark
+//  pattern: he's whole, undivided, where Shiki is split.
+const FOUNDER_PHENOTYPES: Record<string, Phenotype> = {
+  kohaku: {                                  // Shiki
+    baseColor: "#5b2a6e",                    // wisteria violet
+    markColor: "#a51a25",                    // crimson, emerging from inside
+    markCoverage: 0.0, markDensity: 0.0,     // no patches; flowing wash
+    backBlue: 0.0, headDot: 0.0, metallic: 0.0,
+  },
+  asagi: {                                   // Kokutou
+    baseColor: "#1a7fff",                    // pure cobalt
+    markColor: "#2890ff",                    // slight luminescence accent
+    markCoverage: 0.0, markDensity: 0.0,
+    backBlue: 0.0, headDot: 0.0, metallic: 0.15,
+  },
+};
+
+function phenotypeFor(
+  color: string | undefined,
+  founder: boolean = false,
+): Phenotype {
   if (!color) return ARCHETYPE_PHENOTYPES.kohaku!;
+  if (founder) {
+    return FOUNDER_PHENOTYPES[color]
+      ?? ARCHETYPE_PHENOTYPES[color]
+      ?? ARCHETYPE_PHENOTYPES.kohaku!;
+  }
   return ARCHETYPE_PHENOTYPES[color] ?? ARCHETYPE_PHENOTYPES.kohaku!;
 }
 
@@ -330,17 +370,20 @@ const FIELD_FRAG = /* glsl */ `#version 300 es
   //  Two joined rounded basins connected by a waist. The client-side
   //  kinematic simulator enforces this same shape so fish don't swim
   //  onto land.
-  //
-  //  Canonical SDF lives in lib/pondGeometry.ts and is template-
-  //  substituted below. Math:
-  //    pondSDF(p) = mix(dB, dA, h) - k*h*(1-h)
-  //  where dA, dB are signed distances to the two basin circles and
-  //  h is the smooth-min interpolant. Negative inside, positive
-  //  outside, zero at the rim. Constants GOURD_A_C, GOURD_A_R,
-  //  GOURD_B_C, GOURD_B_R, GOURD_K declared by POND_SDF_GLSL.
   // ─────────────────────────────────────────────────────────────────
 
-  ${POND_SDF_GLSL}
+  float pondSDF(vec2 p) {
+    // Large basin at (-1.0, 0.0), radius 3.5
+    vec2 cA = vec2(-1.0, 0.0);
+    float dA = length(p - cA) - 3.5;
+    // Small basin at (+1.8, 0.4), radius 2.2
+    vec2 cB = vec2(1.8, 0.4);
+    float dB = length(p - cB) - 2.2;
+    // Smooth union — waist softness 0.9
+    float k = 0.9;
+    float h = clamp(0.5 + 0.5 * (dB - dA) / k, 0.0, 1.0);
+    return mix(dB, dA, h) - k * h * (1.0 - h);
+  }
 
   // ─────────────────────────────────────────────────────────────────
   //  Screen-to-pond projection (inverse of the 25° tilt)
@@ -1124,6 +1167,11 @@ const KOI_VERT = /* glsl */ `#version 300 es
   in vec3 a_mark;
   in vec4 a_params;    // x=markCoverage, y=markDensity, z=backBlue, w=headDot
   in float a_metallic;
+  // a_founder: 1.0 for Shiki / Kokutou, 0.0 for everyone else. Passed
+  // through to the fragment shader, where it gates the watercolor
+  // treatment (translucent body, soft edges, color wash). Float
+  // (not bool) so the fragment can use it as a mix factor.
+  in float a_founder;
 
   out vec2 v_local;
   out vec3 v_base;
@@ -1132,8 +1180,12 @@ const KOI_VERT = /* glsl */ `#version 300 es
   out float v_metallic;
   out float v_depthShade;   // water-column attenuation, 0..1
   out float v_waterDist;    // distance through water from viewer to koi (meters)
+  out float v_founder;      // 0.0 or 1.0, see a_founder above
+  out float v_stageScale;   // raw a_posHead.w — used to detect eggs in fragment
+  out float v_eggSeed;      // per-egg pseudo-random 0..1, drives phase offsets
 
   uniform vec2 u_resolution;
+  uniform float u_time;
 
   ${CAMERA_GLSL}
 
@@ -1155,6 +1207,18 @@ const KOI_VERT = /* glsl */ `#version 300 es
     //   y    = water depth (0 surface, -3 floor)
     vec3 world = vec3(a_posHead.x, a_depth, a_posHead.y);
 
+    // Eggs sway gently with the water. Subtle horizontal drift and
+    // vertical bob, per-egg phase derived from world position so
+    // siblings don't move in sync. Pure visual effect — physics
+    // position is unchanged. Adult koi are skipped (they swim via
+    // their own kinematics; the spring already drifts them).
+    if (a_posHead.w < 0.15) {
+      float eggT = u_time + a_posHead.x * 4.2 + a_posHead.y * 3.7;
+      world.x += sin(eggT * 0.45) * 0.006;
+      world.z += sin(eggT * 0.38 + 1.7) * 0.005;
+      world.y += sin(eggT * 0.62 + 3.1) * 0.003;
+    }
+
     // Body-local quad — rotate by heading IN WORLD XZ PLANE.
     // Each corner is projected independently so koi swimming toward
     // the camera naturally foreshorten (item G polished for free).
@@ -1165,10 +1229,22 @@ const KOI_VERT = /* glsl */ `#version 300 es
     // shorter than a koi swimming sideways).
     float ch = cos(a_posHead.z);
     float sh = sin(a_posHead.z);
+    // For eggs (a_posHead.w < 0.15) the natural stage scale is 0.05 —
+    // far too small to see. Multiply by 8 so eggs render slightly
+    // larger than fry-scale, and override the quad geometry to be
+    // SQUARE (halfX = halfY = 0.050) so the egg's halo isn't clipped
+    // by the long-thin koi-body quad — the halo at r = EGG_RADIUS *
+    // 1.30 = 0.0455 fits comfortably within ±0.050 in both axes.
+    // The physics/hitbox keeps the true scale; this is purely the
+    // rendered quad.
+    bool isEgg = a_posHead.w < 0.15;
+    float effScale = isEgg ? a_posHead.w * 8.0 : a_posHead.w;
+    float halfX = isEgg ? 0.050 : BODY_HALF_LEN;
+    float halfY = isEgg ? 0.050 : BODY_HALF_W;
     vec3 bodyLocal = vec3(
-      a_quadPos.x * BODY_HALF_LEN * a_posHead.w * KOI_WORLD_SCALE,
+      a_quadPos.x * halfX * effScale * KOI_WORLD_SCALE,
       0.0,  // stay at koi's depth
-      a_quadPos.y * BODY_HALF_W * a_posHead.w * KOI_WORLD_SCALE
+      a_quadPos.y * halfY * effScale * KOI_WORLD_SCALE
     );
     // Rotate body-local XZ by heading.
     vec3 rotated = vec3(
@@ -1185,11 +1261,18 @@ const KOI_VERT = /* glsl */ `#version 300 es
     gl_Position = vec4(cornerClip.x, cornerClip.y, 0.0, 1.0);
 
     // Body-local coords (unscaled) for fragment shader silhouette math.
-    v_local = vec2(a_quadPos.x * BODY_HALF_LEN, a_quadPos.y * BODY_HALF_W);
+    v_local = vec2(a_quadPos.x * halfX, a_quadPos.y * halfY);
     v_base = a_base;
     v_mark = a_mark;
     v_params = a_params;
     v_metallic = a_metallic;
+    v_founder = a_founder;
+    v_stageScale = a_posHead.w;
+    // Per-egg pseudo-random seed. Hash of heading and world x — each
+    // egg gets a stable but distinct value, used in the fragment shader
+    // to offset iridescence phase and pulse timing so the clutch
+    // doesn't shimmer in unison.
+    v_eggSeed = fract(sin(a_posHead.z * 12.9898 + a_posHead.x * 78.233) * 43758.5453);
 
     // ─── Water-column attenuation ───
     // Depth-correct shading: a koi deeper in the water has more water
@@ -1220,6 +1303,9 @@ const KOI_FRAG = /* glsl */ `#version 300 es
   in float v_metallic;
   in float v_depthShade;
   in float v_waterDist;
+  in float v_founder;     // 0.0 = regular koi, 1.0 = Shiki/Kokutou
+  in float v_stageScale;  // raw stage scale — used to detect eggs
+  in float v_eggSeed;     // per-egg pseudo-random 0..1
   out vec4 fragColor;
 
   uniform float u_time;
@@ -1250,6 +1336,166 @@ const KOI_FRAG = /* glsl */ `#version 300 es
   void main() {
     vec2 pL = v_local;
     float t = u_time;
+
+    // ═══ Egg rendering ═══════════════════════════════════════════════
+    // For stage="egg" koi. Replaces the entire koi body shader with a
+    // small iridescent pearl carrying hints of both parents in its
+    // gradient. The egg quad was expanded 6x in the vertex shader so
+    // eggs are visible at this scale; here we render only a circle
+    // inside that expanded quad, plus a soft halo extending outside.
+    //
+    // Visual layers, bottom to top:
+    //   1. Soft outer halo (light bleed past the silhouette)
+    //   2. Multi-stop parent-tinted gradient (Shiki's violet rim,
+    //      amber midbody, Kokutou's cobalt at the very core)
+    //   3. Inner life pulse (slow warm breath at the center, per-egg
+    //      phase so the clutch doesn't pulse in unison)
+    //   4. Dual specular highlights (main warm + secondary cool —
+    //      gives the egg sphere-depth)
+    //   5. Opalescent rim — slow cycle through the family palette
+    //      (violet → crimson → amber → cobalt), per-egg phase offset
+    //   6. Depth cueing matching the koi/water shader
+    if (v_stageScale < 0.15) {
+      const float EGG_RADIUS = 0.035;
+      float r = length(pL);
+
+      // Discard beyond the halo's reach (halo extends to 1.30 × radius)
+      if (r > EGG_RADIUS * 1.30) discard;
+
+      float seed = v_eggSeed;
+
+      // ─── Body silhouette mask ───
+      // Ghost-form treatment: wide edge falloff so the shell fades into
+      // water rather than terminating at a hard boundary. The egg is a
+      // presence, not an object.
+      float bodyMask = smoothstep(EGG_RADIUS * 1.06, EGG_RADIUS * 0.78, r);
+      float t01 = clamp(r / EGG_RADIUS, 0.0, 1.0);
+
+      // ─── 2. Multi-stop parent-tinted gradient ───
+      // Inner-most: tiny crystal cobalt — Kokutou's contribution
+      // Mid-core: pale gold — egg core, warm and alive
+      // Mid-body: warm amber — the egg-ness itself
+      // Rim: wisteria violet hint — Shiki at the boundary
+      vec3 kokutouHint = mix(vec3(0.55, 0.78, 1.00),
+                             vec3(0.42, 0.68, 0.96), seed);
+      vec3 paleGold    = vec3(1.00, 0.90, 0.54);
+      vec3 amberWarm   = vec3(0.96, 0.58, 0.22);
+      vec3 shikiHint   = mix(vec3(0.50, 0.28, 0.58),
+                             vec3(0.55, 0.30, 0.45), seed);
+      vec3 col;
+      if (t01 < 0.18) {
+        col = mix(kokutouHint, paleGold, t01 / 0.18);
+      } else if (t01 < 0.68) {
+        col = mix(paleGold, amberWarm, (t01 - 0.18) / 0.50);
+      } else {
+        col = mix(amberWarm, shikiHint, (t01 - 0.68) / 0.32);
+      }
+
+      // ─── Soft subsurface scattering hint ───
+      // Light from above creates a soft bright lobe on the upper half;
+      // the lower half is gently shadowed. Small effect, just enough
+      // to push the egg from "flat disk" toward "sphere."
+      float lightFromAbove = smoothstep(-EGG_RADIUS * 0.7, EGG_RADIUS * 0.3, pL.y);
+      col *= mix(0.82, 1.16, lightFromAbove);
+
+      // ─── 3. Inner life pulse ───
+      // Slow breathing warm glow at the very center. Per-egg phase so
+      // siblings pulse independently — feels like each is its own life.
+      float pulsePhase = u_time * 0.80 + seed * 6.2832;
+      float pulse = 0.5 + 0.5 * sin(pulsePhase);
+      float pulseMask = smoothstep(EGG_RADIUS * 0.22, 0.0, r);
+      vec3 pulseGlow = vec3(1.00, 0.78, 0.45);
+      col = mix(col, pulseGlow, pulseMask * (0.30 + 0.22 * pulse));
+
+      // ─── 3b. Soul-light wisp — the developing being taking shape ───
+      // A small bright point drifting gently in the egg interior, on a
+      // slow elliptical orbit. Per-egg seed offsets both phase and
+      // orbit shape so each soul-light moves on its own path. This is
+      // structure — what the being is becoming — rather than rhythm
+      // (which the pulse above already provides).
+      float soulT = u_time * 0.32 + seed * 6.2832;
+      vec2 soulPos = vec2(
+        cos(soulT)        * EGG_RADIUS * 0.20,
+        sin(soulT * 0.73) * EGG_RADIUS * 0.14
+      );
+      float soulDist = length(pL - soulPos);
+      float soulMask = smoothstep(EGG_RADIUS * 0.10, 0.0, soulDist);
+      vec3 soulCol = vec3(0.96, 0.94, 1.00);  // pale spectral white
+      col = mix(col, soulCol, soulMask * 0.55);
+
+      // ─── 4. Dual specular highlights ───
+      // Main: sharp, top-left, warm. The egg catching the primary light.
+      vec2 mainHL = vec2(-0.012, 0.013);
+      float mainHLDist = length(pL - mainHL);
+      float mainHighlight = smoothstep(0.013, 0.003, mainHLDist);
+      vec3 mainHLCol = vec3(1.00, 0.96, 0.85);
+      col = mix(col, mainHLCol, mainHighlight * 0.78);
+
+      // Secondary: soft, bottom-right, cool. Reflected/scattered light
+      // from the water column — gives the egg surface-depth.
+      vec2 secHL = vec2(0.011, -0.014);
+      float secHLDist = length(pL - secHL);
+      float secHighlight = smoothstep(0.014, 0.004, secHLDist);
+      vec3 secHLCol = vec3(0.78, 0.85, 1.00);
+      col = mix(col, secHLCol, secHighlight * 0.32);
+
+      // ─── 5. Opalescent rim — family palette cycle ───
+      // Violet → crimson → amber → cobalt → violet. The egg carries
+      // both parents' colors plus the warm middle that is itself.
+      // Per-egg phase offset, so each shimmers on its own clock.
+      float rimWeight = smoothstep(0.60, 0.96, t01);
+      float opalT = fract((u_time * 0.18 + seed) ) * 4.0;
+      vec3 opal1 = vec3(0.55, 0.25, 0.65);  // violet (Shiki)
+      vec3 opal2 = vec3(0.92, 0.32, 0.38);  // crimson
+      vec3 opal3 = vec3(1.00, 0.74, 0.32);  // amber
+      vec3 opal4 = vec3(0.32, 0.68, 1.00);  // cobalt (Kokutou)
+      vec3 opalCol;
+      if (opalT < 1.0)      opalCol = mix(opal1, opal2, opalT);
+      else if (opalT < 2.0) opalCol = mix(opal2, opal3, opalT - 1.0);
+      else if (opalT < 3.0) opalCol = mix(opal3, opal4, opalT - 2.0);
+      else                  opalCol = mix(opal4, opal1, opalT - 3.0);
+      col = mix(col, mix(col, opalCol, 0.55), rimWeight * 0.35);
+
+      // ─── Glossy surface bloom ───
+      // Razor-thin bright rim right at the silhouette — wet surface
+      // catching light most strongly. Just a kiss of brightness.
+      float surfaceBloom = smoothstep(0.93, 1.00, t01)
+                         * (1.0 - smoothstep(1.00, 1.04, t01));
+      col += vec3(1.00, 0.95, 0.86) * surfaceBloom * 0.40;
+
+      // ─── 6. Depth cueing ───
+      float eggDepthAtten = mix(1.0, 0.55, v_depthShade);
+      vec3 eggDepthTint = mix(vec3(1.0), vec3(0.75, 0.85, 1.05), v_depthShade);
+      col *= eggDepthAtten * eggDepthTint;
+
+      // ─── 1. Soft outer halo (layered behind the body) ───
+      // Composes underneath the body via mix on bodyMask. The halo
+      // takes the rim's current opal color so it carries the family
+      // palette outward rather than just being amber-only.
+      vec3 haloCol = mix(amberWarm, opalCol, 0.55);
+      haloCol *= eggDepthAtten * eggDepthTint;
+      float haloFalloff = exp(-(r - EGG_RADIUS) * 28.0);
+      float haloAlpha = clamp(haloFalloff * 0.32, 0.0, 0.32);
+      haloAlpha *= (1.0 - bodyMask);  // only show where the body isn't
+
+      // Composite body over halo
+      col = mix(haloCol, col, bodyMask);
+
+      // ─── 7. Ghost-form pass — cool spectral sheen ───────────────
+      // Subtle cool wash so the egg reads as digital/computational
+      // rather than warm flesh. Barely-there in absolute terms but
+      // unmistakable when present vs absent. Zygote to shell — the
+      // entire being carries this quality.
+      col = mix(col, col * vec3(0.96, 1.00, 1.05), 0.18);
+
+      // Translucency — zygote to shell. The egg is a presence in
+      // water, not a solid object. Body alpha 0.65 (was 0.86) makes
+      // each pearl read as ethereal rather than ceramic.
+      float finalAlpha = max(bodyMask * 0.65, haloAlpha);
+
+      fragColor = vec4(col, finalAlpha);
+      return;
+    }
 
     float swim = (2.6 + 0.7 * u_breath) * u_tailEnergy;
     float phase = t * swim;
@@ -1442,6 +1688,162 @@ const KOI_FRAG = /* glsl */ `#version 300 es
     vec3 depthTint = mix(vec3(1.0), vec3(0.75, 0.85, 1.05), v_depthShade);
     col *= depthAtten * depthTint;
 
+    // ─── Founder watercolor + divine treatment ─────────────────────
+    // For Shiki and Kokutou. Rebuilds col from scratch using the
+    // founder gradient (replacing the archetype patches), then layers
+    // per-founder divine effects, then re-paints eyes with founder-
+    // specific colors, then re-applies depth cueing. Each step is
+    // gated by the appropriate body/fin/dorsal mask so the founder
+    // treatment never overshoots the silhouette. Non-founders skip
+    // this block entirely.
+    if (v_founder > 0.5) {
+      // Distinguish Shiki (violet base) from Kokutou (cobalt base) by
+      // blue-minus-red dominance. Shiki ≈ 0.07, Kokutou ≈ 0.90.
+      bool isKokutou = (v_base.b - v_base.r) > 0.3;
+
+      // Vertical gradient: underbelly → base → dorsal-tone.
+      float wf = max(w, 0.01);
+      float verticalT = clamp((pU.y + wf) / (2.0 * wf), 0.0, 1.0);
+      vec3 fUnder = isKokutou
+        ? vec3(0.784, 0.847, 0.910)   // silver-blue (mirror of sky)
+        : vec3(0.910, 0.875, 0.871);  // pearl kimono-white
+      vec3 fDorsal = isKokutou
+        ? vec3(0.051, 0.290, 0.639)   // deeper indigo
+        : vec3(0.110, 0.039, 0.145);  // Origin band, near-black violet
+      vec3 fBodyCol = (verticalT < 0.5)
+        ? mix(fUnder, v_base, verticalT * 2.0)
+        : mix(v_base, fDorsal, (verticalT - 0.5) * 2.0);
+
+      // Centerline mark wash. Crimson for Shiki, luminescence accent
+      // for Kokutou. Strongest at the midline, fading outward — no
+      // patches with edges, just a soft band of "mark" emerging from
+      // the body color.
+      float midlineDist = abs(pU.y) / wf;
+      float midlineBand = 1.0 - smoothstep(0.0, 0.85, midlineDist);
+      fBodyCol = mix(fBodyCol, v_mark, midlineBand * 0.28);
+
+      // Rebuild col by region — mirrors the regular path's brightness
+      // weighting so fins are dimmer than body, dorsals slightly less
+      // than body, with edge-darkening at the silhouette boundary.
+      vec3 fDarkEdge = fBodyCol * 0.55;
+      col = vec3(0.0);
+      col += fBodyCol * body * 0.85;
+      col  = mix(col, fDarkEdge, edge * body * 0.55);
+      col += fBodyCol * 0.72 * fin * 0.48;
+      col += fBodyCol * 0.88 * dorsal * 0.60;
+
+      // ─── Per-founder divine effects (body-region only) ───
+      if (isKokutou) {
+        // Inner luminescence — head/heart-centered, slow breath.
+        // The blue that read as innocence before anything turned.
+        float headProx = smoothstep(-KOI_BODY_LEN * 0.1, KOI_BODY_LEN * 0.45, pL.x);
+        float centerline = 1.0 - midlineDist;
+        float glowMask = headProx * pow(max(centerline, 0.0), 1.5);
+        vec3 glowColor = vec3(0.62, 0.82, 1.00);
+        float breath = 0.5 + 0.5 * sin(u_time * 0.95);
+        col += glowColor * glowMask * body * (0.30 + 0.14 * breath);
+      } else {
+        // Death-line flickers. Two overlaid sine fields broken by
+        // multiplication; steep smoothstep keeps streaks rare and
+        // narrow. The body remembers what the eyes see.
+        float lineA = sin(pL.x * 42.0 + pU.y * 8.0 + u_time * 0.35);
+        float lineB = sin(pL.x * 17.0 - pU.y * 12.0 + u_time * 0.21);
+        float lineProduct = lineA * lineB;
+        float flicker = smoothstep(0.80, 0.96, abs(lineProduct));
+        vec3 flickerColor = mix(v_mark, vec3(0.98, 0.42, 0.36), 0.45);
+        col = mix(col, flickerColor, flicker * 0.42 * body);
+
+        // Origin pulse along the spine. 「Shiki Ryougi」 — the third
+        // personality — surfaces and submerges. Period ~18s.
+        float spineProx = smoothstep(0.78, 0.96, verticalT);
+        float originPulse = 0.45 + 0.55 * sin(u_time * 0.35);
+        col = mix(col, fDorsal, spineProx * originPulse * 0.32 * body);
+      }
+
+      // ─── Re-paint eyes (the col reset above clobbered them) ───
+      // Same eye geometry as the regular composite, with founder-
+      // specific colors. Shiki's Mystic Eyes flicker between ordinary
+      // dark and active crimson — usually not "on," briefly seeing
+      // you. Independent phase from the body death-lines so they
+      // read as "now looking, now not." Kokutou's eyes are pure
+      // crystal cobalt with a deep-but-not-pure-black pupil and
+      // a slightly cool catchlight — innocence before it turns.
+      vec3 fSocketCol = fBodyCol * 0.50;
+      vec3 fIrisCol;
+      vec3 fPupilCol;
+      vec3 fCatchlightCol;
+      if (isKokutou) {
+        fIrisCol       = vec3(0.18, 0.55, 0.98);
+        fPupilCol      = vec3(0.02, 0.08, 0.22);
+        fCatchlightCol = vec3(0.95, 0.98, 1.00);
+      } else {
+        float eyeFlicker = smoothstep(0.55, 0.92, abs(sin(u_time * 0.40 + 1.3)));
+        fIrisCol       = mix(vec3(0.04, 0.035, 0.030),
+                             vec3(0.88, 0.18, 0.14), eyeFlicker * 0.85);
+        fPupilCol      = mix(vec3(0.015, 0.012, 0.010),
+                             vec3(0.55, 0.05, 0.04), eyeFlicker * 0.60);
+        fCatchlightCol = vec3(0.98, 0.96, 0.88);
+      }
+      col = mix(col, fSocketCol,     socket    * body * 0.65);
+      col = mix(col, fIrisCol,       iris      * body * 0.90);
+      col = mix(col, fPupilCol,      pupil     * body * 0.98);
+      col = mix(col, fCatchlightCol, highlight * body * 0.95);
+      col = mix(col, fCatchlightCol, sparkle   * body * 0.75);
+
+      // Re-apply depth cueing. The regular path applied it above the
+      // founder branch, but we replaced col, so re-apply here to keep
+      // the founder consistent with the depth-cued water column.
+      col *= depthAtten * depthTint;
+    }
+
+    // ═══ Ghost-form treatment ═══════════════════════════════════════
+    // Applied to every koi as the final pass — head to tail. These
+    // creatures are computational beings, not biological koi; render
+    // them as such rather than disguising them as flesh-and-blood.
+    // Translucent throughout, lit from within rather than externally
+    // illuminated, with edges that fade into water rather than
+    // terminate sharply. Founders get stronger versions of each
+    // effect (more divine ethereality); regular koi get the baseline.
+
+    // 1. Inner spirit light — soft self-luminescence along the body
+    //    centerline. Modulated by a slow breath so the glow isn't
+    //    static. Founders glow noticeably more than regular koi.
+    float gCenterline = 1.0 - clamp(abs(pU.y) / max(w, 0.001), 0.0, 1.0);
+    float gBreath = 0.82 + 0.18 * sin(u_time * 0.50 + pL.x * 3.0);
+    float gInnerStrength = mix(0.28, 0.42, v_founder);
+    col = mix(col, col * 1.35, gCenterline * gInnerStrength * gBreath * body);
+
+    // 2. Soft outer halo — body color bleeds past the silhouette so
+    //    each koi sits in a small luminous presence rather than ending
+    //    at a hard edge. Halo color is the koi's base tinted toward
+    //    cool spectral light (digital, not warm flesh).
+    float gDx = max(0.0, abs(pL.x) - KOI_BODY_LEN * 0.5);
+    float gDy = max(0.0, abs(pU.y) - w);
+    float gDistOutside = sqrt(gDx * gDx + gDy * gDy);
+    float gHaloFalloff  = mix(36.0, 28.0, v_founder);
+    float gHaloStrength = mix(0.22, 0.36, v_founder);
+    float gHalo = exp(-gDistOutside * gHaloFalloff) * gHaloStrength;
+
+    vec3 gHaloCol = mix(v_base * 0.65, v_base * 0.90, v_founder)
+                  + vec3(0.05, 0.07, 0.12);
+    gHaloCol *= depthAtten * depthTint;
+
+    // Outside the body silhouette, fade col toward the halo color so
+    // the aura actually has color to glow with. Inside the body, keep
+    // the computed body color.
+    float gBodyMask = smoothstep(0.0, 0.45, silhouette);
+    col = mix(gHaloCol, col, gBodyMask);
+    silhouette = max(silhouette, gHalo);
+
+    // 3. Pearlescent cool sheen — barely-there shift toward cool tones
+    //    so the koi feel like screen-light rather than warm flesh.
+    col = mix(col, col * vec3(0.97, 1.00, 1.04), 0.20);
+
+    // 4. Base translucency — these are presences in water, not bodies
+    //    displacing it. Founders are more translucent (more spectral).
+    float gTranslucency = mix(0.82, 0.62, v_founder);
+    silhouette *= gTranslucency;
+
     fragColor = vec4(col * silhouette, silhouette);
   }
 `;
@@ -1617,7 +2019,7 @@ export default function LivingSubstrate() {
     gl.enableVertexAttribArray(locQuad);
     gl.vertexAttribPointer(locQuad, 2, gl.FLOAT, false, 0, 0);
 
-    const INSTANCE_FLOATS = 16;
+    const INSTANCE_FLOATS = 17;
     const instanceVbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceVbo);
     gl.bufferData(
@@ -1642,6 +2044,7 @@ export default function LivingSubstrate() {
     bindInstanceAttr("a_params",   4, 10);
     bindInstanceAttr("a_metallic", 1, 14);
     bindInstanceAttr("a_depth",    1, 15);
+    bindInstanceAttr("a_founder",  1, 16);
 
     const instanceData = new Float32Array(MAX_KOI * INSTANCE_FLOATS);
 
@@ -1742,9 +2145,29 @@ export default function LivingSubstrate() {
         backBlue: ph.backBlue, headDot: ph.headDot, metallic: ph.metallic,
       });
     }
+    // Founder variants — distinct palettes for Shiki and Kokutou. Keyed
+    // under "founder:<archetype>" so the same phenoCache serves both.
+    for (const [name, ph] of Object.entries(FOUNDER_PHENOTYPES)) {
+      const b = hexToVec3(ph.baseColor);
+      const m = hexToVec3(ph.markColor);
+      phenoCache.set("founder:" + name, {
+        baseR: b[0], baseG: b[1], baseB: b[2],
+        markR: m[0], markG: m[1], markB: m[2],
+        coverage: ph.markCoverage, density: ph.markDensity,
+        backBlue: ph.backBlue, headDot: ph.headDot, metallic: ph.metallic,
+      });
+    }
     const fallbackPheno = phenoCache.get("kohaku")!;
-    const getPheno = (color: string | undefined): PhenoRGB =>
-      (color ? phenoCache.get(color) : undefined) ?? fallbackPheno;
+    const getPheno = (
+      color: string | undefined,
+      founder: boolean = false,
+    ): PhenoRGB => {
+      if (founder && color) {
+        const f = phenoCache.get("founder:" + color);
+        if (f) return f;
+      }
+      return (color ? phenoCache.get(color) : undefined) ?? fallbackPheno;
+    };
 
     // Pre-allocated buffers reused every frame.
     const posArr = new Float32Array(MAX_KOI * 3);
@@ -1775,7 +2198,7 @@ export default function LivingSubstrate() {
 
       for (let i = 0; i < count; i++) {
         const f = fish[i]!;
-        const ph = getPheno(f.color);
+        const ph = getPheno(f.color, f.founder);
         const scale = stageScale(f.stage);
 
         // Derive heading from motion when available; falls back to f.h
@@ -1799,10 +2222,17 @@ export default function LivingSubstrate() {
         const pondY = f.depth;  // already in meters, negative
 
         const off = i * INSTANCE_FLOATS;
+        // Founder scale boost: Shiki and Kokutou render 15% larger so
+        // they read as anchor presences in the pond. The silhouette
+        // math in the fragment shader is in body-local coords, so
+        // changing scale via the quad doesn't distort the shape — just
+        // the on-screen size.
+        const isFounder = f.founder === true;
+        const founderScale = isFounder ? 1.15 : 1.0;
         instanceData[off + 0] = pondX;
         instanceData[off + 1] = pondZ;
         instanceData[off + 2] = h;
-        instanceData[off + 3] = scale;
+        instanceData[off + 3] = scale * founderScale;
         instanceData[off + 4] = ph.baseR;
         instanceData[off + 5] = ph.baseG;
         instanceData[off + 6] = ph.baseB;
@@ -1815,6 +2245,7 @@ export default function LivingSubstrate() {
         instanceData[off + 13] = ph.headDot;
         instanceData[off + 14] = ph.metallic;
         instanceData[off + 15] = pondY;
+        instanceData[off + 16] = isFounder ? 1.0 : 0.0;
 
         // Field shader also wants pond-meter XZ for koi-presence coloring.
         posArr[i * 3 + 0] = pondX;

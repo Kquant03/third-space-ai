@@ -1,5 +1,4 @@
-HEY DUMBASS
-===========
+
 
 This is the venv for repo_map.py and any other little utility scripts.
 
@@ -25,5 +24,3 @@ RUN THE MAP:
 
 DEACTIVATE when done:
     deactivate
-
-THAT'S IT.

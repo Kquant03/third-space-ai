@@ -83,6 +83,10 @@ export interface KoiFrame {
   m?: { v: number; a: number };
   /** Hunger 0..1. Optional for backward compatibility with pre-commit-3 servers. */
   hu?: number;
+  /** Founder flag — true for koi spawned at pond instantiation
+   *  (Shiki, Kokutou). Absent on all naturally-hatched koi. The
+   *  renderer reads this for distinct visual treatment. */
+  founder?: boolean;
   // v3 action-state fields
   i?: IntentKind;
   t?: string | null;
@@ -117,6 +121,9 @@ export interface ShaderFish {
   name?: string;
   color?: string;
   mood?: { v: number; a: number };
+  /** Founder flag — surfaced from the wire so LivingSubstrate can
+   *  apply distinct treatment to Shiki and Kokutou. */
+  founder?: boolean;
   // v3 action-state fields — renderers use these to animate intent.
   intent?: IntentKind;
   target?: string | null;
@@ -174,30 +181,6 @@ export interface MechanismEvent {
   receivedAtMs: number;
 }
 
-/** A chat message in the visitor-to-visitor surface. Server-assigned
- *  id, handle, and timestamp; the visitor only contributes the text.
- *  Pond-voice messages share the same shape but carry kind: "pond" so
- *  the renderer can style them distinctly. */
-export interface ChatMessage {
-  id: string;
-  handle: string;
-  text: string;
-  at: number;
-  /** Local arrival time (Date.now()), used for "just now" / "2m ago" labels. */
-  receivedAtMs: number;
-  /** "visitor" (default) or "pond". Pond-originated messages are
-   *  observations from the pond's own voice — see pond-utterance.ts. */
-  kind?: "visitor" | "pond";
-}
-
-/** Last rejection from the moderation classifier — shown in the UI
- *  briefly so the visitor can rewrite. */
-export interface ChatRejection {
-  text: string;
-  reason: string;
-  at: number;
-}
-
 interface PondState {
   connected: boolean;
   tick: number;
@@ -212,28 +195,30 @@ interface PondState {
    *  latest values. */
   food: FoodFrame[];
   meta: PondMeta | null;
-  /** Chat ring buffer mirrored from the worker. Updated on snapshot
-   *  (fresh load) and on each chat_message broadcast. */
+
+  // ─── chat surface (§ XIV) ──────────────────────────────────────
+  /** Ring buffer of chat messages — both visitor sends and pond-voice
+   *  utterances. Dedup'd by id on insert. Capped at the worker's ring
+   *  buffer size by trimming the front when an applyChatMessage push
+   *  exceeds the threshold; in practice the worker delivers messages
+   *  faster than the cap matters. */
   chat: ChatMessage[];
-  /** Cumulative all-time chat message count. Distinct from
-   *  chat.length, which is bounded by the ring buffer. Used by the
-   *  collapsed-chat pill to show meaningful at-scale numbers like
-   *  "chat · 1.2k" rather than capping at 50. */
-  chatTotal: number;
-  /** Visitor's auto-assigned handle for this session, set from the
-   *  snapshot's yourHandle field. Null before snapshot arrives. */
+  /** The visitor handle the worker assigned to this session for the
+   *  chat surface. Null until the first snapshot carrying yourHandle
+   *  arrives; null thereafter means the worker is on a pre-chat
+   *  code path and chat is unavailable for this session. */
   yourHandle: string | null;
-  /** Last moderation rejection, if any. Set on chat_rejected envelope,
-   *  cleared by the UI when the visitor edits or dismisses. */
-  lastChatRejection: ChatRejection | null;
-  /** Count of chat_message broadcasts received since this session
-   *  began. NOT capped by the ring buffer — this is "how alive has
-   *  the pond been while I've been here," not "how many messages
-   *  are visible right now." Reset to 0 on every snapshot (which
-   *  fires on connect and reconnect). Excludes the initial buffer
-   *  contents that arrived in the snapshot — those were here before
-   *  the visitor was, so they don't count as "while I've been here." */
+  /** Cumulative chat-message counter across the pond's entire history.
+   *  Visitor-attributable messages only — pond-voice does NOT bump it.
+   *  Surfaces as the "chat · 1.2k" pill in the UI. */
+  chatTotal: number;
+  /** Count of chat messages this session has had broadcast. Increments
+   *  when a chat_message arrives whose handle matches yourHandle.
+   *  Resets only on page reload. */
   sessionChatCount: number;
+  /** Most recent classifier or rate-limit rejection. Cleared when the
+   *  visitor edits the input or explicitly dismisses. */
+  lastChatRejection: ChatRejection | null;
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -243,12 +228,38 @@ interface PondState {
 type Listener = () => void;
 type SpeechListener = (e: SpeechEvent) => void;
 type MechanismListener = (e: MechanismEvent) => void;
-type ChatListener = (e: ChatMessage | ChatRejection) => void;
+
+/** A single visitor-or-pond chat message held in the client's ring
+ *  buffer. The server-side ChatMessage type lives in the worker's
+ *  protocol.ts; this is the client mirror, including the local
+ *  receivedAtMs for animation timing. */
+export interface ChatMessage {
+  id: string;
+  handle: string;
+  text: string;
+  at: number;
+  kind: "visitor" | "pond";
+  /** performance.now() at the moment we received the broadcast. Used
+   *  by the renderer to fade new messages in. */
+  receivedAtMs?: number;
+}
+
+/** A classifier or rate-limit rejection of an attempted chat send.
+ *  Mirrors the chat_rejected envelope from the worker. */
+export interface ChatRejection {
+  text: string;
+  reason: string;
+  at: number;
+}
+
+/** Chat lifecycle listener. The event arg is optional — chat_message
+ *  and chat_rejected broadcasts carry payloads, but lifecycle changes
+ *  like rejection-cleared fire the listener with no arg. Subscribers
+ *  should re-pull state via the accessors rather than relying on the
+ *  event payload. */
+type ChatListener = (e?: ChatMessage | ChatRejection) => void;
 
 const MECHANISM_BUFFER_MAX = 40;
-/** Match the worker's CHAT_RING_BUFFER_SIZE so we never store more
- *  client-side than the worker would re-send on reconnect. */
-const CHAT_BUFFER_MAX = 50;
 
 /** Render delay, in ms. Sampling position at (now - INTERP_DELAY_MS)
  *  ensures we always have multiple future snapshots buffered ahead
@@ -440,10 +451,10 @@ class PondStore {
     food: [],
     meta: null,
     chat: [],
-    chatTotal: 0,
     yourHandle: null,
-    lastChatRejection: null,
+    chatTotal: 0,
     sessionChatCount: 0,
+    lastChatRejection: null,
   };
   private listeners = new Set<Listener>();
   private speechListeners = new Set<SpeechListener>();
@@ -657,6 +668,86 @@ class PondStore {
     return () => this.chatListeners.delete(l);
   };
 
+  // ─────────────────────────────────────────────────────────────
+  //  Chat-surface mutators
+  //
+  //  applyChatMessage dedups by id. The store is a module-level
+  //  singleton but the app has multiple usePond callers (page.tsx,
+  //  PondWhispers in layout.tsx, the diagnostic). Each call opens
+  //  its own WebSocket; the worker broadcasts to all of them; the
+  //  same chat_message would otherwise be inserted N times. Cheap
+  //  O(buffer) check, runs only on chat broadcasts (rare).
+  // ─────────────────────────────────────────────────────────────
+
+  applyChatMessage(msg: {
+    id: string; handle: string; text: string; at: number;
+    chatTotal?: number;
+    kind?: "visitor" | "pond";
+  }): void {
+    if (this.state.chat.some((m) => m.id === msg.id)) {
+      // Already delivered. Still update chatTotal if this delivery
+      // carried a higher value (usually identical, but late deliveries
+      // can have fresher totals from the worker).
+      if (
+        typeof msg.chatTotal === "number" &&
+        msg.chatTotal > this.state.chatTotal
+      ) {
+        this.state = { ...this.state, chatTotal: msg.chatTotal };
+        this.notify();
+      }
+      return;
+    }
+
+    const ev: ChatMessage = {
+      id: msg.id,
+      handle: msg.handle,
+      text: msg.text,
+      at: msg.at,
+      kind: msg.kind ?? "visitor",
+      receivedAtMs: Date.now(),
+    };
+
+    // Bump sessionChatCount only when the broadcast handle matches
+    // ours. yourHandle is set sticky for the session by snapshot.
+    const isOurs =
+      this.state.yourHandle !== null && msg.handle === this.state.yourHandle;
+
+    this.state = {
+      ...this.state,
+      chat: [...this.state.chat, ev],
+      chatTotal:
+        typeof msg.chatTotal === "number"
+          ? Math.max(this.state.chatTotal, msg.chatTotal)
+          : this.state.chatTotal,
+      sessionChatCount: isOurs
+        ? this.state.sessionChatCount + 1
+        : this.state.sessionChatCount,
+    };
+    this.notify();
+    for (const l of this.chatListeners) l(ev);
+  }
+
+  applyChatRejected(msg: { text: string; reason: string; at: number }): void {
+    const ev: ChatRejection = {
+      text: msg.text,
+      reason: msg.reason,
+      at: msg.at,
+    };
+    this.state = { ...this.state, lastChatRejection: ev };
+    this.notify();
+    for (const l of this.chatListeners) l(ev);
+  }
+
+  clearChatRejection(): void {
+    if (this.state.lastChatRejection === null) return;
+    this.state = { ...this.state, lastChatRejection: null };
+    this.notify();
+    // Fire chat listeners so the dismiss-X button actually closes the
+    // banner in PondChat. The store-level notify is general; the chat
+    // listener is what PondChat re-pulls state on.
+    for (const l of this.chatListeners) l();
+  }
+
   getSnapshot = (): PondState => this.state;
   peek = (): PondState => this.state;
 
@@ -680,19 +771,19 @@ class PondStore {
     // Date.now() (wall-clock epoch, vastly different magnitude).
     const nowMs = performance.now();
     this.syncKine(msg.fish, nowMs);
-    // Hydrate chat buffer with receivedAtMs stamps for relative-time labels.
-    // For snapshot messages (initial load or reconnect), we don't know
-    // when the visitor "received" each message — we use Date.now() as a
-    // conservative approximation. Subsequent broadcasts have accurate stamps.
-    const arrivedAtMs = Date.now();
-    const incomingChat: ChatMessage[] = (msg.chat ?? []).map((c) => ({
-      id: c.id,
-      handle: c.handle,
-      text: c.text,
-      at: c.at,
-      receivedAtMs: arrivedAtMs,
-      kind: c.kind ?? "visitor",
+
+    // Hydrate chat-surface fields. The worker sends each independently
+    // as optional, so we only overwrite present fields and degrade
+    // gracefully on pre-chat snapshots.
+    const hydratedChat: ChatMessage[] | undefined = msg.chat?.map((m) => ({
+      id: m.id,
+      handle: m.handle,
+      text: m.text,
+      at: m.at,
+      kind: m.kind ?? "visitor",
+      receivedAtMs: Date.now(),
     }));
+
     this.state = {
       ...this.state,
       connected: true,
@@ -704,94 +795,17 @@ class PondStore {
       fishCurrTime: msg.now,
       food: msg.food ?? [],
       meta: msg.pondMeta ?? this.state.meta,
-      chat: incomingChat,
+      chat: hydratedChat ?? this.state.chat,
       yourHandle: msg.yourHandle ?? this.state.yourHandle,
-      // chatTotal from worker is authoritative; missing → keep current
-      // (covers a future field-removal or pre-deploy server).
-      chatTotal: typeof msg.chatTotal === "number"
-        ? msg.chatTotal
-        : this.state.chatTotal,
-      // Snapshot marks the start (or restart) of a session — counter
-      // resets, even if there are messages in the initial buffer.
-      sessionChatCount: 0,
+      chatTotal:
+        typeof msg.chatTotal === "number" ? msg.chatTotal : this.state.chatTotal,
     };
     this.notify();
-  }
-
-  applyChatMessage(msg: {
-    id: string; handle: string; text: string; at: number;
-    chatTotal?: number;
-    kind?: "visitor" | "pond";
-  }): void {
-    // Dedupe by id. The store is a module-level singleton but the app
-    // has multiple usePond callers (page.tsx's pond, PondWhispers' pond
-    // mounted in layout.tsx, possibly others). Each call opens its own
-    // WebSocket, and the worker broadcasts to all of them — so the same
-    // chat_message arrives N times and would be inserted N times into
-    // state.chat without this guard. The keys-collide React warning
-    // is the symptom; this is the fix at the source. Cheap O(buffer
-    // size) check, runs only on chat broadcasts (rare).
-    if (this.state.chat.some((m) => m.id === msg.id)) {
-      // Still update chatTotal if the broadcast carried a higher value
-      // than our current — useful when the late delivery has fresher
-      // total info, though usually they're identical.
-      if (
-        typeof msg.chatTotal === "number" &&
-        msg.chatTotal > this.state.chatTotal
-      ) {
-        this.state = { ...this.state, chatTotal: msg.chatTotal };
-        this.notify();
-      }
-      return;
+    // Fire chat listeners so consumers re-pull on snapshot-driven
+    // hydration (e.g., initial yourHandle arrival enables the input).
+    if (msg.chat !== undefined || msg.yourHandle !== undefined) {
+      for (const l of this.chatListeners) l();
     }
-    const ev: ChatMessage = {
-      id: msg.id,
-      handle: msg.handle,
-      text: msg.text,
-      at: msg.at,
-      receivedAtMs: Date.now(),
-      kind: msg.kind ?? "visitor",
-    };
-    // If this is the visitor's own message landing back, clear the
-    // rejection state — they successfully sent something. Identified by
-    // matching handle to yourHandle.
-    const isOwnMessage = ev.handle === this.state.yourHandle;
-    const nextChat = [...this.state.chat, ev];
-    while (nextChat.length > CHAT_BUFFER_MAX) nextChat.shift();
-    // chatTotal from worker is authoritative when present; otherwise
-    // increment locally (pre-deploy worker compatibility).
-    const nextChatTotal = typeof msg.chatTotal === "number"
-      ? msg.chatTotal
-      : this.state.chatTotal + 1;
-    this.state = {
-      ...this.state,
-      chat: nextChat,
-      chatTotal: nextChatTotal,
-      sessionChatCount: this.state.sessionChatCount + 1,
-      lastChatRejection: isOwnMessage ? null : this.state.lastChatRejection,
-    };
-    for (const l of this.chatListeners) l(ev);
-    this.notify();
-  }
-
-  applyChatRejected(msg: { text: string; reason: string; at: number }): void {
-    const rejection: ChatRejection = {
-      text: msg.text,
-      reason: msg.reason,
-      at: msg.at,
-    };
-    this.state = {
-      ...this.state,
-      lastChatRejection: rejection,
-    };
-    for (const l of this.chatListeners) l(rejection);
-    this.notify();
-  }
-
-  clearChatRejection(): void {
-    if (this.state.lastChatRejection === null) return;
-    this.state = { ...this.state, lastChatRejection: null };
-    this.notify();
   }
 
   applyTick(msg: {
@@ -930,48 +944,46 @@ export interface UsePondResult {
    *  trace, and (in a later commit) by the shader for surface rendering. */
   getFood: () => FoodFrame[];
 
-  // ─── Chat surface ──────────────────────────────────────────────
-  // The pond's visitor-to-visitor chat. Bottom-left of the limen-pond
-  // page only. Subscribe + accessor pattern matches speech/mechanism.
-
-  /** Current chat ring buffer (up to CHAT_BUFFER_MAX). Not reactive at
-   *  this layer — the PondChat component subscribes via subscribeToChat
-   *  and re-reads here on each event. */
+  // ─── chat surface (§ XIV) ───────────────────────────────────────
+  /** Current chat ring buffer — visitor sends and pond utterances,
+   *  in arrival order, dedup'd by id. Not reactive; consumers should
+   *  subscribeToChat to be notified of changes and re-pull. */
   getChat: () => ChatMessage[];
 
-  /** This visitor's auto-assigned handle for the session. Null until
-   *  the first snapshot arrives. */
-  getYourHandle: () => string | null;
-
-  /** All-time count of chat messages this pond has ever accepted.
-   *  Worker-authoritative; reset would only happen on a fresh pond
-   *  deployment. Shown in the collapsed-chat pill, abbreviated at
-   *  scale (e.g. "1.2k", "47k") so the pond's lifetime of conversation
-   *  is legible at any size. */
-  getChatTotal: () => number;
-
-  /** Last moderation rejection, if any. Cleared automatically when the
-   *  visitor's next message lands successfully (matched by handle), or
-   *  explicitly via clearChatRejection() when they edit the input. */
+  /** Most recent classifier/rate-limit rejection, or null. Cleared
+   *  by clearChatRejection or by sending another message. */
   getLastChatRejection: () => ChatRejection | null;
 
-  /** Count of chat_message broadcasts received during this session.
-   *  Uncapped — keeps incrementing across the whole visit, formatted
-   *  by the UI with abbreviations (1.2k / 12k / 1.2m) when large. */
+  /** This session's visitor handle for the chat surface. Null until
+   *  the first snapshot delivers it, and remains null on workers
+   *  predating the chat deploy — in that case, the chat surface
+   *  should remain disabled. */
+  getYourHandle: () => string | null;
+
+  /** Count of messages this session has had broadcast. Bumps only on
+   *  accepted broadcasts whose handle matches yourHandle. */
   getSessionChatCount: () => number;
 
-  /** Subscribe to chat events — both incoming broadcasts and personal
-   *  rejections. Returns unsubscribe. */
+  /** Cumulative pond-wide chat counter. Surfaces as the abbreviated
+   *  "chat · 1.2k" pill. Visitor-attributable messages only — pond
+   *  utterances do not bump. */
+  getChatTotal: () => number;
+
+  /** Subscribe to chat lifecycle events: new messages, rejections,
+   *  rejection-cleared, snapshot-driven handle/buffer hydration.
+   *  Listener receives no arg by default; consumers should re-pull
+   *  state via the accessors. Returns unsubscribe. */
   subscribeToChat: (l: ChatListener) => () => void;
 
-  /** Send a chat message. The worker rate-limits per session (15s) and
-   *  classifies via Gemma 4 E4B; results arrive asynchronously as
-   *  either a chat_message broadcast (success) or chat_rejected
-   *  envelope (rejected to just this socket). */
+  /** Send a chat message. Trimmed and validated client-side
+   *  (1..200 chars after trim); empty/oversize sends are silently
+   *  dropped. Worker classifies via Workers AI and either broadcasts
+   *  to all sockets or sends chat_rejected back to this one. */
   sendChat: (text: string) => void;
 
-  /** Clear the last rejection state. The UI calls this when the visitor
-   *  edits the input after a reject, so the rejection banner disappears. */
+  /** Clear the last rejection state. The UI calls this when the
+   *  visitor edits the input after a reject, or when they explicitly
+   *  dismiss the rejection banner. */
   clearChatRejection: () => void;
 }
 
@@ -1165,23 +1177,29 @@ export function usePond(opts: UsePondOptions): UsePondResult {
      *  consumers that want live updates should re-read inside their
      *  animation loop (which the diagnostic does). */
     getFood: (): FoodFrame[] => state.food,
-    // Chat surface
+
+    // ─── chat surface ──────────────────────────────────────────
     getChat: (): ChatMessage[] => store.peek().chat,
-    getYourHandle: (): string | null => store.peek().yourHandle,
-    getChatTotal: (): number => store.peek().chatTotal,
     getLastChatRejection: (): ChatRejection | null =>
       store.peek().lastChatRejection,
+    getYourHandle: (): string | null => store.peek().yourHandle,
     getSessionChatCount: (): number => store.peek().sessionChatCount,
+    getChatTotal: (): number => store.peek().chatTotal,
     subscribeToChat: store.subscribeToChat,
     sendChat: (text: string): void => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       const trimmed = text.trim();
-      if (trimmed.length === 0) return;
+      // Mirror the worker's validation (z.string().min(1).max(200))
+      // so the malformed-shape rejection happens before the round
+      // trip rather than after. Silently drop both edges; the UI
+      // should be disabling the send button when these conditions
+      // hold.
+      if (trimmed.length === 0 || trimmed.length > 200) return;
       try {
         ws.send(JSON.stringify({ t: "chat", text: trimmed }));
       } catch {
-        /* socket closing; silently drop */
+        /* socket closed mid-send; the close handler will reconnect */
       }
     },
     clearChatRejection: (): void => store.clearChatRejection(),
@@ -1225,6 +1243,7 @@ function toShader(f: KoiFrame): ShaderFish {
     name: f.name,
     color: f.c,
     mood: f.m,
+    founder: f.founder,
     // Action-state — forwarded as-is. Renderers read these each frame
     // to animate intent-specific behavior without needing to re-query
     // the backend.

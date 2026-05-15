@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePond, type DebugKine, type FoodFrame } from "@/lib/usePond";
-import { pondSDF } from "@/lib/pondGeometry";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Limen Pond — Forensic Diagnostic Overlay
@@ -55,6 +54,21 @@ const COLOR = {
 const FONT_MONO =
   "var(--font-mono), 'JetBrains Mono', monospace";
 
+// ── Gourd SDF — canonical; must match backend/shader ─────────────────────
+const GOURD = {
+  basinA: { cx: -1.0, cz: 0.0, r: 3.5 },
+  basinB: { cx:  1.8, cz: 0.4, r: 2.2 },
+  k: 0.9,
+} as const;
+
+function pondSDF(x: number, z: number): number {
+  const a = GOURD.basinA, b = GOURD.basinB, k = GOURD.k;
+  const dA = Math.hypot(x - a.cx, z - a.cz) - a.r;
+  const dB = Math.hypot(x - b.cx, z - b.cz) - b.r;
+  const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (dB - dA) / k));
+  return dB * (1 - h) + dA * h - k * h * (1 - h);
+}
+
 // ── Trace storage (per fish, in-component refs) ──────────────────────────
 interface TracePoint {
   t: number;     // performance.now() ms
@@ -72,11 +86,95 @@ function shouldShow(): boolean {
   return false;
 }
 
+// ─── Dev console admin helpers ─────────────────────────────────────────
+// These talk to the worker's /admin/* HTTP endpoints. The shared secret
+// is stored client-side in localStorage under "pond_dev_secret"; on
+// first use, the user is prompted to paste it. The secret matches the
+// SHARED_SECRET env var on the Cloudflare worker.
+
+const DEV_SECRET_KEY = "pond_dev_secret";
+
+function getDevSecret(): string | null {
+  try {
+    let s = localStorage.getItem(DEV_SECRET_KEY);
+    if (!s) {
+      const entered = window.prompt(
+        "Paste the SHARED_SECRET from your Cloudflare worker env. " +
+        "Stored locally; never sent anywhere except the pond worker."
+      );
+      if (entered && entered.trim()) {
+        s = entered.trim();
+        localStorage.setItem(DEV_SECRET_KEY, s);
+      }
+    }
+    return s || null;
+  } catch {
+    return null;
+  }
+}
+
+function workerBaseUrl(): string {
+  // Derive HTTP base URL from the WS URL.
+  const ws = process.env.NEXT_PUBLIC_POND_WS_URL ?? "";
+  return ws
+    .replace(/^ws:/, "http:")
+    .replace(/^wss:/, "https:")
+    .replace(/\/ws$/, "");
+}
+
+async function postAdmin(
+  path: string,
+  body: Record<string, unknown> = {},
+): Promise<{ ok: boolean; status: number; body: string }> {
+  const secret = getDevSecret();
+  if (!secret) {
+    return { ok: false, status: 401, body: "no secret provided" };
+  }
+  const base = workerBaseUrl();
+  try {
+    const res = await fetch(base + path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + secret,
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    return { ok: res.ok, status: res.status, body: text };
+  } catch (e) {
+    return {
+      ok: false,
+      status: 0,
+      body: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
 export default function PondDiagnostic() {
   const [enabled, setEnabled] = useState(false);
   const [debug, setDebug] = useState<DebugKine[]>([]);
   const [food, setFood] = useState<FoodFrame[]>([]);
   const [snapshotRateHz, setSnapshotRateHz] = useState(0);
+
+  // Tab state. STATUS is the original forensic panel; DEV is the test
+  // console for triggering simulation events (spawning, bonds, time
+  // jumps, etc.) without waiting for them to occur naturally. DEV is
+  // only shown when the URL has ?dev=1 — production visitors never
+  // see it. Admin endpoints check the SHARED_SECRET header on the
+  // worker side, so even if a visitor discovered ?dev=1, they could
+  // not trigger admin actions without the secret.
+  const [tab, setTab] = useState<"status" | "dev">("status");
+  const [devEnabled, setDevEnabled] = useState(false);
+  const [adminBusy, setAdminBusy] = useState<string | null>(null);
+  const [adminLastResult, setAdminLastResult] = useState<string>("");
+
+  // Track the live header height so the diagnostic always sits just
+  // below the SiteHeader masthead — which is ~240px when expanded at
+  // top of page and ~60-70px when scrolled into compact mode. Default
+  // to the expanded value so the panel renders correctly before the
+  // first scroll event.
+  const [headerHeight, setHeaderHeight] = useState(256);
 
   // Measure snapshot cadence by counting tick changes per second.
   const lastTickRef = useRef<number>(-1);
@@ -87,6 +185,31 @@ export default function PondDiagnostic() {
 
   // Gate mount after first render so SSR and client agree.
   useEffect(() => { setEnabled(shouldShow()); }, []);
+
+  // Detect ?dev=1 query param. Done client-side so the static build
+  // doesn't bake dev exposure into the page.
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get("dev") === "1") setDevEnabled(true);
+    } catch { /* SSR or malformed URL — ignore */ }
+  }, []);
+
+  // Match the SiteHeader's own scroll threshold (64px) so the panel
+  // tracks the header's expanded ↔ compact mode transitions exactly.
+  // Hardcoded clearance values rather than DOM measurement — the
+  // SiteHeader masthead is ~240px expanded, ~60-70px compact, and
+  // measuring via querySelector("header") was unreliable (matched
+  // the wrong element or returned mid-transition values).
+  useEffect(() => {
+    const onScroll = () => {
+      const scrolled = window.scrollY > 64;
+      setHeaderHeight(scrolled ? 76 : 256);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const pond = usePond({
     url: process.env.NEXT_PUBLIC_POND_WS_URL ?? "",
@@ -177,12 +300,13 @@ export default function PondDiagnostic() {
       style={{
         position: "fixed",
         right: 16,
-        top: "50%",
-        transform: "translateY(-50%)",
+        top: headerHeight,
+        // 12rem of clearance from viewport bottom (≈192px). Covers the
+        // MiniPlayer for Consequences of Infinity sitting at bottom-right.
+        bottom: "12rem",
         zIndex: 50,
         width: "max-content",
         maxWidth: 520,
-        maxHeight: "calc(100vh - 32px)",
         padding: "14px 18px",
         background: COLOR.bg,
         border: `1px solid ${COLOR.border}`,
@@ -198,6 +322,11 @@ export default function PondDiagnostic() {
         pointerEvents: "auto",
         userSelect: "text",
         overflowY: "auto",
+        overflowX: "hidden",
+        // Subtle scrollbar styling — visible enough to know it's there,
+        // not so loud it competes with the diagnostic content.
+        scrollbarWidth: "thin",
+        scrollbarColor: `${COLOR.border} transparent`,
       }}
     >
       {/* ── Header ───────────────────────────────────────────── */}
@@ -219,6 +348,30 @@ export default function PondDiagnostic() {
           ` to hide
         </span>
       </div>
+
+      {/* ── Tab strip (only when ?dev=1 in URL) ──────────────── */}
+      {devEnabled && (
+        <div style={{
+          display: "flex",
+          gap: 0,
+          marginBottom: 10,
+          borderBottom: `1px solid ${COLOR.border}`,
+        }}>
+          <TabButton
+            label="STATUS"
+            active={tab === "status"}
+            onClick={() => setTab("status")}
+          />
+          <TabButton
+            label="DEV"
+            active={tab === "dev"}
+            onClick={() => setTab("dev")}
+          />
+        </div>
+      )}
+
+      {/* ── STATUS tab content ──────────────────────────────── */}
+      <div style={{ display: tab === "status" ? "block" : "none" }}>
 
       {/* ── Connection & cadence ─────────────────────────────── */}
       <Row label="STATE">
@@ -342,6 +495,95 @@ export default function PondDiagnostic() {
           food={food}
         />
       </div>
+      </div>{/* close STATUS tab wrapper */}
+
+      {/* ── DEV tab content ──────────────────────────────────── */}
+      {devEnabled && tab === "dev" && (
+        <div>
+          {/* Reproduction section */}
+          <div style={{
+            color: COLOR.inkFaint,
+            fontSize: 9,
+            letterSpacing: "0.28em",
+            textTransform: "uppercase",
+            marginBottom: 8,
+            marginTop: 2,
+          }}>
+            Reproduction
+          </div>
+          <DevButton
+            label="Trigger Spawn — Shiki × Kokutou"
+            busy={adminBusy === "spawn"}
+            onClick={async () => {
+              setAdminBusy("spawn");
+              setAdminLastResult("");
+              const r = await postAdmin("/admin/spawn", {});
+              setAdminBusy(null);
+              setAdminLastResult(
+                (r.ok ? "✓ " : "✗ ") + r.status + " — " + r.body
+              );
+            }}
+          />
+          <DevButton
+            label="Force Hatch — all eggs"
+            busy={adminBusy === "hatch"}
+            onClick={async () => {
+              setAdminBusy("hatch");
+              setAdminLastResult("");
+              const r = await postAdmin("/admin/hatch-all", {});
+              setAdminBusy(null);
+              setAdminLastResult(
+                (r.ok ? "✓ " : "✗ ") + r.status + " — " + r.body
+              );
+            }}
+          />
+          <DevButton
+            label="Clear All Eggs — remove without hatching"
+            busy={adminBusy === "clear"}
+            onClick={async () => {
+              setAdminBusy("clear");
+              setAdminLastResult("");
+              const r = await postAdmin("/admin/clear-eggs", {});
+              setAdminBusy(null);
+              setAdminLastResult(
+                (r.ok ? "✓ " : "✗ ") + r.status + " — " + r.body
+              );
+            }}
+          />
+
+          {/* Result line — shows the last admin call's status. */}
+          {adminLastResult && (
+            <div style={{
+              marginTop: 10,
+              padding: "6px 8px",
+              background: "rgba(0,0,0,0.25)",
+              border: `1px solid ${COLOR.border}`,
+              borderRadius: 1,
+              color: adminLastResult.startsWith("✓") ? COLOR.good : COLOR.bad,
+              fontSize: 9,
+              letterSpacing: "0.04em",
+              wordBreak: "break-word",
+              maxHeight: 80,
+              overflowY: "auto",
+            }}>
+              {adminLastResult}
+            </div>
+          )}
+
+          <div style={{
+            color: COLOR.inkFaint,
+            fontSize: 9,
+            marginTop: 12,
+            letterSpacing: "0.04em",
+            lineHeight: 1.5,
+          }}>
+            <div>buttons bypass the usual gates (proximity, bond permission,</div>
+            <div>witness density) and call the worker directly. requires</div>
+            <div>SHARED_SECRET — prompted on first use, cached in localStorage.</div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -529,6 +771,74 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
         {children}
       </span>
     </div>
+  );
+}
+
+function TabButton({
+  label, active, onClick,
+}: {
+  label: string; active: boolean; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flex: 1,
+        padding: "6px 10px",
+        background: "transparent",
+        border: "none",
+        borderBottom: active
+          ? `2px solid ${COLOR.inkStrong}`
+          : "2px solid transparent",
+        color: active ? COLOR.inkStrong : COLOR.inkFaint,
+        fontFamily: FONT_MONO,
+        fontSize: 10,
+        letterSpacing: "0.24em",
+        textTransform: "uppercase",
+        cursor: "pointer",
+        outline: "none",
+      }}
+      onMouseEnter={(e) => {
+        if (!active) e.currentTarget.style.color = COLOR.ink;
+      }}
+      onMouseLeave={(e) => {
+        if (!active) e.currentTarget.style.color = COLOR.inkFaint;
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function DevButton({
+  label, busy, onClick,
+}: {
+  label: string; busy: boolean; onClick: () => void | Promise<void>;
+}) {
+  return (
+    <button
+      onClick={() => { void onClick(); }}
+      disabled={busy}
+      style={{
+        display: "block",
+        width: "100%",
+        padding: "8px 10px",
+        marginBottom: 6,
+        background: busy ? "rgba(127, 175, 179, 0.15)" : "rgba(0, 0, 0, 0.25)",
+        border: `1px solid ${busy ? COLOR.connected : COLOR.border}`,
+        borderRadius: 1,
+        color: busy ? COLOR.connected : COLOR.ink,
+        fontFamily: FONT_MONO,
+        fontSize: 10,
+        letterSpacing: "0.08em",
+        cursor: busy ? "wait" : "pointer",
+        outline: "none",
+        textAlign: "left",
+        transition: "background 120ms, border-color 120ms, color 120ms",
+      }}
+    >
+      {busy ? "· · · " + label : label}
+    </button>
   );
 }
 
