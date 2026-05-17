@@ -65,8 +65,13 @@ export interface CreateKoiInit {
    *  in the reproduction gate and we want that to be impossible to
    *  forget. */
   sex: "female" | "male";
-  /** Optional spawn override. Defaults to randomSpawn on the shelf. */
+  /** Optional spawn position. If omitted, randomSpawn is called. */
   spawn?: { x: number; y: number; z: number; h: number };
+  /** True for the originating founder koi (Shiki, Kokutou). Threads
+   *  through to KoiState.founder which the wire serializer (toFrame)
+   *  exposes, which the renderer reads to pick the founder phenotype
+   *  palette instead of the archetype default. */
+  founder?: boolean;
 }
 
 export function createKoi(init: CreateKoiInit, rng: Rng): KoiState {
@@ -100,6 +105,10 @@ export function createKoi(init: CreateKoiInit, rng: Rng): KoiState {
     lastSpawningTick: 0,
     recentHeadings: [],
     tagState: null,
+    // Founder flag carried from init. Set only when explicitly true so
+    // KoiState stays minimal for naturally-hatched koi (toFrame uses
+    // the same truthy-only pattern when serializing to the wire).
+    ...(init.founder ? { founder: true } : {}),
   };
 }
 
@@ -314,37 +323,79 @@ const COLOR_ROTATION: KoiColor[] = [
  *  earlier distribution [18, 14, 9, 4, 2] caused a cohort die-off
  *  cascade visible in April 2026 debug sessions. */
 export function seedInitialCohort(tick: SimTick, rng: Rng): KoiState[] {
-  // Target ages in sim-days so the pond has a mix of stages with runway.
-  const AGES_DAYS = [14, 10, 6, 3, 1];
-  const NAMES = [
-    "Kishi",              // late-adult, quiet veteran
-    "The One Who Waits",  // adult with patience
-    "Bronze-Fin",         // adolescent
-    "Reed-Follower",      // juvenile
-    "Third-of-Five",      // fry
-  ];
-  // Seed cohort sex assignment. Distributed so any cross-stage pairing
-  // has at least one viable sex combination when both reach adulthood.
-  // 3F (indices 0, 2, 4) / 2M (indices 1, 3).
-  const SEX: Array<"female" | "male"> =
-    ["female", "male", "female", "male", "female"];
+  // ─────────────────────────────────────────────────────────────────
+  //  Founder family — the originating pair plus their existing fry.
+  //
+  //  The demo opens with three koi present so the visitor's first
+  //  impression is "this is a family that already lives here," not
+  //  "wait 18 real-hours for them to spawn." Reproduction continues
+  //  from here — Shiki and Kokutou will produce more clutches in the
+  //  normal way (~every 5 sim-days after cooldown), and Sylvanas will
+  //  grow up through her life stages alongside any new siblings.
+  //
+  //  Color choices: founders map to founder phenotypes via the renderer:
+  //    Shiki "kohaku"  → FOUNDER_PHENOTYPES["founder:kohaku"] → wisteria
+  //    Kokutou "asagi" → FOUNDER_PHENOTYPES["founder:asagi"]  → cobalt
+  //  Sylvanas's color inherits from her mother, but the magical
+  //  founder-offspring phenotype overrides it at render time anyway
+  //  (any non-founder gets the iridescent wisteria-cobalt blend
+  //  derived from a hash of their koi id).
+  //
+  //  Ages: founders are mature adults with substantial runway left
+  //  (lifespan ~30 sim-days, so ~18 days remain). Sylvanas at 3 sim-
+  //  days is a young fry — visibly small and iridescent.
+  //
+  //  Sex layout: 1F (Shiki) + 1M (Kokutou) for the founders so they
+  //  can pair-bond; Sylvanas female so the lineage has a daughter
+  //  presence from the start.
+  // ─────────────────────────────────────────────────────────────────
 
-  const out: KoiState[] = [];
-  for (let i = 0; i < AGES_DAYS.length; i++) {
-    const day = AGES_DAYS[i]!;
-    const ageTicks = Math.floor(day * SIM.realSecondsPerSimDay * SIM.tickHz);
-    const id = `koi_${String(i).padStart(2, "0")}_seed`;
-    const color = COLOR_ROTATION[i % COLOR_ROTATION.length]!;
-    const legendary = rng.chance(LIFE.legendaryRate);
-    const hatchedAt = tick - ageTicks;
-    out.push(createKoi({
-      id, name: NAMES[i]!, ageTicks,
-      hatchedAtTick: hatchedAt,
-      legendary, color,
-      sex: SEX[i]!,
-    }, rng));
-  }
-  return out;
+  const simDaysToTicks = (d: number) =>
+    Math.floor(d * SIM.realSecondsPerSimDay * SIM.tickHz);
+
+  const SHIKI_AGE_DAYS = 12;
+  const KOKUTOU_AGE_DAYS = 12;
+  const SYLVANAS_AGE_DAYS = 3;
+
+  const shikiAge   = simDaysToTicks(SHIKI_AGE_DAYS);
+  const kokutouAge = simDaysToTicks(KOKUTOU_AGE_DAYS);
+  const sylvanasAge = simDaysToTicks(SYLVANAS_AGE_DAYS);
+
+  const shiki = createKoi({
+    id: "koi_shiki_founder",
+    name: "Shiki",
+    ageTicks: shikiAge,
+    hatchedAtTick: tick - shikiAge,
+    legendary: false,
+    color: "kohaku",
+    sex: "female",
+    founder: true,
+  }, rng);
+
+  const kokutou = createKoi({
+    id: "koi_kokutou_founder",
+    name: "Kokutou",
+    ageTicks: kokutouAge,
+    hatchedAtTick: tick - kokutouAge,
+    legendary: false,
+    color: "asagi",
+    sex: "male",
+    founder: true,
+  }, rng);
+
+  const sylvanas = createKoi({
+    id: "koi_sylvanas_firstborn",
+    name: "Sylvanas",
+    ageTicks: sylvanasAge,
+    hatchedAtTick: tick - sylvanasAge,
+    legendary: false,
+    color: "kohaku",        // inherited from mother; overridden by
+                            // magical-offspring phenotype at render
+    sex: "female",
+    founder: false,         // non-founder → magical iridescent phenotype
+  }, rng);
+
+  return [shiki, kokutou, sylvanas];
 }
 
 // ───────────────────────────────────────────────────────────────────

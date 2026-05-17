@@ -214,10 +214,12 @@ function phenotypeFor(
       ?? ARCHETYPE_PHENOTYPES[color]
       ?? ARCHETYPE_PHENOTYPES.kohaku!;
   }
-  // Children of the founders — magical iridescent treatment.
-  // Only applies at egg and fry stages; juveniles and older
-  // revert to the normal archetype expression of their color.
-  if ((stage === "fry" || stage === "egg") && koiId) {
+  // Children of the founders — magical iridescent treatment that
+  // persists across every life stage. The shape is "child of these
+  // particular founders," not "child currently small" — so Sylvanas
+  // keeps her wisteria-cobalt iridescence as a fry, a juvenile, and
+  // every stage after.
+  if (koiId) {
     return founderOffspringPhenotype(koiId);
   }
   return ARCHETYPE_PHENOTYPES[color] ?? ARCHETYPE_PHENOTYPES.kohaku!;
@@ -2330,10 +2332,13 @@ export default function LivingSubstrate() {
         if (f) return f;
       }
       // Magical fry — children of the founders. Lazy per-koi cache
-      // keyed by id; computed once per session per fry. The heuristic
-      // matches phenotypeFor: any non-founder at fry/egg stage is
-      // treated as a founder offspring for tonight's demo.
-      if (!founder && koiId && (stage === "fry" || stage === "egg")) {
+      // keyed by id; computed once per session per offspring. Persists
+      // across every life stage (fry / juvenile / adolescent / adult /
+      // elder) so Sylvanas keeps her wisteria-cobalt iridescence
+      // throughout her life, not just while small. The shape is
+      // "child of these particular founders," not "child currently
+      // small." Matches the same removal in phenotypeFor above.
+      if (!founder && koiId) {
         const cacheKey = "offspring:" + koiId;
         const cached = phenoCache.get(cacheKey);
         if (cached) return cached;
