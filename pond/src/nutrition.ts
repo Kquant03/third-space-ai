@@ -65,55 +65,54 @@ function isInsectSeason(season: Season): boolean {
 //  saturated (no fish eating), we skip spawn until consumption catches up.
 // ───────────────────────────────────────────────────────────────────
 
+// ───────────────────────────────────────────────────────────────────
+//  Spawn nodes — fixed coral/plant positions on the substrate that
+//  periodically release food. LoL-jungle-camp pattern: each node has
+//  a respawn period and a phase offset so spawns stagger across the
+//  pond rather than firing all at once. At 2Hz, period 60 = 30 sim
+//  seconds between insects per node; with 5 nodes phase-offset by 12
+//  ticks, the pond always has fresh food appearing somewhere.
+//
+//  Positions chosen to spread across the gourd's two basins and the
+//  narrow waist between them, so wherever a hungry koi happens to
+//  be, there's usually a node within a short swim. Post-hackathon
+//  visual treatment will render coral/plants at these same positions.
+// ───────────────────────────────────────────────────────────────────
+
+const FOOD_SPAWN_NODES: ReadonlyArray<{
+  x: number; z: number; periodTicks: number; phaseTicks: number;
+}> = [
+  { x: -1.2, z: -0.5, periodTicks: 60, phaseTicks:  0 },
+  { x:  1.4, z: -0.3, periodTicks: 60, phaseTicks: 12 },
+  { x: -0.8, z:  1.0, periodTicks: 60, phaseTicks: 24 },
+  { x:  1.1, z:  0.8, periodTicks: 60, phaseTicks: 36 },
+  { x:  0.0, z: -1.2, periodTicks: 60, phaseTicks: 48 },
+];
+
 function spawnAmbient(
   hot: PondHotState, newTick: SimTick, rng: Rng,
 ): FoodItem[] {
   if (hot.food.length >= FOOD.maxConcurrent) return [];
   const out: FoodItem[] = [];
-  const world = hot.world;
   const ticksPerSec = SIM.tickHz;
 
-  // Pollen — spring only
-  if (world.season === "spring" && rng.chance(FOOD.pollen.pPerTick)) {
-    const pos = samplePointInPond(() => rng.float(), 0.35);
-    out.push({
-      id: nextFoodId(newTick, "pollen"),
-      kind: "pollen",
-      x: pos.x, y: FOOD.pollen.y, z: pos.z,
-      spawnedAtTick: newTick,
-      decayAtTick: newTick + Math.floor(FOOD.pollen.decaySec * ticksPerSec),
-      nutrition: FOOD.pollen.nutrition,
-      vx: (rng.float() - 0.5) * 0.02,
-      vz: (rng.float() - 0.5) * 0.02,
-    });
-  }
-
-  // Algae — always, on shelf
-  if (rng.chance(FOOD.algae.pPerTick)) {
-    const pos = samplePointOnShelf(() => rng.float());
-    out.push({
-      id: nextFoodId(newTick, "algae"),
-      kind: "algae",
-      x: pos.x, y: FOOD.algae.y, z: pos.z,
-      spawnedAtTick: newTick,
-      decayAtTick: newTick + Math.floor(FOOD.algae.decaySec * ticksPerSec),
-      nutrition: FOOD.algae.nutrition,
-    });
-  }
-
-  // Insects — summer/autumn only, dawn/dusk only
-  if (isInsectSeason(world.season) && isDawnOrDusk(world.tDay) &&
-      rng.chance(FOOD.insect.pPerTick)) {
-    const pos = samplePointInPond(() => rng.float(), 0.35);
+  // Walk each spawn node — if its phase aligns with this tick AND
+  // global cap permits, emerge one insect. The fixed positions read
+  // visually as food "coming from the substrate," matching the
+  // post-hackathon coral/plant rendering plan.
+  for (const node of FOOD_SPAWN_NODES) {
+    if ((newTick - node.phaseTicks) % node.periodTicks !== 0) continue;
+    if (hot.food.length + out.length >= FOOD.maxConcurrent) break;
     out.push({
       id: nextFoodId(newTick, "insect"),
       kind: "insect",
-      x: pos.x, y: FOOD.insect.y, z: pos.z,
+      x: node.x, y: FOOD.insect.y, z: node.z,
       spawnedAtTick: newTick,
       decayAtTick: newTick + Math.floor(FOOD.insect.decaySec * ticksPerSec),
       nutrition: FOOD.insect.nutrition,
-      vx: (rng.float() - 0.5) * 0.10,  // skittering
-      vz: (rng.float() - 0.5) * 0.10,
+      // Mild scatter — insect emerges and skitters a little
+      vx: (rng.float() - 0.5) * 0.06,
+      vz: (rng.float() - 0.5) * 0.06,
     });
   }
 

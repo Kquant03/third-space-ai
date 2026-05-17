@@ -83,14 +83,16 @@ export interface KoiFrame {
   m?: { v: number; a: number };
   /** Hunger 0..1. Optional for backward compatibility with pre-commit-3 servers. */
   hu?: number;
-  /** Founder flag — true for koi spawned at pond instantiation
-   *  (Shiki, Kokutou). Absent on all naturally-hatched koi. The
-   *  renderer reads this for distinct visual treatment. */
-  founder?: boolean;
   // v3 action-state fields
   i?: IntentKind;
   t?: string | null;
   mech?: string;
+  /** Age in ticks since hatch. Optional; the diagnostic shows "—" when
+   *  absent. Wire shorthand key 'at' to keep payloads small. */
+  at?: number;
+  /** True for the founder koi (Shiki, Kokutou). Must match KoiFrameSchema
+   *  in protocol.ts — both definitions are kept in sync by hand. */
+  founder?: boolean;
 }
 
 /** Food items from the server, rendered on the motion-trace plot
@@ -101,6 +103,26 @@ export interface FoodFrame {
   x: number;
   y: number;
   z: number;
+}
+
+// ─── Chat types — STUB SURFACE ─────────────────────────────────────────────
+// These shapes exist so PondChat.tsx type-checks and the build passes. The
+// real chat backend (worker WebSocket chat handler + Gemma safety classifier
+// + bounded server-side history + visitor-handle assignment) is post-Stripe
+// work — the same pipeline will power pebble inscription safety filtering.
+// Until that lands, the hook returns empty arrays / null / no-ops for all
+// chat methods so PondChat renders without crashing but does nothing.
+export interface ChatMessage {
+  id: string;
+  kind: "pond" | "system";   // "pond" = visitor message, "system" = pond
+  text: string;
+  handle: string;            // visitor handle ("Crepuscular-Heimdall" etc.)
+  at: number;                // ms epoch
+}
+
+export interface ChatRejection {
+  reason: string;            // human-readable why-rejected
+  text: string;              // the rejected attempt
 }
 
 export interface PondMeta {
@@ -121,13 +143,14 @@ export interface ShaderFish {
   name?: string;
   color?: string;
   mood?: { v: number; a: number };
-  /** Founder flag — surfaced from the wire so LivingSubstrate can
-   *  apply distinct treatment to Shiki and Kokutou. */
-  founder?: boolean;
   // v3 action-state fields — renderers use these to animate intent.
   intent?: IntentKind;
   target?: string | null;
   mechanism?: string;
+  /** True for the founder koi (Shiki, Kokutou). Renderer reads this to
+   *  switch into the founder phenotype palette (wisteria/cobalt) instead
+   *  of the archetype default (kohaku/asagi). */
+  founder?: boolean;
 }
 
 /** A body-point sample for wake-field injection. Each moving koi
@@ -195,30 +218,6 @@ interface PondState {
    *  latest values. */
   food: FoodFrame[];
   meta: PondMeta | null;
-
-  // ─── chat surface (§ XIV) ──────────────────────────────────────
-  /** Ring buffer of chat messages — both visitor sends and pond-voice
-   *  utterances. Dedup'd by id on insert. Capped at the worker's ring
-   *  buffer size by trimming the front when an applyChatMessage push
-   *  exceeds the threshold; in practice the worker delivers messages
-   *  faster than the cap matters. */
-  chat: ChatMessage[];
-  /** The visitor handle the worker assigned to this session for the
-   *  chat surface. Null until the first snapshot carrying yourHandle
-   *  arrives; null thereafter means the worker is on a pre-chat
-   *  code path and chat is unavailable for this session. */
-  yourHandle: string | null;
-  /** Cumulative chat-message counter across the pond's entire history.
-   *  Visitor-attributable messages only — pond-voice does NOT bump it.
-   *  Surfaces as the "chat · 1.2k" pill in the UI. */
-  chatTotal: number;
-  /** Count of chat messages this session has had broadcast. Increments
-   *  when a chat_message arrives whose handle matches yourHandle.
-   *  Resets only on page reload. */
-  sessionChatCount: number;
-  /** Most recent classifier or rate-limit rejection. Cleared when the
-   *  visitor edits the input or explicitly dismisses. */
-  lastChatRejection: ChatRejection | null;
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -228,36 +227,6 @@ interface PondState {
 type Listener = () => void;
 type SpeechListener = (e: SpeechEvent) => void;
 type MechanismListener = (e: MechanismEvent) => void;
-
-/** A single visitor-or-pond chat message held in the client's ring
- *  buffer. The server-side ChatMessage type lives in the worker's
- *  protocol.ts; this is the client mirror, including the local
- *  receivedAtMs for animation timing. */
-export interface ChatMessage {
-  id: string;
-  handle: string;
-  text: string;
-  at: number;
-  kind: "visitor" | "pond";
-  /** performance.now() at the moment we received the broadcast. Used
-   *  by the renderer to fade new messages in. */
-  receivedAtMs?: number;
-}
-
-/** A classifier or rate-limit rejection of an attempted chat send.
- *  Mirrors the chat_rejected envelope from the worker. */
-export interface ChatRejection {
-  text: string;
-  reason: string;
-  at: number;
-}
-
-/** Chat lifecycle listener. The event arg is optional — chat_message
- *  and chat_rejected broadcasts carry payloads, but lifecycle changes
- *  like rejection-cleared fire the listener with no arg. Subscribers
- *  should re-pull state via the accessors rather than relying on the
- *  event payload. */
-type ChatListener = (e?: ChatMessage | ChatRejection) => void;
 
 const MECHANISM_BUFFER_MAX = 40;
 
@@ -322,11 +291,12 @@ interface KineState {
   name?: string;
   color?: string;
   mood?: { v: number; a: number };
-  /** Founder flag — carried through the interpolation pipeline so
-   *  the renderer's hot path (kineToShader) can hand it to the koi
-   *  shader's a_founder instance attribute. Set once at makeKineState
-   *  time; founders never become non-founders and vice versa. */
+  /** True for the founder koi (Shiki, Kokutou). Carried through from
+   *  the wire so kineToShader can hand it to the renderer. */
   founder?: boolean;
+  /** Age in ticks since hatch — carried through to DebugKine for the
+   *  diagnostic's koi-life-age display (sim-days / sim-hours). */
+  ageTicks?: number;
 
   // Stage-derived speed multiplier (used by visual flourishes)
   speedMult: number;
@@ -398,6 +368,7 @@ function makeKineState(f: KoiFrame, nowMs: number): KineState {
     color: f.c,
     mood: f.m,
     founder: f.founder,
+    ageTicks: f.at,
     speedMult: STAGE_SPEED_MULT[f.stage ?? "adult"] ?? 1.0,
     breachPhase: 0,
     lingerPhase: hashToUnit(f.id + ":lp") * Math.PI * 2,
@@ -442,10 +413,8 @@ function updateKineTarget(k: KineState, f: KoiFrame, nowMs: number): void {
   k.stage = f.stage ?? k.stage;
   k.color = f.c ?? k.color;
   k.mood = f.m ?? k.mood;
-  // Founder flag — only update when the wire actually carries it.
-  // Worker omits the field for non-founders to keep the wire minimal,
-  // so we treat absence as "no change" rather than "set false."
-  if (f.founder !== undefined) k.founder = f.founder;
+  k.founder = f.founder ?? k.founder;
+  k.ageTicks = f.at ?? k.ageTicks;
   if (f.stage) k.speedMult = STAGE_SPEED_MULT[f.stage] ?? 1.0;
 }
 
@@ -460,18 +429,12 @@ class PondStore {
     fishCurrTime: 0,
     food: [],
     meta: null,
-    chat: [],
-    yourHandle: null,
-    chatTotal: 0,
-    sessionChatCount: 0,
-    lastChatRejection: null,
   };
   private listeners = new Set<Listener>();
   private speechListeners = new Set<SpeechListener>();
   private speechBuffer: SpeechEvent[] = [];
   private mechanismListeners = new Set<MechanismListener>();
   private mechanismBuffer: MechanismEvent[] = [];
-  private chatListeners = new Set<ChatListener>();
 
   /** Continuous kinematic state per fish, keyed by id. This is what
    *  the renderer ultimately reads — it moves smoothly every frame
@@ -673,91 +636,6 @@ class PondStore {
     return () => this.mechanismListeners.delete(l);
   };
 
-  subscribeToChat = (l: ChatListener): (() => void) => {
-    this.chatListeners.add(l);
-    return () => this.chatListeners.delete(l);
-  };
-
-  // ─────────────────────────────────────────────────────────────
-  //  Chat-surface mutators
-  //
-  //  applyChatMessage dedups by id. The store is a module-level
-  //  singleton but the app has multiple usePond callers (page.tsx,
-  //  PondWhispers in layout.tsx, the diagnostic). Each call opens
-  //  its own WebSocket; the worker broadcasts to all of them; the
-  //  same chat_message would otherwise be inserted N times. Cheap
-  //  O(buffer) check, runs only on chat broadcasts (rare).
-  // ─────────────────────────────────────────────────────────────
-
-  applyChatMessage(msg: {
-    id: string; handle: string; text: string; at: number;
-    chatTotal?: number;
-    kind?: "visitor" | "pond";
-  }): void {
-    if (this.state.chat.some((m) => m.id === msg.id)) {
-      // Already delivered. Still update chatTotal if this delivery
-      // carried a higher value (usually identical, but late deliveries
-      // can have fresher totals from the worker).
-      if (
-        typeof msg.chatTotal === "number" &&
-        msg.chatTotal > this.state.chatTotal
-      ) {
-        this.state = { ...this.state, chatTotal: msg.chatTotal };
-        this.notify();
-      }
-      return;
-    }
-
-    const ev: ChatMessage = {
-      id: msg.id,
-      handle: msg.handle,
-      text: msg.text,
-      at: msg.at,
-      kind: msg.kind ?? "visitor",
-      receivedAtMs: Date.now(),
-    };
-
-    // Bump sessionChatCount only when the broadcast handle matches
-    // ours. yourHandle is set sticky for the session by snapshot.
-    const isOurs =
-      this.state.yourHandle !== null && msg.handle === this.state.yourHandle;
-
-    this.state = {
-      ...this.state,
-      chat: [...this.state.chat, ev],
-      chatTotal:
-        typeof msg.chatTotal === "number"
-          ? Math.max(this.state.chatTotal, msg.chatTotal)
-          : this.state.chatTotal,
-      sessionChatCount: isOurs
-        ? this.state.sessionChatCount + 1
-        : this.state.sessionChatCount,
-    };
-    this.notify();
-    for (const l of this.chatListeners) l(ev);
-  }
-
-  applyChatRejected(msg: { text: string; reason: string; at: number }): void {
-    const ev: ChatRejection = {
-      text: msg.text,
-      reason: msg.reason,
-      at: msg.at,
-    };
-    this.state = { ...this.state, lastChatRejection: ev };
-    this.notify();
-    for (const l of this.chatListeners) l(ev);
-  }
-
-  clearChatRejection(): void {
-    if (this.state.lastChatRejection === null) return;
-    this.state = { ...this.state, lastChatRejection: null };
-    this.notify();
-    // Fire chat listeners so the dismiss-X button actually closes the
-    // banner in PondChat. The store-level notify is general; the chat
-    // listener is what PondChat re-pulls state on.
-    for (const l of this.chatListeners) l();
-  }
-
   getSnapshot = (): PondState => this.state;
   peek = (): PondState => this.state;
 
@@ -770,30 +648,11 @@ class PondStore {
   applySnapshot(msg: {
     tick: number; now: number; fish: KoiFrame[];
     food?: FoodFrame[]; pondMeta?: PondMeta;
-    chat?: Array<{
-      id: string; handle: string; text: string; at: number;
-      kind?: "visitor" | "pond";
-    }>;
-    yourHandle?: string;
-    chatTotal?: number;
   }): void {
     // NB: use performance.now() (matches interpolator clock), not
     // Date.now() (wall-clock epoch, vastly different magnitude).
     const nowMs = performance.now();
     this.syncKine(msg.fish, nowMs);
-
-    // Hydrate chat-surface fields. The worker sends each independently
-    // as optional, so we only overwrite present fields and degrade
-    // gracefully on pre-chat snapshots.
-    const hydratedChat: ChatMessage[] | undefined = msg.chat?.map((m) => ({
-      id: m.id,
-      handle: m.handle,
-      text: m.text,
-      at: m.at,
-      kind: m.kind ?? "visitor",
-      receivedAtMs: Date.now(),
-    }));
-
     this.state = {
       ...this.state,
       connected: true,
@@ -805,17 +664,8 @@ class PondStore {
       fishCurrTime: msg.now,
       food: msg.food ?? [],
       meta: msg.pondMeta ?? this.state.meta,
-      chat: hydratedChat ?? this.state.chat,
-      yourHandle: msg.yourHandle ?? this.state.yourHandle,
-      chatTotal:
-        typeof msg.chatTotal === "number" ? msg.chatTotal : this.state.chatTotal,
     };
     this.notify();
-    // Fire chat listeners so consumers re-pull on snapshot-driven
-    // hydration (e.g., initial yourHandle arrival enables the input).
-    if (msg.chat !== undefined || msg.yourHandle !== undefined) {
-      for (const l of this.chatListeners) l();
-    }
   }
 
   applyTick(msg: {
@@ -954,46 +804,16 @@ export interface UsePondResult {
    *  trace, and (in a later commit) by the shader for surface rendering. */
   getFood: () => FoodFrame[];
 
-  // ─── chat surface (§ XIV) ───────────────────────────────────────
-  /** Current chat ring buffer — visitor sends and pond utterances,
-   *  in arrival order, dedup'd by id. Not reactive; consumers should
-   *  subscribeToChat to be notified of changes and re-pull. */
+  // ─── Chat surface — STUB UNTIL CHAT BACKEND ─────────────────────────────
+  // PondChat.tsx imports and calls these. The real implementations land
+  // alongside the worker chat WS handler. Until then: empty/null/no-op.
   getChat: () => ChatMessage[];
-
-  /** Most recent classifier/rate-limit rejection, or null. Cleared
-   *  by clearChatRejection or by sending another message. */
-  getLastChatRejection: () => ChatRejection | null;
-
-  /** This session's visitor handle for the chat surface. Null until
-   *  the first snapshot delivers it, and remains null on workers
-   *  predating the chat deploy — in that case, the chat surface
-   *  should remain disabled. */
-  getYourHandle: () => string | null;
-
-  /** Count of messages this session has had broadcast. Bumps only on
-   *  accepted broadcasts whose handle matches yourHandle. */
-  getSessionChatCount: () => number;
-
-  /** Cumulative pond-wide chat counter. Surfaces as the abbreviated
-   *  "chat · 1.2k" pill. Visitor-attributable messages only — pond
-   *  utterances do not bump. */
   getChatTotal: () => number;
-
-  /** Subscribe to chat lifecycle events: new messages, rejections,
-   *  rejection-cleared, snapshot-driven handle/buffer hydration.
-   *  Listener receives no arg by default; consumers should re-pull
-   *  state via the accessors. Returns unsubscribe. */
-  subscribeToChat: (l: ChatListener) => () => void;
-
-  /** Send a chat message. Trimmed and validated client-side
-   *  (1..200 chars after trim); empty/oversize sends are silently
-   *  dropped. Worker classifies via Workers AI and either broadcasts
-   *  to all sockets or sends chat_rejected back to this one. */
+  getLastChatRejection: () => ChatRejection | null;
+  getSessionChatCount: () => number;
+  getYourHandle: () => string | null;
   sendChat: (text: string) => void;
-
-  /** Clear the last rejection state. The UI calls this when the
-   *  visitor edits the input after a reject, or when they explicitly
-   *  dismiss the rejection banner. */
+  subscribeToChat: (l: () => void) => () => void;
   clearChatRejection: () => void;
 }
 
@@ -1032,8 +852,6 @@ export function usePond(opts: UsePondOptions): UsePondResult {
             else if (msg.t === "tick") store.applyTick(msg);
             else if (msg.t === "speech") store.applySpeech(msg);
             else if (msg.t === "mechanism") store.applyMechanism(msg);
-            else if (msg.t === "chat_message") store.applyChatMessage(msg);
-            else if (msg.t === "chat_rejected") store.applyChatRejected(msg);
           } catch (err) {
             console.warn("pond: bad message", err);
           }
@@ -1167,6 +985,7 @@ export function usePond(opts: UsePondOptions): UsePondResult {
         springVx: k.vx,
         springVz: k.vz,
         hunger: hungerById.get(k.id),
+        ageTicks: k.ageTicks,
       });
     }
     return out;
@@ -1188,31 +1007,18 @@ export function usePond(opts: UsePondOptions): UsePondResult {
      *  animation loop (which the diagnostic does). */
     getFood: (): FoodFrame[] => state.food,
 
-    // ─── chat surface ──────────────────────────────────────────
-    getChat: (): ChatMessage[] => store.peek().chat,
-    getLastChatRejection: (): ChatRejection | null =>
-      store.peek().lastChatRejection,
-    getYourHandle: (): string | null => store.peek().yourHandle,
-    getSessionChatCount: (): number => store.peek().sessionChatCount,
-    getChatTotal: (): number => store.peek().chatTotal,
-    subscribeToChat: store.subscribeToChat,
-    sendChat: (text: string): void => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      const trimmed = text.trim();
-      // Mirror the worker's validation (z.string().min(1).max(200))
-      // so the malformed-shape rejection happens before the round
-      // trip rather than after. Silently drop both edges; the UI
-      // should be disabling the send button when these conditions
-      // hold.
-      if (trimmed.length === 0 || trimmed.length > 200) return;
-      try {
-        ws.send(JSON.stringify({ t: "chat", text: trimmed }));
-      } catch {
-        /* socket closed mid-send; the close handler will reconnect */
-      }
-    },
-    clearChatRejection: (): void => store.clearChatRejection(),
+    // ─── Chat stubs — STUB UNTIL CHAT BACKEND ──────────────────────────
+    // Empty/null/no-op surfaces that satisfy PondChat.tsx's type checks
+    // and let it render without crashing. Real wiring (worker chat WS,
+    // Gemma safety classifier, bounded history) is post-Stripe work.
+    getChat: (): ChatMessage[] => [],
+    getChatTotal: (): number => 0,
+    getLastChatRejection: (): ChatRejection | null => null,
+    getSessionChatCount: (): number => 0,
+    getYourHandle: (): string | null => null,
+    sendChat: (_text: string): void => { /* no-op until backend */ },
+    subscribeToChat: (_l: () => void): (() => void) => () => { /* no-op */ },
+    clearChatRejection: (): void => { /* no-op */ },
   };
 }
 
@@ -1236,6 +1042,10 @@ export interface DebugKine {
   springVz: number;
   /** Hunger 0..1. Undefined only if the server hasn't sent it yet. */
   hunger?: number;
+  /** Age in ticks since hatch. Diagnostic divides by ticks-per-sim-day
+   *  to display sim-day / sim-hour values. Undefined only if the
+   *  server hasn't sent it yet (pre-'at'-field worker builds). */
+  ageTicks?: number;
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -1253,13 +1063,13 @@ function toShader(f: KoiFrame): ShaderFish {
     name: f.name,
     color: f.c,
     mood: f.m,
-    founder: f.founder,
     // Action-state — forwarded as-is. Renderers read these each frame
     // to animate intent-specific behavior without needing to re-query
     // the backend.
     intent: f.i,
     target: f.t,
     mechanism: f.mech,
+    founder: f.founder,
   };
 }
 
@@ -1330,10 +1140,10 @@ function kineToShader(k: KineState): ShaderFish {
     name: k.name,
     color: k.color,
     mood: k.mood,
-    founder: k.founder,
     intent: k.intent,
     target: k.target,
     mechanism: k.mechanism,
+    founder: k.founder,
   };
 }
 

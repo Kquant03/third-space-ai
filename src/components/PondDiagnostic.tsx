@@ -438,6 +438,7 @@ export default function PondDiagnostic() {
               <th style={th}>|v|</th>
               <th style={th}>hunger</th>
               <th style={th}>age</th>
+              <th style={th}>snap ms</th>
             </tr>
           </thead>
           <tbody>
@@ -471,6 +472,26 @@ export default function PondDiagnostic() {
                   <td style={td}>{vmag.toFixed(3)}</td>
                   <td style={{ ...td, color: hungerColor }}>
                     {h === undefined ? "—" : h.toFixed(2)}
+                  </td>
+                  {/* Real koi life-age. tick_interval_ms from pond
+                      meta tells us ms per tick; combined with
+                      6 sim-hours per real-hour at REAL_SECONDS_PER_SIM_DAY
+                      = 21600, ticks-per-sim-day = (21600 * 1000) /
+                      tick_interval_ms. For young fish (< 1 day) show in
+                      sim-hours for readability. */}
+                  <td style={{ ...td, color: COLOR.ink }}>
+                    {(() => {
+                      if (k.ageTicks === undefined) return "—";
+                      const tickIntervalMs = state.meta?.tick_interval_ms ?? 500;
+                      const REAL_SECONDS_PER_SIM_DAY = 21600;
+                      const ticksPerSimDay = (REAL_SECONDS_PER_SIM_DAY * 1000) / tickIntervalMs;
+                      const ageDays = k.ageTicks / ticksPerSimDay;
+                      if (ageDays < 1) {
+                        const ageHours = ageDays * 24;
+                        return ageHours.toFixed(1) + "h";
+                      }
+                      return ageDays.toFixed(1) + "d";
+                    })()}
                   </td>
                   <td style={{ ...td, color: k.snapAgeMs > 1500 ? COLOR.bad : k.snapAgeMs > 700 ? COLOR.warn : COLOR.ink }}>
                     {Math.round(k.snapAgeMs)}

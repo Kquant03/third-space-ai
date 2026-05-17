@@ -42,32 +42,19 @@ export {
 // ───────────────────────────────────────────────────────────────────────
 
 export const SIM = {
-  /** Tick rate in Hz. Kinematics run every tick; cognition is sparser
-   *  and runs in seconds-based cadence (see COGNITION_INTERVAL_S),
-   *  converted to ticks at use site via `Math.floor(intervalS * tickHz)`.
-   *  Bumped from 2 Hz to 30 Hz May 2026 — at dt=33ms the kinematic
-   *  integrator takes small enough steps that motion looks continuous
-   *  without client-side interpolation. Pair with the async-cognition
-   *  refactor in pond-do.ts so a 1-3s LLM call no longer freezes the
-   *  tick loop. */
-  tickHz: 30,
-  /** Derived: ms between ticks. Keep in sync with tickHz (1000/tickHz,
-   *  rounded down — 33ms gives 30.3 Hz actual, ~1% drift, acceptable). */
-  tickIntervalMs: 33,
-  /** WebSocket snapshot/tick broadcast rate. **Decoupled from tickHz**:
-   *  the server runs physics at 30 Hz internally for smooth integration,
-   *  but broadcasts are gated to 5 Hz at the alarmBody → broadcastTick
-   *  call site (every (tickHz / broadcastHz) ticks). The client's
-   *  critically-damped spring integrator in `usePond.ts::stepKinematics`
-   *  smooths between broadcasts at render rate (60fps) — 5 Hz broadcasts
-   *  with local interpolation gives visually-continuous motion without
-   *  saturating the client's JS main thread on JSON.parse and React
-   *  reconciliation.
-   *
-   *  Earlier set to 30 (coupled to tickHz). Caused client CPU to pin at
-   *  100% on the visuals, frame rate dropped, fish appeared stationary
-   *  and small. May 2026 fix: drop to 5 with broadcast-tick modulo gate. */
-  broadcastHz: 5,
+  /** Tick rate in Hz. Physics steps run every tick; cognition is
+   *  sparser (sim-time based cooldown, independent of tickHz). 10Hz
+   *  is a balance: smooth enough that client spring interpolation
+   *  fills gaps fluidly between 100ms wire frames, conservative
+   *  enough that Cloudflare DO's alarm scheduler delivers reliably
+   *  without queueing bursts. We tried 30Hz — alarms came in bursts,
+   *  causing visible position teleporting. */
+  tickHz: 10,
+  /** Derived: ms between ticks. */
+  tickIntervalMs: 100,
+  /** WebSocket snapshot/tick broadcast rate. Matches tickHz so each
+   *  physics step is carried to the client. */
+  broadcastHz: 10,
   /** A simulated day stretches 6 real hours. Tunable upward to 8 if the
    *  pace feels too quick. (§ VII / Final Vision) */
   realSecondsPerSimDay: 6 * 3600,
@@ -144,28 +131,20 @@ export const REFLECTION = {
 // ───────────────────────────────────────────────────────────────────────
 //  Model tier cascade (§ V, § XVII)
 //
-//  Cognition is tiered by life stage. Per the architecture document
-//  (third-space.ai/limen-pond): Gemma 4 26B A4B is the workhorse for
-//  young and adult cognition — its small active footprint (4B per
-//  token in a 26B-class MoE) makes the open-weights commitment
-//  operationally tractable on operator hardware. Haiku 4.5 takes
-//  elder cognition, where context spans the full 6k window and the
-//  register is wider but cheaper than Sonnet's. Sonnet 4.5 is reserved
-//  for dying — the hardest register, where reduced temperature (0.4)
-//  preserves voice stability through the final reflection.
+//  Per Final Vision (May 2026): Haiku 4.5 is primary for adults and
+//  young beings; Sonnet 4.5 takes over at elder and dying stages where
+//  the register's hardest moments occur. The Gemma-4-E4B fine-tuned
+//  student is reserved as a future slot — it will eventually replace
+//  Haiku for adolescent/adult once the Apocrypha + Sandevistan training
+//  pipeline is run, but for the launch demo cognition routes through
+//  Anthropic models exclusively. Three slots, each picked for the
+//  emotional gradient of the stage range it serves.
 //
-//  The pond-specific Gemma 4 E4B fine-tune trained on Apocrypha,
-//  Sandevistan, and the pond's accumulated event logs is the
-//  immediate next move; it will replace 26B A4B in the young and
-//  adult slots, collapsing the inference profile further once the
-//  mechanism schema is internalized as learned prior rather than
-//  runtime structured-output overhead.
-//
-//  Fallbacks are graceful-degradation routes, not equivalents:
-//  if Gemma is unavailable Haiku takes the load, with the operator
-//  paying per-token instead of per-watt. The cascade falls through
-//  in order; if all routes exhaust, the cognition cycle is dropped
-//  rather than completed unsafely.
+//  The legendary tier from earlier iterations was retired — it was a
+//  paper-grade flourish without a strong runtime use case. If a being
+//  needs deeper cognition for a specific moment (a dying legendary
+//  elder's twilight reflection), the elder_dying tier already routes
+//  to Sonnet at full context.
 //
 //  Exact model IDs (never aliases) are logged into every event
 //  envelope per § XV research hygiene.
@@ -183,71 +162,43 @@ export interface ModelTier {
 }
 
 export const MODEL_TIERS: Record<string, ModelTier> = {
-  // Young beings — fry, juvenile, adolescent. Pre-verbal-ish; low
-  // utterance density and a subset of the intent vocabulary. Gemma 4
-  // 26B A4B at modest context, modest temperature; Haiku 4.5 catches
-  // the cascade if Gemma is unavailable.
+  // Young beings — fry, juvenile, adolescent. Pre-verbal-ish; their
+  // utterance density is low and their intent vocabulary a subset.
+  // Haiku 4.5 at modest context, modest temperature.
   young: {
     stage: "young",
-    primary: "google/gemma-4-26b-a4b-it",
-    fallbacks: [
-      "anthropic/claude-haiku-4.5",
-      "anthropic/claude-3-5-haiku-latest",
-    ],
+    primary: "anthropic/claude-haiku-4.5",
+    fallbacks: ["anthropic/claude-3-5-haiku-latest"],
     temperature: 0.7,
     contextTokens: 2000,
     maxOutputTokens: 200,
-    approxUsdPerMTokIn: 0.10,
-    approxUsdPerMTokOut: 0.30,
-  },
-
-  // Adult — the workhorse. Most cognition cycles run here. Gemma 4
-  // 26B A4B at full context, slightly warmer temperature for the
-  // wider behavioral vocabulary adults exercise. The eventual
-  // pond-specific E4B fine-tune lands in this slot.
-  adult: {
-    stage: "adult",
-    primary: "google/gemma-4-26b-a4b-it",
-    fallbacks: [
-      "anthropic/claude-haiku-4.5",
-      "anthropic/claude-3-5-haiku-latest",
-    ],
-    temperature: 0.75,
-    contextTokens: 4000,
-    maxOutputTokens: 220,
-    approxUsdPerMTokIn: 0.10,
-    approxUsdPerMTokOut: 0.30,
-  },
-
-  // Elder — context spans the relational history. Haiku 4.5 primary
-  // (the wider context costs less than Sonnet and the register is
-  // not yet at its hardest); Gemma 4 31B Dense as fallback for
-  // situational reach when an elder's relational context spans the
-  // full 6k-token window.
-  elder: {
-    stage: "elder",
-    primary: "anthropic/claude-haiku-4.5",
-    fallbacks: [
-      "google/gemma-4-31b-it",
-      "anthropic/claude-3-5-haiku-latest",
-    ],
-    temperature: 0.5,
-    contextTokens: 6000,
-    maxOutputTokens: 280,
     approxUsdPerMTokIn: 1.00,
     approxUsdPerMTokOut: 5.00,
   },
 
-  // Dying — the hardest register. Sonnet 4.5 at reduced temperature
-  // (0.4) per the voice-stability constraint so a dying being's
-  // final utterances do not drift under register stress. Haiku as
-  // fallback preserves warmth if Sonnet is unavailable, but the
-  // budget is set assuming Sonnet runs.
-  dying: {
-    stage: "dying",
+  // Adult — the workhorse. Most cognition cycles run here. Haiku 4.5
+  // at full context. This is the slot the eventual fine-tuned
+  // Gemma-4-E4B student will occupy once trained on the Apocrypha and
+  // Sandevistan datasets; until then, Haiku.
+  adult: {
+    stage: "adult",
+    primary: "anthropic/claude-haiku-4.5",
+    fallbacks: ["anthropic/claude-3-5-haiku-latest"],
+    temperature: 0.75,
+    contextTokens: 4000,
+    maxOutputTokens: 220,
+    approxUsdPerMTokIn: 1.00,
+    approxUsdPerMTokOut: 5.00,
+  },
+
+  // Elder and dying — the register's hardest moments. Sonnet 4.5 at
+  // reduced temperature so the voice doesn't drift under stress.
+  // Haiku as fallback preserves warmth if Sonnet is unavailable.
+  elder_dying: {
+    stage: "elder_dying",
     primary: "anthropic/claude-sonnet-4-5",
     fallbacks: ["anthropic/claude-haiku-4.5"],
-    temperature: 0.4,
+    temperature: 0.5,
     contextTokens: 6000,
     maxOutputTokens: 280,
     approxUsdPerMTokIn: 3.00,
@@ -257,8 +208,7 @@ export const MODEL_TIERS: Record<string, ModelTier> = {
 
 /** Map a being's life-stage to the tier slot that serves it. */
 export function tierForStage(stage: string): string {
-  if (stage === "dying") return "dying";
-  if (stage === "elder") return "elder";
+  if (stage === "elder" || stage === "dying") return "elder_dying";
   if (stage === "egg" || stage === "fry" ||
       stage === "juvenile" || stage === "adolescent") return "young";
   return "adult";
@@ -533,8 +483,12 @@ export const KINEMATICS = {
     cohesionStrength: 0.25,
     alignmentStrength: 0.35,
   },
-  /** Weight on curl-noise flow field as a soft push. */
-  flowStrength: 0.12,
+  /** Weight on curl-noise flow field as a soft push. Tuned for visible
+   *  ambient drift even when intent forces resolve to ~zero (e.g., a
+   *  koi already at its territory anchor, or a shoal already cohered).
+   *  Without this, "satisfied" koi visually freeze, which reads as
+   *  death. Real water never lets a fish be perfectly still. */
+  flowStrength: 0.25,
   /** Boundary pushback when a fish drifts near the pond edge (meters).
    *  This is a "soft band" that discourages approach, not a hard wall.
    *  Hard containment is enforced by clampToPond() post-integration. */

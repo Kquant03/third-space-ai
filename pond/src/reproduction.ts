@@ -68,9 +68,22 @@ export const SHELF_BAND = {
  *  yield 3-4 eggs, ~30% yield 5-6, ~5% yield a rare bumper cohort of
  *  8-10. With ~2% fry mortality, average survival is ~1-2 per spawning
  *  which, at one spawning per 10-14 sim-days, matches the target rate. */
+/** Egg-count weights for spawning. Historical multi-egg behavior:
+ *
+ *   const EGG_COUNT_WEIGHTS = [
+ *     [3, 0.35], [4, 0.30], [5, 0.18], [6, 0.12], [8, 0.04], [10, 0.01],
+ *   ];
+ *
+ * Now deprecated in favor of single-egg drops per spawning fire. The
+ * target birth rate (~5-6 fry over the founders' lifespan) is achieved
+ * by the natural-spawn gate firing multiple times across sim-days
+ * rather than by batch clutches. Single eggs read better visually:
+ * one egg appearing under the mother is unambiguous biology, whereas
+ * a cluster of 4 in a grid reads as procedural placement. Eggs from
+ * different sim-days will accumulate together on the shelf, producing
+ * the look of a clutch built over time. */
 const EGG_COUNT_WEIGHTS: ReadonlyArray<[number, number]> = [
-  [3, 0.35], [4, 0.30], [5, 0.18], [6, 0.12],
-  [8, 0.04], [10, 0.01],
+  [1, 1.0],
 ];
 
 /** Additional adults counted as co-present witnesses during spawning. */
@@ -497,17 +510,42 @@ export function placeEggs(
   count: number, atTick: SimTick,
   rng: Rng,
 ): EggPlacement[] {
-  const cx = (a.x + b.x) / 2;
-  const cz = (a.z + b.z) / 2;
+  // Identify the female parent. Eggs drop from under her body, not
+  // from the midpoint between parents — this is the biological case
+  // and reads correctly visually (a single egg appearing at the
+  // mother's current position rather than placed somewhere between
+  // her and the male). Fall back to `a` if neither is marked female
+  // (shouldn't happen in current code; sex is required at creation),
+  // because a misplaced egg is recoverable but a thrown exception
+  // mid-spawning is not.
+  const mother = a.sex === "female" ? a : b.sex === "female" ? b : a;
+  const father = mother === a ? b : a;
+
   const out: EggPlacement[] = [];
   for (let i = 0; i < count; i++) {
-    const ang = rng.float() * Math.PI * 2;
-    const r = 0.08 + rng.float() * 0.22;
-    const x = cx + r * Math.cos(ang);
-    const z = cz + r * Math.sin(ang);
-    const y = SHELF_BAND.yMin + (SHELF_BAND.yMax - SHELF_BAND.yMin) * rng.float();
+    // For count > 1 (currently unused — EGG_COUNT_WEIGHTS yields 1),
+    // add a small lateral jitter so eggs don't render coincident.
+    // For count === 1 the jitter is zero and the egg sits exactly at
+    // her body.
+    const jitter = count === 1
+      ? { dx: 0, dz: 0 }
+      : (() => {
+          const ang = rng.float() * Math.PI * 2;
+          const r = 0.05 + rng.float() * 0.10;
+          return { dx: r * Math.cos(ang), dz: r * Math.sin(ang) };
+        })();
+
+    const x = mother.x + jitter.dx;
+    const z = mother.z + jitter.dz;
+    // Depth: drop the egg at the mother's exact y so it appears to come
+    // FROM her body, not from a fixed shelf band above or below her.
+    // If she's swimming the shelf, the egg lands on the shelf. If
+    // she's swimming higher, the egg starts higher and naturally
+    // settles. Either way the visual is "from her" rather than
+    // "from somewhere else."
+    const y = mother.y;
     const legendary = rng.chance(LIFE.legendaryRate);
-    const color = rng.chance(0.5) ? a.color : b.color;
+    const color = rng.chance(0.5) ? mother.color : father.color;
     out.push({
       eggId: eggIdFor(atTick, i, rng),
       parentAId: a.id, parentBId: b.id,

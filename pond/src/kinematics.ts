@@ -297,7 +297,11 @@ function intentPull(
       // at the same distance from everyone else.
       const anchor = territoryAnchor(self.id);
       const d = mag(anchor.x - self.x, anchor.z - self.z);
-      if (d < 0.5) return { x: 0, z: 0, strength: 0 };  // arrived
+      // Even when "arrived" (within 0.5m), retain a small inward
+      // tendency so the koi tends toward the anchor rather than
+      // settling into a dead stop. Combined with curl + sway forces,
+      // this keeps the koi visibly tending somewhere.
+      if (d < 0.5) return toward(anchor.x, anchor.z, 0.08);
       return toward(anchor.x, anchor.z, 0.5);
     }
 
@@ -485,9 +489,20 @@ export function stepKoi(
   simTime: number,
   dt: number = SIM.tickIntervalMs / 1000,
 ): void {
-  // Eggs do not move.
+  // Eggs do not swim, but they sink slightly to settle on the
+  // substrate below shelf swim depth. Real koi eggs are adhesive and
+  // slightly denser than water — they descend from the mother and
+  // attach to the floor within seconds. We sink to -0.5 (below the
+  // ~ -0.3 to -0.4 shelf where adults swim, but well within the
+  // visible camera frame). At this depth, depth-testing renders
+  // swimming fish in front of resting eggs.
   if (self.stage === "egg") {
     self.vx = 0; self.vz = 0;
+    const EGG_FLOOR_Y = -0.5;
+    if (self.y > EGG_FLOOR_Y) {
+      self.y -= 0.10 * dt;
+      if (self.y < EGG_FLOOR_Y) self.y = EGG_FLOOR_Y;
+    }
     return;
   }
 
@@ -501,12 +516,54 @@ export function stepKoi(
   // 3. Curl-noise ambient current
   const curl = sampleCurlXZ(self.x, self.z, simTime, KINEMATICS.flowStrength);
 
+  // 3b. Idle sway — a small, slow oscillation always present on living
+  // koi. Without this, a koi whose intent has resolved (already at
+  // anchor, already shoaling) has near-zero net force and damping
+  // brings it to a stop, which reads as death rather than rest. Real
+  // fish are never perfectly still — gill action, buoyancy, and
+  // micro-currents keep them swaying. Magnitude is small and the
+  // period is per-koi (hashed from id) so two adjacent fish don't
+  // sway in lockstep.
+  let swayX = 0, swayZ = 0;
+  if (self.stage !== "egg" && self.stage !== "dying") {
+    // Per-koi phase seeds derived from id.
+    let phaseHash = 0;
+    for (let i = 0; i < self.id.length; i++) {
+      phaseHash = ((phaseHash << 5) - phaseHash) + self.id.charCodeAt(i);
+      phaseHash |= 0;
+    }
+    const phaseX = (Math.abs(phaseHash) % 1000) / 1000 * Math.PI * 2;
+    const phaseZ = (Math.abs(phaseHash >> 4) % 1000) / 1000 * Math.PI * 2;
+    // ~12-second period at simTime in seconds. Magnitude 0.04 — small
+    // but defeats damping over time so the fish keeps drifting.
+    const omega = 2 * Math.PI / 12;
+    swayX = Math.cos(omega * simTime + phaseX) * 0.04;
+    swayZ = Math.sin(omega * simTime + phaseZ) * 0.04;
+  }
+
+  // 3c. Persistent forward propulsion — real fish always have tail-beat
+  // thrust in their heading direction, even when resting. Without this,
+  // satisfied intents (already shoaling, already at anchor) resolve to
+  // ~zero force, sway oscillates around the current point, and damping
+  // bleeds residual velocity to a halt. The koi looks dead. Adding a
+  // small persistent forward force in heading direction means the koi
+  // always swims gently forward; intents and sway perturb the direction
+  // but the baseline is alive. Magnitude 0.15 — strong enough that
+  // cruise speed is visibly nonzero against damping, soft enough that
+  // intent forces (typical magnitude 0.3-0.5) still dominate when they
+  // fire.
+  let propX = 0, propZ = 0;
+  if (self.stage !== "dying") {
+    propX = Math.cos(self.h) * 0.15;
+    propZ = Math.sin(self.h) * 0.15;
+  }
+
   // 4. Boundary pushback (gourd SDF)
   const bd = boundaryPushback(self);
 
   // 5. Sum accelerations
-  let ax = goal.x * goal.strength + fl.x + curl.vx + bd.x;
-  let az = goal.z * goal.strength + fl.z + curl.vz + bd.z;
+  let ax = goal.x * goal.strength + fl.x + curl.vx + bd.x + swayX + propX;
+  let az = goal.z * goal.strength + fl.z + curl.vz + bd.z + swayZ + propZ;
 
   // PAD modulation: higher arousal → stronger drive; lower valence →
   // separation stronger (handled in flocking radii indirectly, but we

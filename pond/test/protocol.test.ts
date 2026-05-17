@@ -61,7 +61,7 @@ describe("protocol — WS envelopes", () => {
       kind: "died",
       tick: 200_000,
       now: Date.now(),
-      details: { name: "Moon-Watcher" },
+      details: { name: "Sylvanas" },
     };
     expect(AmbientEventMessageSchema.parse(msg)).toBeTruthy();
   });

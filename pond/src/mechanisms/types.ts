@@ -75,6 +75,12 @@ export const FAMILY_OF: Record<LoveFlowMechanism, LoveFlowFamily> = {
   farewell: "ritual",
   solstice_attendance: "ritual",
   seasonal_rite: "ritual",
+  /** Parent attending their own egg or fry. Detector lives in
+   *  witnessing.ts because the logic is proximity-based (closer to
+   *  witnessing than to seasonal cycle); the family assignment here
+   *  is "ritual" because the act is one of the colony's recurring
+   *  patterns around new life, not a moment of dyadic recognition. */
+  birth_witnessing: "ritual",
 };
 
 // ───────────────────────────────────────────────────────────────────

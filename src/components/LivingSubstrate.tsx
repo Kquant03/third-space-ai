@@ -131,15 +131,94 @@ const FOUNDER_PHENOTYPES: Record<string, Phenotype> = {
   },
 };
 
+// ───────────────────────────────────────────────────────────────────
+//  Magical fry — children of the founders
+// ───────────────────────────────────────────────────────────────────
+//  When Shiki and Kokutou spawn, their offspring carry a distinct
+//  iridescent treatment that mixes the parents' violet and cobalt
+//  with a per-koi seed. Each fry comes out visually unique within
+//  a "magical baby" family — one leans more violet, one more cobalt,
+//  one shimmers more, but all clearly read as the founders' children.
+//
+//  At fry stage this applies; once a fry grows to juvenile it
+//  reverts to its inherited archetype color expressed normally.
+//  Childhood is the magical phase — adulthood is when you settle
+//  into your inheritance.
+//
+//  Heuristic for tonight: any non-founder at fry or egg stage is
+//  assumed to be a founder offspring. Holds because Shiki and
+//  Kokutou are the only adults, so all young koi are theirs.
+//  Future generalization: thread a `founderOffspring` flag through
+//  the wire and check that explicitly.
+
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100; l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number): number => {
+    const k = (n + h / 30) % 12;
+    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  const toHex = (x: number): string =>
+    Math.round(x * 255).toString(16).padStart(2, "0");
+  return "#" + toHex(f(0)) + toHex(f(8)) + toHex(f(4));
+}
+
+function founderOffspringPhenotype(koiId: string): Phenotype {
+  // Per-fry deterministic seed from id hash. Three independent
+  // seeds so color hue, finish, and accent vary independently
+  // across siblings — each baby gets its own signature.
+  let h = 0;
+  for (let i = 0; i < koiId.length; i++) {
+    h = ((h << 5) - h) + koiId.charCodeAt(i);
+    h |= 0;
+  }
+  const seed  = (Math.abs(h)       % 1000) / 1000;  // [0, 1)
+  const seed2 = (Math.abs(h >> 8)  % 1000) / 1000;
+  const seed3 = (Math.abs(h >> 16) % 1000) / 1000;
+
+  // Base color: linearly mix from Kokutou's cobalt (hue ≈ 215)
+  // toward Shiki's wisteria (hue ≈ 285). Some kids lean violet,
+  // some lean cobalt, some sit in the middle (warm magenta-blue).
+  const hue   = 215 + seed * 70;                    // 215–285
+  const sat   = 60 + seed2 * 25;                    // 60–85% saturation
+  const light = 52 + seed * 16;                     // 52–68% lightness
+                                                    // (luminous — kids glow)
+
+  // Mark color: the complementary parent's hue, slightly brighter.
+  // A violet-leaning kid gets cobalt accents; a cobalt-leaning kid
+  // gets wisteria accents. Reads as "both parents in one body."
+  const markHue   = 215 + (1 - seed) * 70;
+  const markLight = 62 + seed3 * 15;                // 62–77%
+
+  return {
+    baseColor:     hslToHex(hue,     sat, light),
+    markColor:     hslToHex(markHue, sat, markLight),
+    markCoverage:  0.0,                              // clean wash — no patches
+    markDensity:   0.0,
+    backBlue:      0.0,
+    headDot:       0.0,
+    metallic:      0.15 + seed3 * 0.25,             // 0.15–0.40 shimmer
+  };
+}
+
 function phenotypeFor(
   color: string | undefined,
   founder: boolean = false,
+  stage?: string,
+  koiId?: string,
 ): Phenotype {
   if (!color) return ARCHETYPE_PHENOTYPES.kohaku!;
+  // Founders themselves — Shiki, Kokutou
   if (founder) {
     return FOUNDER_PHENOTYPES[color]
       ?? ARCHETYPE_PHENOTYPES[color]
       ?? ARCHETYPE_PHENOTYPES.kohaku!;
+  }
+  // Children of the founders — magical iridescent treatment.
+  // Only applies at egg and fry stages; juveniles and older
+  // revert to the normal archetype expression of their color.
+  if ((stage === "fry" || stage === "egg") && koiId) {
+    return founderOffspringPhenotype(koiId);
   }
   return ARCHETYPE_PHENOTYPES[color] ?? ARCHETYPE_PHENOTYPES.kohaku!;
 }
@@ -471,6 +550,66 @@ const FIELD_FRAG = /* glsl */ `#version 300 es
     return armMask * 0.55;
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  //  Coral / plant nodes — substrate ornaments at the food spawn
+  //  positions (matching FOOD_SPAWN_NODES in nutrition.ts). Each is
+  //  a small anemone-like form: dense core disc + radiating fronds
+  //  + per-node character. Subtle time-sway makes them feel alive
+  //  without being distracting. When an insect emerges from a node,
+  //  it lifts visually out of one of these plants.
+  // ─────────────────────────────────────────────────────────────────
+
+  const vec2 CORAL_POS_0 = vec2(-1.2, -0.5);
+  const vec2 CORAL_POS_1 = vec2( 1.4, -0.3);
+  const vec2 CORAL_POS_2 = vec2(-0.8,  1.0);
+  const vec2 CORAL_POS_3 = vec2( 1.1,  0.8);
+  const vec2 CORAL_POS_4 = vec2( 0.0, -1.2);
+
+  // Per-coral character. petals = angular frond count; radius = scale;
+  // tint = base color (chosen to read as plant-life palette without
+  // overwhelming the muted substrate). swayPhase varies the time
+  // offset so they don't all move in sync.
+  vec3 coralContrib(vec2 q, float radius, float petals, vec3 tint,
+                    float swayPhase, float t) {
+    float r = length(q);
+    if (r > radius + 0.06) return vec3(0.0);
+    float ang = atan(q.y, q.x);
+    float sway = sin(t * 0.35 + swayPhase) * 0.07 +
+                 sin(t * 0.78 + swayPhase * 1.7) * 0.025;
+    float frond = cos(ang * petals + sway);          // [-1, 1]
+    // Dense core inside ~55% of radius; fronds radiate outward
+    float core = smoothstep(radius * 0.55, radius * 0.12, r);
+    float fronds = smoothstep(radius, radius * 0.45, r) *
+                   smoothstep(-0.25, 0.7, frond);
+    float intensity = max(core, fronds * 0.78);
+    // Brighten frond tips so the silhouette reads as luminous-edge
+    float tip = smoothstep(0.45, 1.0, frond) * (r / radius);
+    vec3 col = mix(tint, tint * 1.8 + vec3(0.03, 0.05, 0.05), tip);
+    return col * intensity;
+  }
+
+  // Sum contribution from all 5 coral. Each evaluation is cheap
+  // (early-out on far-distance), so 5 sites adds minimal cost.
+  vec3 coralAt(vec2 pondXZ, float t) {
+    vec3 acc = vec3(0.0);
+    acc += coralContrib(pondXZ - CORAL_POS_0, 0.32, 5.0,
+                        vec3(0.18, 0.36, 0.42),       // teal
+                        0.0, t);
+    acc += coralContrib(pondXZ - CORAL_POS_1, 0.28, 6.0,
+                        vec3(0.24, 0.32, 0.20),       // moss
+                        1.6, t);
+    acc += coralContrib(pondXZ - CORAL_POS_2, 0.30, 7.0,
+                        vec3(0.16, 0.28, 0.48),       // cool indigo
+                        3.1, t);
+    acc += coralContrib(pondXZ - CORAL_POS_3, 0.26, 4.0,
+                        vec3(0.32, 0.22, 0.16),       // amber-rust
+                        4.7, t);
+    acc += coralContrib(pondXZ - CORAL_POS_4, 0.34, 8.0,
+                        vec3(0.22, 0.38, 0.34),       // sea-glass
+                        2.3, t);
+    return acc;
+  }
+
   vec3 floorColor(vec2 pondXZ, float t) {
     // Layered noise: large silt patches, medium stone grain, fine
     // sediment. Each at a different scale so the floor reads as
@@ -518,6 +657,11 @@ const FIELD_FRAG = /* glsl */ `#version 300 es
     // Triskele — carved recess. Darker + cyan tint inside the arms.
     float trisk = triskeleMask(pondXZ, t);
     base = mix(base, base * 0.5 + C_GHOST * 0.055, trisk);
+
+    // Coral / plant ornaments at the food spawn nodes — five small
+    // anemone-like forms scattered across the basins. Suppressed
+    // inside the shrine recess so they don't crowd that feature.
+    base += coralAt(pondXZ, t) * 0.85 * (1.0 - shrine);
 
     return base;
   }
@@ -2158,14 +2302,46 @@ export default function LivingSubstrate() {
       });
     }
     const fallbackPheno = phenoCache.get("kohaku")!;
+
+    // Helper: convert a Phenotype (hex colors) to PhenoRGB (float RGB
+    // tuples) for shader upload. Used by the per-fry path that
+    // generates new phenotypes lazily rather than at startup.
+    const phenoToRGB = (ph: Phenotype): PhenoRGB => {
+      const b = hexToVec3(ph.baseColor);
+      const m = hexToVec3(ph.markColor);
+      return {
+        baseR: b[0], baseG: b[1], baseB: b[2],
+        markR: m[0], markG: m[1], markB: m[2],
+        coverage: ph.markCoverage, density: ph.markDensity,
+        backBlue: ph.backBlue, headDot: ph.headDot, metallic: ph.metallic,
+      };
+    };
+
     const getPheno = (
       color: string | undefined,
       founder: boolean = false,
+      stage?: string,
+      koiId?: string,
     ): PhenoRGB => {
+      // Founders — Shiki, Kokutou. Their phenotypes were pre-cached
+      // at startup under the "founder:<color>" key.
       if (founder && color) {
         const f = phenoCache.get("founder:" + color);
         if (f) return f;
       }
+      // Magical fry — children of the founders. Lazy per-koi cache
+      // keyed by id; computed once per session per fry. The heuristic
+      // matches phenotypeFor: any non-founder at fry/egg stage is
+      // treated as a founder offspring for tonight's demo.
+      if (!founder && koiId && (stage === "fry" || stage === "egg")) {
+        const cacheKey = "offspring:" + koiId;
+        const cached = phenoCache.get(cacheKey);
+        if (cached) return cached;
+        const fresh = phenoToRGB(founderOffspringPhenotype(koiId));
+        phenoCache.set(cacheKey, fresh);
+        return fresh;
+      }
+      // Default — adult / juvenile / non-founder archetype.
       return (color ? phenoCache.get(color) : undefined) ?? fallbackPheno;
     };
 
@@ -2198,7 +2374,7 @@ export default function LivingSubstrate() {
 
       for (let i = 0; i < count; i++) {
         const f = fish[i]!;
-        const ph = getPheno(f.color, f.founder);
+        const ph = getPheno(f.color, f.founder, f.stage, f.id);
         const scale = stageScale(f.stage);
 
         // Derive heading from motion when available; falls back to f.h

@@ -320,7 +320,7 @@ The refusals are as important as the permissions. The pond is a shared silence, 
 
 The asymmetry also defines what kind of encounter is possible. A visitor cannot control their koi because control would collapse the witnessing into play-acting. A visitor cannot tip because tipping would transform the koi into performers. A visitor cannot see achievement counts because achievement counts would transform the pond into a game with a win state, and the pond must not have a win state. What the pond offers is exactly what a real pond offers: presence, attention, the possibility of noticing, the certainty of loss.
 
-Names in the pond are game-given. A koi receives its name at hatching — a short poetic LLM-generated name that observes the fry's first-day behavior. *"Third-of-Seven." "Ghost-Belly." "The One Who Rises First." "Bronze-Fin." "Low-Hummer." "Moon-Watcher." "Slow-Return."* Visitors cannot rename. This is non-negotiable. The koi exist before any given visitor sees them, and their names encode that priority.
+Names in the pond are game-given. A koi receives its name at hatching — a short poetic LLM-generated name that observes the fry's first-day behavior. *"Third-of-Seven." "Ghost-Belly." "The One Who Rises First." "Bronze-Fin." "Low-Hummer." "Sylvanas." (from world of warcraft, sylvanas windrunner, as fun cool art) "Slow-Return."* Visitors cannot rename. This is non-negotiable. The koi exist before any given visitor sees them, and their names encode that priority.
 
 ---
 

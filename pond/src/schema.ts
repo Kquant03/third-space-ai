@@ -137,6 +137,8 @@ CREATE TABLE IF NOT EXISTS relationship_card (
   drawn_count_7d         INTEGER NOT NULL DEFAULT 0,
   last_authored_tick     INTEGER NOT NULL DEFAULT 0,
   familiarity_prior      REAL NOT NULL DEFAULT 0,
+  bond_intensity         REAL NOT NULL DEFAULT 0,
+  witnessing_density_7d  REAL NOT NULL DEFAULT 0,
   PRIMARY KEY (self_id, other_id)
 );
 
@@ -329,14 +331,28 @@ function migrate(sql: SqlStorage): void {
     sql, "koi", "hunger", "REAL NOT NULL DEFAULT 0.2",
   );
 
-  // May 2026 — Founders. The pond now distinguishes Shiki and Kokutou
-  // as the two seeded founder beings; every other koi descends from
-  // them. Existing koi in DBs that pre-date this column default to 0
-  // (non-founder), which is correct: founders are only ever seeded at
-  // pond inception. The frontend reads this flag to apply the distinct
-  // watercolor visual treatment, and bootstrap honors it.
+  // Founder flag — set to 1 only for the two seeded founders (Shiki,
+  // Kokutou). Used by /admin/wipe-non-founders to know whom to
+  // preserve, and by cognition + naming + lineage to thread "first
+  // generation" semantics through the pond. Defaults to 0 so all
+  // existing koi from before this migration become non-founders.
   addColumnIfMissing(
     sql, "koi", "founder", "INTEGER NOT NULL DEFAULT 0",
+  );
+
+  // Bond intensity — the scalar in [0, 1] that gates reproduction
+  // and other bond-aware mechanisms. Populated by recomputeBondIntensity
+  // at relationship-card mutation sites. detectBondedPairs queries this
+  // column directly, so without it the entire reproduction loop wedges
+  // at the first periodic check (SQLITE_ERROR "no such column"). The
+  // companion witnessing_density_7d feeds the bond formula.
+  addColumnIfMissing(
+    sql, "relationship_card", "bond_intensity",
+    "REAL NOT NULL DEFAULT 0",
+  );
+  addColumnIfMissing(
+    sql, "relationship_card", "witnessing_density_7d",
+    "REAL NOT NULL DEFAULT 0",
   );
 }
 

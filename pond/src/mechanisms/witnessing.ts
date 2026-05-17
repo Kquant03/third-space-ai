@@ -26,6 +26,17 @@ import {
 //  Tunable thresholds
 // ───────────────────────────────────────────────────────────────────
 
+const BIRTH_WITNESSING = {
+  /** A parent must be within this many meters of their offspring for
+   *  birth_witnessing to fire. Tight — this is "attending" or
+   *  "nuzzling," not just "in the same pond." */
+  maxDistanceM: 0.5,
+  /** Per (parent, child) pair. Tuned so the mechanism can fire several
+   *  times across an egg's ~1.2 sim-day hatch period without spamming
+   *  the event log. */
+  cooldownSimHours: 4,
+};
+
 const PARALLEL_PRESENCE = {
   maxDistanceM: 1.2,
   maxHeadingDeltaRad: Math.PI / 4,  // 45° — soft side-by-side
@@ -312,9 +323,92 @@ export function detectJoyfulReunion(
   return out;
 }
 
-// ───────────────────────────────────────────────────────────────────
-//  Helper: standard symmetric pair firing
-// ───────────────────────────────────────────────────────────────────
+/**
+ * Detect parent-attending-offspring events. Iterates over every egg
+ * and fry in the pond, reads their parents from k.parents (populated
+ * at egg/fry creation, persists through hatch), and fires
+ * birth_witnessing for each living parent within proximity that
+ * hasn't fired this same pair within the cooldown.
+ *
+ * This is Stanley's "Shiki and Kokutou nuzzle their eggs and babies"
+ * mechanism. The pond whispers renderer should pick up these events
+ * and surface them as "Shiki attends her egg" / "Kokutou pauses near
+ * the clutch" — life rather than mechanism.
+ *
+ * Bypasses isObservant for the offspring (which excludes eggs and
+ * dying koi) because the egg IS the focal point of the event. The
+ * parent must still be observant; you cannot witness from death.
+ *
+ * PAD: parent receives a modest valence boost (gently joyful, not
+ * euphoric — this is daily presence with one's offspring, not a
+ * peak). The offspring's PAD isn't touched because eggs don't have
+ * mood; fry have mood but the developmental literature suggests
+ * being-attended-to by a parent is a baseline expectation rather
+ * than a delta event.
+ *
+ * No card valence bump — birth_witnessing is parent-child, and we
+ * don't currently maintain relationship_card rows on the parent-fry
+ * direction beyond the seeded familiarity bias at hatch (which
+ * fry-hatch handles separately).
+ */
+export function detectBirthWitnessing(
+  ctx: DetectionContext,
+): MechanismFiring[] {
+  const out: MechanismFiring[] = [];
+  const cooldown = cooldownFromHours(
+    BIRTH_WITNESSING.cooldownSimHours, ctx.tickHz,
+  );
+
+  // Index living koi by id for fast parent lookup. Cheap — small set.
+  const livingById = new Map<string, KoiState>();
+  for (const k of ctx.koi) {
+    if (k.stage !== "dying") livingById.set(k.id, k);
+  }
+
+  for (const child of ctx.koi) {
+    // Birth-witnessing only applies to eggs and fry. Older offspring
+    // generate their own relationships through interaction; they don't
+    // need a dedicated parent-attending event.
+    if (child.stage !== "egg" && child.stage !== "fry") continue;
+    if (!child.parents || child.parents.length === 0) continue;
+
+    for (const parentId of child.parents) {
+      const parent = livingById.get(parentId);
+      if (!parent) continue;                       // parent no longer alive
+      if (parent.stage === "egg" || parent.stage === "fry") continue;
+      if (parent.id === child.id) continue;         // defensive
+
+      const d = Math.hypot(parent.x - child.x, parent.z - child.z);
+      if (d > BIRTH_WITNESSING.maxDistanceM) continue;
+
+      // Cooldown: per (parent, child) pair.
+      const recent = lastFiredTick(
+        ctx.sql, "birth_witnessing",
+        parent.id, [child.id], ctx.tick, cooldown,
+      );
+      if (recent !== null) continue;
+
+      out.push({
+        mechanism: "birth_witnessing",
+        family: FAMILY_OF["birth_witnessing"],
+        actor: parent.id,
+        participants: [parent.id, child.id],
+        tick: ctx.tick,
+        actorDelta: { p: 0.08, a: -0.03 },           // gently joyful + calmer
+        participantDelta: { p: 0 },                  // egg/fry untouched
+        payload: {
+          parent: parent.id,
+          child: child.id,
+          child_stage: child.stage,
+          child_color: child.color,
+          distance: d,
+        },
+        cardValenceBump: 0,
+      });
+    }
+  }
+  return out;
+}
 
 function makePairFiring(
   mech: LoveFlowMechanism, a: KoiState, b: KoiState, tick: SimTick,
@@ -347,6 +441,7 @@ export function runWitnessingDetectors(
     ...detectSharedAttention(ctx),
     ...detectBearingWitness(ctx),
     ...detectJoyfulReunion(ctx),
+    ...detectBirthWitnessing(ctx),
   ];
 }
 

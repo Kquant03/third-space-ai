@@ -97,10 +97,12 @@ export default function PondWhispers() {
   }, []);
 
   // Fish position lookup in pond meters — pondToScreen handles the
-  // perspective projection through the substrate's camera.
-  const fishById = new Map<string, { x: number; z: number }>();
+  // perspective projection through the substrate's camera. Includes
+  // y (depth) so the projection uses the fish's actual rendered
+  // position, not the y=0 surface point above them.
+  const fishById = new Map<string, { x: number; y: number; z: number }>();
   for (const f of pond.fish) {
-    fishById.set(f.id, { x: f.x, z: f.z });
+    fishById.set(f.id, { x: f.x, y: f.y, z: f.z });
   }
 
   return (
@@ -122,7 +124,7 @@ export default function PondWhispers() {
 
         const W = typeof window !== "undefined" ? window.innerWidth : 1920;
         const H = typeof window !== "undefined" ? window.innerHeight : 1080;
-        const screen = pondToScreen(pos.x, pos.z, W, H);
+        const screen = pondToScreen(pos.x, pos.z, W, H, pos.y);
         if (!screen) return null;  // behind camera (shouldn't happen)
 
         const age = performance.now() - u.createdAtMs;

@@ -153,7 +153,15 @@ export default function LimenPondPage() {
       const kine = pondRef.current.getDebugKine();
       const k = kine.find((x) => x.id === hoveredId);
       if (!k) { setHoverXY(null); return; }
-      const scr = pondToScreen(k.renderX, k.renderZ, window.innerWidth, window.innerHeight);
+      // Pass renderY so the label lands at the koi's body, not at the
+      // water surface above it. pondCamera.ts bug #3 — without pondY,
+      // the surface point gets projected and the label drifts up by
+      // ~koi depth × perspective foreshortening.
+      const scr = pondToScreen(
+        k.renderX, k.renderZ,
+        window.innerWidth, window.innerHeight,
+        k.renderY,
+      );
       if (scr) setHoverXY({ x: scr.sx, y: scr.sy });
     };
     tick();
@@ -252,6 +260,9 @@ export default function LimenPondPage() {
     const { vx, vy, aspect } = clientToViewport(e.clientX, e.clientY, W, H);
     const hit = viewportToPondXZ(vx, vy, aspect);
 
+    // Pointer-on-surface logic for feeding & pebble drops is unchanged.
+    // Those target the water surface (y=0); mouse→surface projection is
+    // correct for them. Only hover detection needs the depth-aware path.
     if (mode !== "watch") {
       const valid = hit !== null && pondSDF(hit.x, hit.z) <= -0.1;
       setPointerScreen({ x: e.clientX, y: e.clientY, validPondXZ: valid });
@@ -259,18 +270,24 @@ export default function LimenPondPage() {
       setPointerScreen(null);
     }
 
-    if (hit) {
-      const s = pondRef.current.peek();
-      let nearestId: string | null = null;
-      let nearestD2 = 0.7 * 0.7;
-      for (const f of s.fish) {
-        const d2 = (f.x - hit.x) ** 2 + (f.z - hit.z) ** 2;
-        if (d2 < nearestD2) { nearestId = f.id; nearestD2 = d2; }
-      }
-      setHoveredId(nearestId);
-    } else {
-      setHoveredId(null);
+    // Hover detection: koi swim at y ≈ -0.6 (underwater), so projecting
+    // the mouse onto y=0 and comparing in pond-XZ puts the hit-zone far
+    // above where the visitor actually sees the fish. Instead, project
+    // every koi to screen coords using its actual renderY, then compare
+    // in screen space. 60px screen-radius is roughly one koi-body wide
+    // and feels right for a forgiving but precise hover.
+    const kine = pondRef.current.getDebugKine();
+    let nearestId: string | null = null;
+    let nearestD2 = 60 * 60;  // 60px radius²
+    for (const k of kine) {
+      const scr = pondToScreen(k.renderX, k.renderZ, W, H, k.renderY);
+      if (!scr) continue;
+      const dx = scr.sx - e.clientX;
+      const dy = scr.sy - e.clientY;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < nearestD2) { nearestId = k.id; nearestD2 = d2; }
     }
+    setHoveredId(nearestId);
   }, [mode]);
 
   const handleLeave = useCallback(() => {
@@ -481,7 +498,15 @@ export default function LimenPondPage() {
 
       <ReadMoreDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
 
-      <PondChat pond={pond} COLOR={COLOR} FONT={FONT} />
+      {/* PondChat mounts only when the chat surface exists on the
+          hook. The chat backend (subscribeToChat, getChat, postChat,
+          getYourHandle) is incomplete in usePond.ts — wiring it up
+          is part of the pebble inscription work, not tonight's
+          hackathon scope. Until then, conditional mount so the
+          component doesn't crash on undefined pond methods. */}
+      {"subscribeToChat" in pond && (
+        <PondChat pond={pond} COLOR={COLOR} FONT={FONT} />
+      )}
 
       <style>{`
         .pond-chip:hover {

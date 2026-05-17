@@ -32,7 +32,7 @@ export const SeasonSchema = z.enum(["spring", "summer", "autumn", "winter"]);
 export const WeatherSchema = z.enum(["clear", "breeze", "rain", "storm"]);
 
 export const LifeStageSchema = z.enum([
-  "egg", "fry", "juvenile", "adolescent", "adult", "elder", "dying", "dead",
+  "egg", "fry", "juvenile", "adolescent", "adult", "elder", "dying",
 ]);
 
 // ───────────────────────────────────────────────────────────────────
@@ -71,12 +71,6 @@ export const KoiFrameSchema = z.object({
   // or fin-droop) as the fish's body state becomes visible in its motion.
   hu: z.number().min(0).max(1).optional(),
 
-  // Founder flag — true for koi created at pond instantiation rather
-  // than hatched. Present only on Shiki and Kokutou (or any future
-  // founders); absent on all naturally-hatched koi. The renderer
-  // reads this to apply distinct treatment to the anchor presences.
-  founder: z.boolean().optional(),
-
   // Current kinematic intent — what the koi is doing right now. Shipped
   // every tick so the frontend can animate intent-specific behavior
   // (linger orbits, shoal formation, approach curves, surface breaches).
@@ -103,6 +97,20 @@ export const KoiFrameSchema = z.object({
   // an active love-flow mechanism (e.g. gift, play_invitation), this
   // field identifies it. Most ticks this is absent.
   mech: z.string().optional(),
+
+  // Age in ticks since hatch. Surfaces to the diagnostic so the operator
+  // can see real koi life-age (sim-days/sim-hours) and distinguish it
+  // from snapshot freshness. Optional so older worker builds without
+  // this field still parse cleanly.
+  at: z.number().int().nonnegative().optional(),
+
+  // True for the originating founder koi (Shiki, Kokutou). Worker sends
+  // founder:true every tick for founders, omits otherwise. The client
+  // uses this to route them through founder-specific phenotype paths
+  // (distinct color palettes, founder-only kinematic flourishes,
+  // protected admin operations like wipe-non-founders). Without it,
+  // founders would render in their archetype's default colors.
+  founder: z.boolean().optional(),
 });
 
 export type KoiFrame = z.infer<typeof KoiFrameSchema>;
@@ -138,20 +146,6 @@ export const SnapshotMessageSchema = z.object({
   fish: z.array(KoiFrameSchema),
   food: z.array(FoodFrameSchema).optional(),
   pondMeta: PondMetaSchema,
-  /** Chat surface payload — present when the visitor session has a
-   *  handle and the worker is on the chat-deployed code path. Each
-   *  field is independently optional so pre-chat-deploy clients and
-   *  worker rollbacks degrade gracefully (the client treats absent
-   *  fields as "chat unavailable for this session"). */
-  chat: z.array(z.object({
-    id: z.string(),
-    handle: z.string(),
-    text: z.string(),
-    at: z.number(),
-    kind: z.enum(["visitor", "pond"]).optional(),
-  })).optional(),
-  yourHandle: z.string().optional(),
-  chatTotal: z.number().optional(),
 });
 
 /** Incremental frame — broadcast at `broadcastHz`. */
@@ -207,53 +201,12 @@ export const MechanismMessageSchema = z.object({
   payload: z.record(z.unknown()).optional(),
 });
 
-// ───────────────────────────────────────────────────────────────────
-//  Chat surface — visitor-to-visitor, classifier-gated, (§ XIV)
-// ───────────────────────────────────────────────────────────────────
-
-/** Internal chat-message representation, used by the worker before
- *  the message is wrapped into a broadcast envelope. The runtime
- *  ChatMessage type the pond holds in its ring buffer. */
-export const ChatMessageSchema = z.object({
-  id: z.string(),
-  handle: z.string(),
-  text: z.string().min(1).max(200),
-  at: z.number(),
-  kind: z.enum(["visitor", "pond"]).optional(),
-});
-export type ChatMessage = z.infer<typeof ChatMessageSchema>;
-
-/** Broadcast envelope — sent to every connected session when a chat
- *  message is accepted by the classifier and added to the ring. */
-export const ChatMessageBroadcastSchema = z.object({
-  t: z.literal("chat_message"),
-  id: z.string(),
-  handle: z.string(),
-  text: z.string(),
-  at: z.number(),
-  chatTotal: z.number(),
-  kind: z.enum(["visitor", "pond"]),
-});
-
-/** Rejection envelope — sent back to just the submitting socket when
- *  the classifier (or a rate limiter) refuses the message. Carries
- *  the original text so the client can show "this wasn't sent: <text>"
- *  and offer a single rewrite. */
-export const ChatRejectedSchema = z.object({
-  t: z.literal("chat_rejected"),
-  text: z.string(),
-  reason: z.string(),
-  at: z.number(),
-});
-
 export const ServerToClientSchema = z.discriminatedUnion("t", [
   SnapshotMessageSchema,
   TickMessageSchema,
   SpeechMessageSchema,
   AmbientEventMessageSchema,
   MechanismMessageSchema,
-  ChatMessageBroadcastSchema,
-  ChatRejectedSchema,
 ]);
 
 export type ServerToClient = z.infer<typeof ServerToClientSchema>;
@@ -272,11 +225,6 @@ export const FoodMessageSchema = z.object({
   t: z.literal("food"),
   x: z.number(),
   z: z.number(),
-  /** Optional dev key — when present and matching env.DEV_FEED_KEY,
-   *  the food drop bypasses visitor rate limiting. Used during
-   *  development to keep founder koi alive without per-message wait.
-   *  Validated server-side; ignored if env.DEV_FEED_KEY is unset. */
-  devKey: z.string().optional(),
 });
 
 export const NicknameMessageSchema = z.object({
@@ -285,28 +233,10 @@ export const NicknameMessageSchema = z.object({
   nickname: z.string().min(1).max(40),
 });
 
-/** Visitor chat send. Single sentence, hard-capped at 200 chars; the
- *  worker classifies via Workers AI and either broadcasts or rejects.
- *  Rate-limited per session — see CHAT_RATE_LIMIT_MS in pond-do.ts. */
-export const ChatClientMessageSchema = z.object({
-  t: z.literal("chat"),
-  text: z.string().min(1).max(200),
-});
-
-/** Dev-only: drop one pellet at every alive koi's current position.
- *  Auth gate is the dev key; any mismatch silently drops the message.
- *  Used to revive a starving pond during development. */
-export const DevFeedAllMessageSchema = z.object({
-  t: z.literal("dev_feed_all"),
-  devKey: z.string(),
-});
-
 export const ClientToServerSchema = z.discriminatedUnion("t", [
   PebbleMessageSchema,
   FoodMessageSchema,
   NicknameMessageSchema,
-  ChatClientMessageSchema,
-  DevFeedAllMessageSchema,
 ]);
 
 export type ClientToServer = z.infer<typeof ClientToServerSchema>;

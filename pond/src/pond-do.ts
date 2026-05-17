@@ -28,7 +28,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 
-import { SIM, LIFE, POND, HUNGER } from "./constants.js";
+import { SIM, LIFE, POND, HUNGER, BOND } from "./constants.js";
 import { applySchema } from "./schema.js";
 import { Rng } from "./rng.js";
 import type {
@@ -84,7 +84,7 @@ import { runCognition } from "./cognition.js";
 import type { CognitionResponse } from "./protocol.js";
 import { embed } from "./embeddings.js";
 import { retrieveMemories, writeMemoryRow, pruneIfNeeded } from "./memory.js";
-import { fallbackUtterance, classifyVisitorContent } from "./safety.js";
+import { fallbackUtterance, classifyVisitorContent, composePondResponse } from "./safety.js";
 import {
   generateVisitorHandle,
   ringBufferHandleSet,
@@ -418,6 +418,57 @@ export class Pond extends DurableObject<Env> {
       }
     }
     console.log("[bootstrap] complete, " + initialCohort.length + " koi seeded");
+
+    // ── Founder relationship cards ─────────────────────────────────
+    // Shiki and Kokutou were seeded at world inception, but the
+    // relationship_card rows that gate reproduction get created on
+    // first interaction — which means without seeding here, the
+    // founders have no cards and bond detection can never fire.
+    //
+    // Seed both directions with values consistent with two beings
+    // who have just met each other but immediately recognize a
+    // kinship: BOND.founderSeedValence (0.6, defined in constants
+    // as the canonical founder valence), elevated familiarity_prior
+    // (0.6 — they share pond origin and no other reference point),
+    // a starter interaction count and drawn-count that reflect the
+    // 14 sim-days of co-existence they enter the world with rather
+    // than literal zero. Then recompute bond_intensity so the
+    // detection query has a value to compare to threshold.
+    //
+    // The seed values resolve to bond_intensity ≈ 0.61 via the
+    // formula in mechanisms/bond.ts — just above the 0.6
+    // reproduction threshold. So the first natural spawning is
+    // reachable shortly after bootstrap rather than requiring
+    // sim-days of accumulated valence and drawn-to interactions
+    // before the gate opens.
+    const founders = initialCohort.filter((k) => k.founder === true);
+    if (founders.length === 2) {
+      const [f1, f2] = founders;
+      const seedValence = BOND.founderSeedValence;
+      const seedFamiliarity = 0.6;
+      const seedInteractions = 25;
+      const seedDrawn7d = 4;
+      for (const [self, other] of [[f1!, f2!], [f2!, f1!]] as const) {
+        this.sql.exec(
+          `INSERT INTO relationship_card (
+             self_id, other_id, first_encounter_tick, interaction_count,
+             valence, valence_trajectory_json, dominance, trust, summary,
+             notable_memory_ids_json, drawn_count_7d, last_authored_tick,
+             familiarity_prior
+           ) VALUES (?, ?, ?, ?, ?, ?, 0, 0.6, '', '[]', ?, ?, ?)
+           ON CONFLICT(self_id, other_id) DO NOTHING`,
+          self.id, other.id, birthTick, seedInteractions,
+          seedValence, JSON.stringify([seedValence]),
+          seedDrawn7d, birthTick, seedFamiliarity,
+        );
+        this.recomputeBondIntensity(self.id, other.id);
+      }
+      console.log(
+        "[bootstrap] founder relationship cards seeded — " +
+        f1!.name + " ↔ " + f2!.name +
+        " ready for natural reproduction gate"
+      );
+    }
   }
 
   private rehydrateHotState(): PondHotState {
@@ -630,6 +681,64 @@ export class Pond extends DurableObject<Env> {
           ok: true,
           cleared: eggIds.length,
           cleared_ids: eggIds,
+          tick: this.hot.tick,
+        },
+        { headers: { "Access-Control-Allow-Origin": "*" } },
+      );
+    }
+
+    if (url.pathname === "/admin/rename") {
+      // Creator-set name for a specific koi. composeName at hatch time
+      // picks from a small deterministic set of poetic templates; this
+      // endpoint lets the creator override that for any koi by id —
+      // useful for hand-authoring a protagonist's name when the demo
+      // calls for a specific identity (e.g. naming the founders'
+      // magical iridescent daughter "Sylvanas Windrunner" rather than
+      // accepting whatever the composer rolled).
+      //
+      // Updates both hot.koi (so the next snapshot broadcast carries
+      // the new name to all connected clients within ~500ms) and the
+      // SQL row (so the rename persists across DO restarts inside the
+      // same idFromName version). The rename does NOT survive a version
+      // bump — fresh DOs bootstrap from scratch and have no record of
+      // this call. Re-invoke after any wipe.
+      //
+      // Body: { id: string, name: string }
+      // Name is trimmed and validated 1..80 chars. Empty or oversize
+      // names are rejected.
+      const body = await request.json().catch(() => null) as
+        { id?: unknown; name?: unknown } | null;
+      const id = typeof body?.id === "string" ? body.id : null;
+      const rawName = typeof body?.name === "string" ? body.name : null;
+      const name = rawName?.trim() ?? null;
+      if (!id || !name) {
+        return Response.json(
+          { ok: false, error: "body must be { id: string, name: string }" },
+          { status: 400, headers: { "Access-Control-Allow-Origin": "*" } },
+        );
+      }
+      if (name.length < 1 || name.length > 80) {
+        return Response.json(
+          { ok: false, error: "name must be 1..80 chars after trim" },
+          { status: 400, headers: { "Access-Control-Allow-Origin": "*" } },
+        );
+      }
+      const koi = this.hot.koi.find((k) => k.id === id);
+      if (!koi) {
+        return Response.json(
+          { ok: false, error: `no koi with id ${id} in hot state` },
+          { status: 404, headers: { "Access-Control-Allow-Origin": "*" } },
+        );
+      }
+      const oldName = koi.name;
+      koi.name = name;
+      this.sql.exec(`UPDATE koi SET name = ? WHERE id = ?`, name, id);
+      return Response.json(
+        {
+          ok: true,
+          id,
+          old_name: oldName,
+          new_name: name,
           tick: this.hot.tick,
         },
         { headers: { "Access-Control-Allow-Origin": "*" } },
@@ -1061,6 +1170,12 @@ export class Pond extends DurableObject<Env> {
               model_id: verdict.modelId,
               handle,
               text_length: parsed.data.text.length,
+              addresses_pond: verdict.addressesPond,
+              // Reasoning trace from the classifier's thinking mode.
+              // Captured here so the cognition log carries the full
+              // transparency story — every safety decision has its
+              // model-internal justification visible for audit.
+              reasoning: verdict.reasoning,
             },
           },
         );
@@ -1107,6 +1222,76 @@ export class Pond extends DurableObject<Env> {
             },
           },
         );
+
+        // ── Pond response path ─────────────────────────────────────
+        // When the classifier flagged the message as addressing the
+        // pond itself (a question to the water, a prayer, a
+        // philosophical apostrophe), the pond MAY respond. Multiple
+        // gates keep this rare and chosen rather than reactive:
+        //
+        //   1. addresses_pond must be true (classifier judgment)
+        //   2. cooldown — pond speaks at most once per 60s
+        //   3. random gate — 40% chance even when cooldown allows
+        //
+        // The compound effect: on average the pond responds to roughly
+        // one in three addressed messages, and never more than once
+        // per minute. A visitor cannot conversationally engage the
+        // pond; the pond chooses when to be present. Failures
+        // (transport errors, malformed output, length-bound rejection)
+        // silently degrade — the pond simply chose not to speak this
+        // time, indistinguishable from the random gate not firing.
+        //
+        // We do NOT await this before responding to the visitor's own
+        // send. Their broadcast is already done; the pond's reply is
+        // its own subsequent broadcast, arriving when it arrives.
+        if (verdict.addressesPond) {
+          const POND_VOICE_COOLDOWN_MS = 60_000;
+          const POND_VOICE_RANDOM_GATE = 0.4;
+          const cooldownOk =
+            Date.now() - this.lastPondUtteranceMs > POND_VOICE_COOLDOWN_MS;
+          const randomOk = Math.random() < POND_VOICE_RANDOM_GATE;
+
+          if (cooldownOk && randomOk) {
+            // Stamp the cooldown BEFORE the network call so concurrent
+            // addressed messages don't race the same window.
+            this.lastPondUtteranceMs = Date.now();
+
+            // Fire-and-forget. ctx.waitUntil keeps the worker alive
+            // past the HTTP response while the pond composes — same
+            // pattern as background cognition calls.
+            this.ctx.waitUntil((async () => {
+              const utterance = await composePondResponse(
+                this.env,
+                parsed.data.text,
+              );
+              if (!utterance) return;
+
+              const pondMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                handle: "the pond",
+                text: utterance,
+                at: Date.now(),
+                kind: "pond",
+              };
+              this.addToChatRing(pondMsg);
+              this.broadcastChat(pondMsg);
+
+              await emit(this.sql, this.env.AE_EVENTS,
+                { pondId: this.pondId, configHash: this.configHash },
+                {
+                  tick: this.hot.tick,
+                  actor: "pond",
+                  type: "pond_utterance",
+                  payload: {
+                    message_id: pondMsg.id,
+                    triggered_by: message.id,
+                    text_length: utterance.length,
+                  },
+                },
+              );
+            })());
+          }
+        }
         break;
       }
     }
@@ -1506,6 +1691,7 @@ export class Pond extends DurableObject<Env> {
                familiarity_prior = MAX(relationship_card.familiarity_prior, 0.12)`,
             f.id, parentId, newTick, newTick,
           );
+          this.recomputeBondIntensity(f.id, parentId);
           // And the reverse direction: the parent's card toward the fry
           // also gets a familiarity bias — parents recognize their
           // offspring's scent as continuous with theirs.
@@ -1520,6 +1706,7 @@ export class Pond extends DurableObject<Env> {
                familiarity_prior = MAX(relationship_card.familiarity_prior, 0.15)`,
             parentId, f.id, newTick, newTick,
           );
+          this.recomputeBondIntensity(parentId, f.id);
         }
       }
 
@@ -2128,6 +2315,7 @@ export class Pond extends DurableObject<Env> {
         newValence, JSON.stringify(trajectory),
         drawnCount7d, newTick,
       );
+      this.recomputeBondIntensity(selfId, o.id);
     }
   }
 
@@ -2161,6 +2349,7 @@ export class Pond extends DurableObject<Env> {
         WHERE self_id = ? AND other_id = ?`,
       bumped, JSON.stringify(trajectory), nowTick, selfId, otherId,
     );
+    this.recomputeBondIntensity(selfId, otherId);
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -2380,6 +2569,7 @@ export class Pond extends DurableObject<Env> {
         selfId, otherId, nowTick, clampToPlausibleV(delta),
         JSON.stringify([clampToPlausibleV(delta)]), nowTick,
       );
+      this.recomputeBondIntensity(selfId, otherId);
       return;
     }
     const current = existing["valence"] as number;
@@ -2392,7 +2582,78 @@ export class Pond extends DurableObject<Env> {
         WHERE self_id = ? AND other_id = ?`,
       bumped, nowTick, selfId, otherId,
     );
+    this.recomputeBondIntensity(selfId, otherId);
     void traj;
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  //  Bond intensity persistence (§ X)
+  //
+  //  Recompute and persist the bond_intensity scalar for one card. The
+  //  formula lives in mechanisms/bond.ts (the canonical reference) —
+  //  we just provide it with the latest card row and the witnessing-
+  //  density approximation, and write the result back.
+  //
+  //  Witnessing density is provisionally derived from drawn_count_7d
+  //  / 7 (clamped to [0, 1]). A pair that's been drawing-to each
+  //  other every day for the past week reads as ~1.0; a pair that's
+  //  drawn just once reads as ~0.14. This is a proxy until a
+  //  dedicated witnessing_log table + twilight-reflection compute
+  //  replaces it; the formula's downstream consumers don't care which
+  //  source produced the value as long as it's persisted.
+  //
+  //  Called by every site that mutates a relationship_card row
+  //  (bumpCardValence, softBumpCard, authorRelationshipCards, the
+  //  hatch-time inserts, and the founder bootstrap). Without these
+  //  calls bond_intensity stays at its DEFAULT 0, the detection query
+  //  in reproduction.ts returns no rows, and natural spawning never
+  //  fires regardless of how much the founders are actually together.
+  // ─────────────────────────────────────────────────────────────────
+  private recomputeBondIntensity(selfId: string, otherId: string): void {
+    const row = this.sql.exec(
+      `SELECT interaction_count, valence, drawn_count_7d, familiarity_prior
+         FROM relationship_card
+        WHERE self_id = ? AND other_id = ?`,
+      selfId, otherId,
+    ).toArray()[0];
+    if (!row) return; // card doesn't exist yet — nothing to update
+
+    const drawn = (row["drawn_count_7d"] as number | undefined) ?? 0;
+    const density = Math.max(0, Math.min(1, drawn / 7));
+
+    // Build the minimum RelationshipCard shape bondIntensity() reads.
+    // Skips fields the formula doesn't touch (trajectory, dominance,
+    // trust, notableMemoryIds, etc.) — bondIntensity only needs
+    // valence, interactionCount, familiarityPrior.
+    const card: Pick<
+      RelationshipCard,
+      "valence" | "interactionCount" | "familiarityPrior" | "selfId" | "otherId"
+      | "firstEncounterTick" | "valenceTrajectory7d" | "dominance" | "trust"
+      | "summary" | "notableMemoryIds" | "drawnCount7d" | "lastAuthoredTick"
+    > = {
+      selfId: selfId as KoiId,
+      otherId: otherId as KoiId,
+      valence: (row["valence"] as number | undefined) ?? 0,
+      interactionCount: (row["interaction_count"] as number | undefined) ?? 0,
+      familiarityPrior: (row["familiarity_prior"] as number | undefined) ?? 0,
+      // Unused by the formula but required by the type shape.
+      firstEncounterTick: 0,
+      valenceTrajectory7d: [],
+      dominance: 0,
+      trust: 0,
+      summary: "",
+      notableMemoryIds: [],
+      drawnCount7d: drawn,
+      lastAuthoredTick: 0,
+    };
+    const intensity = bondIntensity(card, density);
+
+    this.sql.exec(
+      `UPDATE relationship_card
+          SET bond_intensity = ?, witnessing_density_7d = ?
+        WHERE self_id = ? AND other_id = ?`,
+      intensity, density, selfId, otherId,
+    );
   }
 
   // ─────────────────────────────────────────────────────────────────
