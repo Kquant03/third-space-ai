@@ -687,64 +687,6 @@ export class Pond extends DurableObject<Env> {
       );
     }
 
-    if (url.pathname === "/admin/rename") {
-      // Creator-set name for a specific koi. composeName at hatch time
-      // picks from a small deterministic set of poetic templates; this
-      // endpoint lets the creator override that for any koi by id —
-      // useful for hand-authoring a protagonist's name when the demo
-      // calls for a specific identity (e.g. naming the founders'
-      // magical iridescent daughter "Sylvanas Windrunner" rather than
-      // accepting whatever the composer rolled).
-      //
-      // Updates both hot.koi (so the next snapshot broadcast carries
-      // the new name to all connected clients within ~500ms) and the
-      // SQL row (so the rename persists across DO restarts inside the
-      // same idFromName version). The rename does NOT survive a version
-      // bump — fresh DOs bootstrap from scratch and have no record of
-      // this call. Re-invoke after any wipe.
-      //
-      // Body: { id: string, name: string }
-      // Name is trimmed and validated 1..80 chars. Empty or oversize
-      // names are rejected.
-      const body = await request.json().catch(() => null) as
-        { id?: unknown; name?: unknown } | null;
-      const id = typeof body?.id === "string" ? body.id : null;
-      const rawName = typeof body?.name === "string" ? body.name : null;
-      const name = rawName?.trim() ?? null;
-      if (!id || !name) {
-        return Response.json(
-          { ok: false, error: "body must be { id: string, name: string }" },
-          { status: 400, headers: { "Access-Control-Allow-Origin": "*" } },
-        );
-      }
-      if (name.length < 1 || name.length > 80) {
-        return Response.json(
-          { ok: false, error: "name must be 1..80 chars after trim" },
-          { status: 400, headers: { "Access-Control-Allow-Origin": "*" } },
-        );
-      }
-      const koi = this.hot.koi.find((k) => k.id === id);
-      if (!koi) {
-        return Response.json(
-          { ok: false, error: `no koi with id ${id} in hot state` },
-          { status: 404, headers: { "Access-Control-Allow-Origin": "*" } },
-        );
-      }
-      const oldName = koi.name;
-      koi.name = name;
-      this.sql.exec(`UPDATE koi SET name = ? WHERE id = ?`, name, id);
-      return Response.json(
-        {
-          ok: true,
-          id,
-          old_name: oldName,
-          new_name: name,
-          tick: this.hot.tick,
-        },
-        { headers: { "Access-Control-Allow-Origin": "*" } },
-      );
-    }
-
     // Research surface — every koi (living or deceased) with parents,
     // generation, and children. This is the data source § XV's
     // multi-generation figures are drawn from. Public because the pond
@@ -3007,9 +2949,19 @@ export class Pond extends DurableObject<Env> {
 
     const fish = this.hot.koi.map(toFrame);
     const food = this.hot.food.map(toFoodFrame);
-    const msg = TickMessageSchema.parse({
-      t: "tick", tick, now: nowMs, fish, food,
-    });
+    // No outbound schema parse — a parse failure here silently drops
+    // the entire tick broadcast and the client misses an update,
+    // producing visible 2Hz hitches in koi motion. The client's
+    // inbound parser is tolerant of extra fields and missing optional
+    // ones, so emitting a typed literal directly is both safer and
+    // strictly cheaper than re-validating our own emit on every tick.
+    const msg = {
+      t: "tick" as const,
+      tick,
+      now: nowMs,
+      fish,
+      food,
+    };
     const payload = JSON.stringify(msg);
 
     for (const ws of this.ctx.getWebSockets()) {
@@ -3029,8 +2981,8 @@ export class Pond extends DurableObject<Env> {
       const att = ws.deserializeAttachment() as SessionAttachment | null;
       yourHandle = att?.handle;
     } catch { /* leave undefined */ }
-    const msg = SnapshotMessageSchema.parse({
-      t: "snapshot",
+    const msg = {
+      t: "snapshot" as const,
       tick: this.hot.tick,
       now: Date.now(),
       fish,
@@ -3045,7 +2997,7 @@ export class Pond extends DurableObject<Env> {
       chat: this.chatRing.length > 0 ? this.chatRing.slice() : undefined,
       yourHandle,
       chatTotal: this.chatTotal,
-    });
+    };
     try { ws.send(JSON.stringify(msg)); } catch { /* closed */ }
   }
 
@@ -3090,15 +3042,15 @@ export class Pond extends DurableObject<Env> {
    *  Same pattern as broadcastAmbient: serialize once, send to all,
    *  swallow per-socket send errors. */
   private broadcastChat(msg: ChatMessage): void {
-    const envelope = ChatMessageBroadcastSchema.parse({
-      t: "chat_message",
+    const envelope = {
+      t: "chat_message" as const,
       id: msg.id,
       handle: msg.handle,
       text: msg.text,
       at: msg.at,
       chatTotal: this.chatTotal,
       kind: msg.kind ?? "visitor",
-    });
+    };
     const payload = JSON.stringify(envelope);
     for (const ws of this.ctx.getWebSockets()) {
       try { ws.send(payload); } catch { /* closed */ }
@@ -3109,12 +3061,12 @@ export class Pond extends DurableObject<Env> {
    *  Includes the original text so the client can show "this was not
    *  sent: <text>" and optionally offer a single rewrite. */
   private sendChatRejected(ws: WebSocket, text: string, reason: string): void {
-    const envelope = ChatRejectedSchema.parse({
-      t: "chat_rejected",
+    const envelope = {
+      t: "chat_rejected" as const,
       text,
       reason,
       at: Date.now(),
-    });
+    };
     try { ws.send(JSON.stringify(envelope)); } catch { /* closed */ }
   }
 

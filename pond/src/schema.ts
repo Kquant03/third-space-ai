@@ -232,7 +232,8 @@ CREATE TABLE IF NOT EXISTS visitor_session (
   first_seen_ms     INTEGER NOT NULL,
   last_seen_ms      INTEGER NOT NULL,
   pebble_count      INTEGER NOT NULL DEFAULT 0,
-  food_count        INTEGER NOT NULL DEFAULT 0
+  food_count        INTEGER NOT NULL DEFAULT 0,
+  handle            TEXT
 );
 
 CREATE TABLE IF NOT EXISTS visitor_nickname (
@@ -331,29 +332,66 @@ function migrate(sql: SqlStorage): void {
     sql, "koi", "hunger", "REAL NOT NULL DEFAULT 0.2",
   );
 
-  // Founder flag — set to 1 only for the two seeded founders (Shiki,
-  // Kokutou). Used by /admin/wipe-non-founders to know whom to
-  // preserve, and by cognition + naming + lineage to thread "first
-  // generation" semantics through the pond. Defaults to 0 so all
-  // existing koi from before this migration become non-founders.
+  // May 2026 — Bond mechanism. Pair-bonded koi accumulate a
+  // bond_intensity scalar derived from valence, familiarity_prior,
+  // and a 7-day-trailing witnessing density. The detection query in
+  // reproduction.ts gates natural spawning on bond_intensity >=
+  // threshold (currently 0.6). Without these columns the relationship
+  // card cannot persist either value and the bond recompute fails
+  // with SQLITE_ERROR, taking the entire alarm tick down with it.
+  // Existing rows get default 0 — they'll get an accurate
+  // bond_intensity on the next interaction that touches them via
+  // softBumpCard, which calls recomputeBondIntensity at the end.
+  addColumnIfMissing(
+    sql, "relationship_card", "bond_intensity", "REAL NOT NULL DEFAULT 0",
+  );
+  addColumnIfMissing(
+    sql, "relationship_card", "witnessing_density_7d", "REAL NOT NULL DEFAULT 0",
+  );
+
+  // May 2026 — Founder marker. Distinguishes the original Shiki and
+  // Kokutou (and the firstborn Sylvanas) from all descendants the pond
+  // produces over time. Used by:
+  //   - The default-camera anchor (founders get priority for the two
+  //     anchor slots when alive; falls back to oldest non-founders).
+  //   - The bond gate, which compresses the required familiarity for
+  //     founders → faster pair-bond formation, since the pond starts
+  //     with the lineage already partnered narratively.
+  //   - Rendering: founders use the realistic koi phenotype, descendants
+  //     get the magical iridescent wisteria-cobalt blend.
+  // Defaulting to 0 means rehydrated koi from pre-May-2026 ponds become
+  // non-founders, which is the correct semantic — the founder cohort is
+  // only the seeded trio, never anything that hatched in-pond.
   addColumnIfMissing(
     sql, "koi", "founder", "INTEGER NOT NULL DEFAULT 0",
   );
 
-  // Bond intensity — the scalar in [0, 1] that gates reproduction
-  // and other bond-aware mechanisms. Populated by recomputeBondIntensity
-  // at relationship-card mutation sites. detectBondedPairs queries this
-  // column directly, so without it the entire reproduction loop wedges
-  // at the first periodic check (SQLITE_ERROR "no such column"). The
-  // companion witnessing_density_7d feeds the bond formula.
+  // May 2026 — Sticky visitor handles. Each visitor gets a session-
+  // sticky chat handle keyed to their IP hash, so the same visitor
+  // refreshing the page (or closing and reopening the tab later)
+  // returns to the same identity. The UNIQUE INDEX prevents handle
+  // collisions; SQLite treats multiple NULL values as distinct, so
+  // pre-migration rows with handle=NULL coexist fine until their
+  // visitor reconnects and gets one assigned.
   addColumnIfMissing(
-    sql, "relationship_card", "bond_intensity",
-    "REAL NOT NULL DEFAULT 0",
+    sql, "visitor_session", "handle", "TEXT",
   );
-  addColumnIfMissing(
-    sql, "relationship_card", "witnessing_density_7d",
-    "REAL NOT NULL DEFAULT 0",
-  );
+  // Wrapped in try/catch so any future quirk in the index creation
+  // doesn't take down the entire schema apply (and therefore the
+  // entire DO bootstrap). If the index can't be created, handles
+  // still function — the in-code retry layer in getOrAssignHandle
+  // is the last line of defense and is sufficient on its own.
+  try {
+    sql.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS visitor_session_handle_unique
+       ON visitor_session(handle)`,
+    );
+  } catch (e) {
+    console.error(
+      "[schema migrate] could not create visitor_session handle index: " +
+      (e instanceof Error ? e.message : String(e)),
+    );
+  }
 }
 
 function addColumnIfMissing(

@@ -688,6 +688,22 @@ class PondStore {
     id: string; handle: string; text: string; at: number;
     chatTotal?: number; kind?: "visitor" | "pond";
   }): void {
+    // Dedup defense: if this message id is already in the buffer, drop
+    // the append but still update chatTotal (the broadcast may carry a
+    // fresher counter than our mirror). Without this, the SAME message
+    // can land in the buffer twice — typically when applySnapshot
+    // replaces the buffer with the worker's chat ring just before or
+    // after a near-simultaneous chat_message envelope, or under React
+    // StrictMode double-mounting in dev. React's duplicate-key warning
+    // fires when the duplicates render. Visitors perceive "a billion"
+    // messages because each render of the same id stacks.
+    if (this.chatBuffer.some(m => m.id === msg.id)) {
+      if (typeof msg.chatTotal === "number") {
+        this.chatTotal = msg.chatTotal;
+      }
+      this.notifyChat();
+      return;
+    }
     // Append to buffer, cap at CHAT_BUFFER_CAP from the front.
     this.chatBuffer = [
       ...this.chatBuffer,
@@ -762,13 +778,24 @@ class PondStore {
       meta: msg.pondMeta ?? this.state.meta,
     };
     // Chat: snapshot is authoritative on history. Replace the buffer
-    // wholesale with what the worker just sent. Handle and total are
-    // session-sticky on the worker side and survive across reconnect,
-    // so we always update them when present. sessionChatCount resets
-    // here because this is a fresh socket — earlier session counts
-    // belong to the prior connection.
+    // wholesale with what the worker just sent, dedup'd by id as a
+    // defense-in-depth measure (the worker's chatRing shouldn't have
+    // duplicates, but if it ever did, applying them here would seed
+    // permanent React key warnings until the next reconnect).
+    // Handle and total are session-sticky on the worker side and
+    // survive across reconnect, so we always update them when present.
+    // sessionChatCount resets here because this is a fresh socket —
+    // earlier session counts belong to the prior connection.
     if (msg.chat !== undefined) {
-      this.chatBuffer = msg.chat.slice(0, PondStore.CHAT_BUFFER_CAP);
+      const seen = new Set<string>();
+      const deduped: ChatMessage[] = [];
+      for (const m of msg.chat) {
+        if (!seen.has(m.id)) {
+          seen.add(m.id);
+          deduped.push(m);
+        }
+      }
+      this.chatBuffer = deduped.slice(0, PondStore.CHAT_BUFFER_CAP);
     }
     if (msg.yourHandle !== undefined) {
       this.yourHandle = msg.yourHandle;
@@ -938,6 +965,12 @@ export function usePond(opts: UsePondOptions): UsePondResult {
   const reconnectRef = useRef<{ attempts: number; timer: ReturnType<typeof setTimeout> | null }>({
     attempts: 0, timer: null,
   });
+  // Client-side send floor. Prevents rapid-fire chat duplicates that
+  // could come from holding Enter, React event re-fires, or multiple
+  // WebSocket connections from the same browser (hot-reload leftovers
+  // each have an independent server-side cooldown attachment, so the
+  // server's 2-second per-socket cooldown isn't sufficient on its own).
+  const lastSendAtRef = useRef(0);
 
   const state = useSyncExternalStore(
     store.subscribe,
@@ -1133,14 +1166,25 @@ export function usePond(opts: UsePondOptions): UsePondResult {
     getSessionChatCount: store.getSessionChatCount,
     getYourHandle: store.getYourHandle,
     sendChat: (text: string): void => {
+      // Client-side send floor — 500ms minimum between any two sends.
+      // The worker enforces a longer per-socket cooldown (2s attempt,
+      // 15s post-success) but that's per-socket: in a hot-reload dev
+      // scenario where stale WebSockets linger, each socket has its
+      // own server-side attachment and could each pass cooldown
+      // independently. This client-side floor caps actual outbound
+      // frequency from this browser regardless of socket count.
+      const now = Date.now();
+      if (now - lastSendAtRef.current < 500) return;
+      lastSendAtRef.current = now;
+
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      // No client-side rate limit — the worker enforces both the
-      // attempt cooldown and the 15-second post-success window, and
-      // surfaces the rejection back via chat_rejected. Letting attempts
-      // through here means the visitor sees the worker's actual
-      // verdict ("speaking slower here — Xs before another message")
-      // rather than a silent client drop.
+      // No further client-side rate limit beyond the floor above — the
+      // worker enforces both the attempt cooldown and the 15-second
+      // post-success window, and surfaces the rejection back via
+      // chat_rejected. Letting attempts through here means the visitor
+      // sees the worker's actual verdict ("speaking slower here — Xs
+      // before another message") rather than a silent client drop.
       const trimmed = text.trim();
       if (trimmed.length === 0 || trimmed.length > 280) return;
       try {

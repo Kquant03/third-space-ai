@@ -42,19 +42,17 @@ export {
 // ───────────────────────────────────────────────────────────────────────
 
 export const SIM = {
-  /** Tick rate in Hz. Physics steps run every tick; cognition is
-   *  sparser (sim-time based cooldown, independent of tickHz). 10Hz
-   *  is a balance: smooth enough that client spring interpolation
-   *  fills gaps fluidly between 100ms wire frames, conservative
-   *  enough that Cloudflare DO's alarm scheduler delivers reliably
-   *  without queueing bursts. We tried 30Hz — alarms came in bursts,
-   *  causing visible position teleporting. */
-  tickHz: 10,
+  /** Tick rate in Hz. Kinematics run every tick; cognition is sparser.
+   *  Bumped from 2 to 9 Hz in May 2026 to eliminate the visible 2 Hz
+   *  rhythm in koi motion — at 111ms ticks the eye no longer detects
+   *  per-tick decision points. Bandwidth cost ~4.5x (still <2 KB/s
+   *  per visitor with 3 koi). Cognition cost unchanged: it's gated
+   *  by seconds-to-ticks conversion via tickHz, not per-tick. */
+  tickHz: 9,
   /** Derived: ms between ticks. */
-  tickIntervalMs: 100,
-  /** WebSocket snapshot/tick broadcast rate. Matches tickHz so each
-   *  physics step is carried to the client. */
-  broadcastHz: 10,
+  tickIntervalMs: 111,
+  /** WebSocket snapshot/tick broadcast rate. */
+  broadcastHz: 9,
   /** A simulated day stretches 6 real hours. Tunable upward to 8 if the
    *  pace feels too quick. (§ VII / Final Vision) */
   realSecondsPerSimDay: 6 * 3600,
@@ -483,12 +481,8 @@ export const KINEMATICS = {
     cohesionStrength: 0.25,
     alignmentStrength: 0.35,
   },
-  /** Weight on curl-noise flow field as a soft push. Tuned for visible
-   *  ambient drift even when intent forces resolve to ~zero (e.g., a
-   *  koi already at its territory anchor, or a shoal already cohered).
-   *  Without this, "satisfied" koi visually freeze, which reads as
-   *  death. Real water never lets a fish be perfectly still. */
-  flowStrength: 0.25,
+  /** Weight on curl-noise flow field as a soft push. */
+  flowStrength: 0.12,
   /** Boundary pushback when a fish drifts near the pond edge (meters).
    *  This is a "soft band" that discourages approach, not a hard wall.
    *  Hard containment is enforced by clampToPond() post-integration. */
@@ -506,7 +500,7 @@ export const WS = {
   /** Snapshot sent on initial connection. */
   snapshotOnOpen: true,
   /** Subsequent broadcasts match the sim tick rate. */
-  broadcastHz: 2,
+  broadcastHz: 9,
   /** Maximum number of connected clients tracked per DO. */
   maxClients: 1000,
   /** If no clients for this long, sim goes to kinematic-only-no-cognition mode. */

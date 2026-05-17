@@ -86,6 +86,12 @@ export function PondChat({ pond, COLOR, FONT }: PondChatProps) {
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const previousMessageCountRef = useRef(messages.length);
+  // Tracks whether we've performed the initial scroll-to-bottom on the
+  // first non-empty messages render. Until then, the snapshot's chat
+  // history would land the user at the top of the scroller, requiring
+  // them to scroll down to see the most recent — backwards for "what's
+  // happening at the pond right now."
+  const initialScrollDoneRef = useRef(false);
 
   // Subscribe to chat events. On each event, re-pull current state.
   useEffect(() => {
@@ -110,6 +116,20 @@ export function PondChat({ pond, COLOR, FONT }: PondChatProps) {
     const newCount = messages.length;
     const grew = newCount > previousMessageCountRef.current;
     previousMessageCountRef.current = newCount;
+
+    // Initial hydration jump: on the FIRST render where the buffer is
+    // non-empty (typically right after the snapshot arrives with the
+    // worker's chat ring), pin scroll to the bottom so the visitor
+    // lands on the most recent message instead of the oldest. After
+    // this one-shot, the near-bottom logic below handles all
+    // subsequent growth — including preserving the visitor's scroll
+    // position if they intentionally scrolled up to read history.
+    if (!initialScrollDoneRef.current && newCount > 0) {
+      el.scrollTop = el.scrollHeight;
+      initialScrollDoneRef.current = true;
+      return;
+    }
+
     if (!grew) return;
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (distFromBottom < 120) {
