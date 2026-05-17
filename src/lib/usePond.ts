@@ -105,19 +105,24 @@ export interface FoodFrame {
   z: number;
 }
 
-// ─── Chat types — STUB SURFACE ─────────────────────────────────────────────
-// These shapes exist so PondChat.tsx type-checks and the build passes. The
-// real chat backend (worker WebSocket chat handler + Gemma safety classifier
-// + bounded server-side history + visitor-handle assignment) is post-Stripe
-// work — the same pipeline will power pebble inscription safety filtering.
-// Until that lands, the hook returns empty arrays / null / no-ops for all
-// chat methods so PondChat renders without crashing but does nothing.
+// ─── Chat types — wire-aligned ────────────────────────────────────────────
+// Shapes flow from the worker:
+//   - ChatMessage is what arrives in `chat` array of the snapshot AND
+//     what each chat_message broadcast envelope carries.
+//   - ChatRejection is what each chat_rejected envelope carries
+//     (delivered only to the submitting socket).
+// PondChat reads these via the hook surface (getChat/getLastChatRejection
+// and so on).
 export interface ChatMessage {
   id: string;
-  kind: "pond" | "system";   // "pond" = visitor message, "system" = pond
   text: string;
   handle: string;            // visitor handle ("Crepuscular-Heimdall" etc.)
   at: number;                // ms epoch
+  /** "visitor" = sent by a person; "pond" = the pond observing itself
+   *  (see pond-utterance.ts on the worker). Optional only because the
+   *  initial snapshot's chat ring may carry messages from older worker
+   *  builds that didn't set kind. */
+  kind?: "visitor" | "pond";
 }
 
 export interface ChatRejection {
@@ -436,6 +441,24 @@ class PondStore {
   private mechanismListeners = new Set<MechanismListener>();
   private mechanismBuffer: MechanismEvent[] = [];
 
+  // ─── Chat surface ──────────────────────────────────────────────────
+  // Mirrors the speech/mechanism subscriber pattern: a buffer of
+  // recent messages, a Set of listener callbacks notified on any
+  // change. Chat differs in that newly-connected visitors receive
+  // the existing buffer via the snapshot envelope (worker's
+  // chatRing) — speech and mechanism events are ephemeral, chat is
+  // history.
+  private chatBuffer: ChatMessage[] = [];
+  private chatTotal: number = 0;
+  private yourHandle: string | null = null;
+  private lastChatRejection: ChatRejection | null = null;
+  private sessionChatCount: number = 0;
+  private chatListeners = new Set<() => void>();
+  /** Cap on the rendered chat history. Worker's CHAT_RING_BUFFER_SIZE
+   *  governs what arrives in the snapshot; this is the runtime cap on
+   *  what we keep visible after live broadcasts accumulate. */
+  private static readonly CHAT_BUFFER_CAP = 100;
+
   /** Continuous kinematic state per fish, keyed by id. This is what
    *  the renderer ultimately reads — it moves smoothly every frame
    *  regardless of backend snapshot cadence. */
@@ -636,6 +659,77 @@ class PondStore {
     return () => this.mechanismListeners.delete(l);
   };
 
+  // ─── Chat surface ──────────────────────────────────────────────────
+  subscribeToChat = (l: () => void): (() => void) => {
+    this.chatListeners.add(l);
+    return () => this.chatListeners.delete(l);
+  };
+
+  private notifyChat(): void {
+    for (const l of this.chatListeners) {
+      try { l(); } catch { /* swallow per-listener errors */ }
+    }
+  }
+
+  /** Returns a shallow copy of the chat buffer. Components that re-read
+   *  on every chat change get a fresh array, which forces re-render in
+   *  consumers that compare by identity. */
+  getChatBuffer = (): ChatMessage[] => this.chatBuffer.slice();
+
+  getYourHandle = (): string | null => this.yourHandle;
+
+  getChatTotal = (): number => this.chatTotal;
+
+  getLastChatRejection = (): ChatRejection | null => this.lastChatRejection;
+
+  getSessionChatCount = (): number => this.sessionChatCount;
+
+  applyChatMessage(msg: {
+    id: string; handle: string; text: string; at: number;
+    chatTotal?: number; kind?: "visitor" | "pond";
+  }): void {
+    // Append to buffer, cap at CHAT_BUFFER_CAP from the front.
+    this.chatBuffer = [
+      ...this.chatBuffer,
+      {
+        id: msg.id,
+        handle: msg.handle,
+        text: msg.text,
+        at: msg.at,
+        kind: msg.kind ?? "visitor",
+      },
+    ].slice(-PondStore.CHAT_BUFFER_CAP);
+    // Server's chatTotal is the source of truth — it counts all-time
+    // across reconnects. Update local mirror on every broadcast.
+    if (typeof msg.chatTotal === "number") {
+      this.chatTotal = msg.chatTotal;
+    }
+    // Count only messages that originated from this session (handle
+    // match). This lets the UI show "you've spoken N times today"
+    // without phantom counts from other visitors.
+    if (msg.handle === this.yourHandle) {
+      this.sessionChatCount += 1;
+    }
+    this.notifyChat();
+  }
+
+  applyChatRejected(msg: {
+    text: string; reason: string; at: number;
+  }): void {
+    this.lastChatRejection = {
+      text: msg.text,
+      reason: msg.reason,
+    };
+    this.notifyChat();
+  }
+
+  clearChatRejection(): void {
+    if (this.lastChatRejection !== null) {
+      this.lastChatRejection = null;
+      this.notifyChat();
+    }
+  }
+
   getSnapshot = (): PondState => this.state;
   peek = (): PondState => this.state;
 
@@ -648,6 +742,8 @@ class PondStore {
   applySnapshot(msg: {
     tick: number; now: number; fish: KoiFrame[];
     food?: FoodFrame[]; pondMeta?: PondMeta;
+    chat?: ChatMessage[]; yourHandle?: string;
+    chatTotal?: number;
   }): void {
     // NB: use performance.now() (matches interpolator clock), not
     // Date.now() (wall-clock epoch, vastly different magnitude).
@@ -665,7 +761,24 @@ class PondStore {
       food: msg.food ?? [],
       meta: msg.pondMeta ?? this.state.meta,
     };
+    // Chat: snapshot is authoritative on history. Replace the buffer
+    // wholesale with what the worker just sent. Handle and total are
+    // session-sticky on the worker side and survive across reconnect,
+    // so we always update them when present. sessionChatCount resets
+    // here because this is a fresh socket — earlier session counts
+    // belong to the prior connection.
+    if (msg.chat !== undefined) {
+      this.chatBuffer = msg.chat.slice(0, PondStore.CHAT_BUFFER_CAP);
+    }
+    if (msg.yourHandle !== undefined) {
+      this.yourHandle = msg.yourHandle;
+    }
+    if (msg.chatTotal !== undefined) {
+      this.chatTotal = msg.chatTotal;
+    }
+    this.sessionChatCount = 0;
     this.notify();
+    this.notifyChat();
   }
 
   applyTick(msg: {
@@ -804,9 +917,11 @@ export interface UsePondResult {
    *  trace, and (in a later commit) by the shader for surface rendering. */
   getFood: () => FoodFrame[];
 
-  // ─── Chat surface — STUB UNTIL CHAT BACKEND ─────────────────────────────
-  // PondChat.tsx imports and calls these. The real implementations land
-  // alongside the worker chat WS handler. Until then: empty/null/no-op.
+  // ─── Chat surface ───────────────────────────────────────────────────────
+  // Wired against the worker's chat pipeline. The hook delegates reads
+  // and subscriptions to the store; sendChat ships the visitor's text
+  // over the open WebSocket as a `t: "chat"` envelope and the worker
+  // (a) rate-limits, (b) Gemma-classifies, (c) broadcasts or rejects.
   getChat: () => ChatMessage[];
   getChatTotal: () => number;
   getLastChatRejection: () => ChatRejection | null;
@@ -852,6 +967,8 @@ export function usePond(opts: UsePondOptions): UsePondResult {
             else if (msg.t === "tick") store.applyTick(msg);
             else if (msg.t === "speech") store.applySpeech(msg);
             else if (msg.t === "mechanism") store.applyMechanism(msg);
+            else if (msg.t === "chat_message") store.applyChatMessage(msg);
+            else if (msg.t === "chat_rejected") store.applyChatRejected(msg);
           } catch (err) {
             console.warn("pond: bad message", err);
           }
@@ -1007,18 +1124,31 @@ export function usePond(opts: UsePondOptions): UsePondResult {
      *  animation loop (which the diagnostic does). */
     getFood: (): FoodFrame[] => state.food,
 
-    // ─── Chat stubs — STUB UNTIL CHAT BACKEND ──────────────────────────
-    // Empty/null/no-op surfaces that satisfy PondChat.tsx's type checks
-    // and let it render without crashing. Real wiring (worker chat WS,
-    // Gemma safety classifier, bounded history) is post-Stripe work.
-    getChat: (): ChatMessage[] => [],
-    getChatTotal: (): number => 0,
-    getLastChatRejection: (): ChatRejection | null => null,
-    getSessionChatCount: (): number => 0,
-    getYourHandle: (): string | null => null,
-    sendChat: (_text: string): void => { /* no-op until backend */ },
-    subscribeToChat: (_l: () => void): (() => void) => () => { /* no-op */ },
-    clearChatRejection: (): void => { /* no-op */ },
+    // ─── Chat surface — REAL IMPLEMENTATION ─────────────────────────
+    // All state lives on the store; the hook just wires the WebSocket
+    // for the outbound side and delegates reads/subscriptions.
+    getChat: store.getChatBuffer,
+    getChatTotal: store.getChatTotal,
+    getLastChatRejection: store.getLastChatRejection,
+    getSessionChatCount: store.getSessionChatCount,
+    getYourHandle: store.getYourHandle,
+    sendChat: (text: string): void => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      // No client-side rate limit — the worker enforces both the
+      // attempt cooldown and the 15-second post-success window, and
+      // surfaces the rejection back via chat_rejected. Letting attempts
+      // through here means the visitor sees the worker's actual
+      // verdict ("speaking slower here — Xs before another message")
+      // rather than a silent client drop.
+      const trimmed = text.trim();
+      if (trimmed.length === 0 || trimmed.length > 280) return;
+      try {
+        ws.send(JSON.stringify({ t: "chat", text: trimmed }));
+      } catch { /* socket transitioned to closed mid-call */ }
+    },
+    subscribeToChat: store.subscribeToChat,
+    clearChatRejection: (): void => { store.clearChatRejection(); },
   };
 }
 

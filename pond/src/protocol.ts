@@ -138,6 +138,17 @@ export const PondMetaSchema = z.object({
 
 export type PondMetaWire = z.infer<typeof PondMetaSchema>;
 
+/** Single message inside a chat history payload. Mirrors the
+ *  ChatMessage interface but as a zod schema so SnapshotMessageSchema
+ *  can validate the chat[] array on send. */
+export const ChatMessageSchema = z.object({
+  id: z.string(),
+  handle: z.string(),
+  text: z.string(),
+  at: z.number(),
+  kind: z.enum(["visitor", "pond"]).optional(),
+});
+
 /** Full initial state — sent on WebSocket open. */
 export const SnapshotMessageSchema = z.object({
   t: z.literal("snapshot"),
@@ -146,6 +157,14 @@ export const SnapshotMessageSchema = z.object({
   fish: z.array(KoiFrameSchema),
   food: z.array(FoodFrameSchema).optional(),
   pondMeta: PondMetaSchema,
+  // Chat surface — bundled into the initial snapshot so newly-connected
+  // visitors see the recent room conversation immediately. The
+  // chat-message ring buffer is sent (optional, omitted when empty),
+  // along with the session-sticky handle the worker assigned this
+  // visitor and the all-time chat counter.
+  chat: z.array(ChatMessageSchema).optional(),
+  yourHandle: z.string().optional(),
+  chatTotal: z.number().int().nonnegative().optional(),
 });
 
 /** Incremental frame — broadcast at `broadcastHz`. */
@@ -225,6 +244,10 @@ export const FoodMessageSchema = z.object({
   t: z.literal("food"),
   x: z.number(),
   z: z.number(),
+  /** Optional dev key. When present and matches env.DEV_FEED_KEY, the
+   *  per-visitor rate limit is bypassed. Used to keep founders alive
+   *  during local development. */
+  devKey: z.string().optional(),
 });
 
 export const NicknameMessageSchema = z.object({
@@ -233,10 +256,31 @@ export const NicknameMessageSchema = z.object({
   nickname: z.string().min(1).max(40),
 });
 
+/** Visitor chat submission. Worker handler in pond-do.ts:
+ *  rate-limit → Gemma safety classifier → either broadcast as
+ *  chat_message envelope to every connected socket, or send back
+ *  chat_rejected to the submitting socket with the verdict reason.
+ *  Without this schema, ClientToServerSchema.safeParse would reject
+ *  every chat submission silently and the handler would never fire. */
+export const ChatSchema = z.object({
+  t: z.literal("chat"),
+  text: z.string().min(1).max(280),
+});
+
+/** Dev-only feed-all. Drops one pellet at every alive koi's current
+ *  position when devKey matches env.DEV_FEED_KEY on the worker.
+ *  Silently dropped on mismatch. */
+export const DevFeedAllSchema = z.object({
+  t: z.literal("dev_feed_all"),
+  devKey: z.string(),
+});
+
 export const ClientToServerSchema = z.discriminatedUnion("t", [
   PebbleMessageSchema,
   FoodMessageSchema,
   NicknameMessageSchema,
+  ChatSchema,
+  DevFeedAllSchema,
 ]);
 
 export type ClientToServer = z.infer<typeof ClientToServerSchema>;
