@@ -126,6 +126,12 @@ export interface Env {
    *  pre-classifier. Used for triaging utterance frequency. */
   DEBUG_RAW_UTTERANCES?: string;
   SHARED_SECRET: string;
+  /** HMAC shared secret with the Next.js API routes. Stripe webhooks
+   *  are validated by Next.js, which then signs the drop-pellet
+   *  request with this secret. The worker rejects any /visitor/drop-
+   *  pellet POST whose X-Pond-Signature doesn't verify. Must be the
+   *  SAME value as POND_INGEST_SECRET in Vercel env. */
+  POND_INGEST_SECRET?: string;
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -199,6 +205,66 @@ const POND_UTTERANCE_QUIET_MS = 20 * 60_000;
 //  Pond DO
 // ───────────────────────────────────────────────────────────────────
 
+// ───────────────────────────────────────────────────────────────────
+//  HMAC signature verification (Stripe-webhook style)
+//  Used by /visitor/drop-pellet to validate that the caller is the
+//  Next.js side which holds POND_INGEST_SECRET. Signature header
+//  format: "t=<unix_ts>,v1=<hex_hmac>". Signing payload is
+//  `${ts}.${body}`. Replay window: 5 minutes.
+// ───────────────────────────────────────────────────────────────────
+
+async function verifyPondSignature(
+  header: string | null,
+  bodyText: string,
+  secret: string,
+): Promise<boolean> {
+  if (!header) return false;
+
+  let ts = 0;
+  let sig = "";
+  for (const part of header.split(",")) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith("t=")) {
+      ts = parseInt(trimmed.slice(2), 10);
+    } else if (trimmed.startsWith("v1=")) {
+      sig = trimmed.slice(3);
+    }
+  }
+  if (!ts || !sig) return false;
+
+  // Replay protection — accept only signatures within ±5 minutes of
+  // the worker's wall clock. Stripe→Next.js→worker shouldn't take
+  // anywhere near that long; this just bounds the window during
+  // which a leaked signature could be replayed.
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - ts) > 300) return false;
+
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sigBytes = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    enc.encode(`${ts}.${bodyText}`),
+  );
+  const expected = Array.from(new Uint8Array(sigBytes))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  // Constant-time hex comparison.
+  if (expected.length !== sig.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) {
+    diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 export class Pond extends DurableObject<Env> {
   private sql: SqlStorage;
   private initialized = false;
@@ -225,6 +291,29 @@ export class Pond extends DurableObject<Env> {
    *  exchange, not a chat log). Capped at CHAT_RING_BUFFER_SIZE
    *  messages, oldest dropped on overflow. */
   private chatRing: ChatMessage[] = [];
+
+  /** Stripe session IDs already processed by /visitor/drop-pellet.
+   *  Idempotency guard — Stripe may retry the Next.js call, the user
+   *  may refresh the success page, etc. Each session_id spawns
+   *  pellets exactly once. In-memory only; if the DO hibernates
+   *  between Stripe pay and a duplicate retry, we'd spawn twice in
+   *  the worst case, which is preferable to never spawning (visitor
+   *  paid for pellets). For hackathon scope this is acceptable. */
+  private giftIdsProcessed: Set<string> = new Set();
+
+  /** Per-pellet gift metadata, keyed by food.id. When a pellet is
+   *  spawned via the donation flow we register the donor handle, the
+   *  Stripe session id, and the USD amount. The consumption side
+   *  (nutrition.ts → consumed[]) hands the food.id back; the witness
+   *  layer looks it up here and fires the gift mechanism with
+   *  donor context. Cleared on consumption to avoid unbounded growth;
+   *  any pellet that drifts off (decays without being eaten) also
+   *  cleans up via the decay path. */
+  private pendingGifts: Map<string, {
+    donorHandle: string;
+    giftId: string;
+    amountUsd: number;
+  }> = new Map();
 
   /** Cumulative count of chat messages this pond has ever accepted.
    *  Monotonically increasing — independent of the ring buffer which
@@ -288,6 +377,13 @@ export class Pond extends DurableObject<Env> {
       // Existing pond — rehydrate hot state.
       this.hot = this.rehydrateHotState();
       this.loadLifespans();
+      // Pebbles live in ctx.storage (not SQL) — load them now so
+      // they're available before the first WS connection lands.
+      const storedPebbles = await this.ctx.storage.get<typeof this.hot.pebbles>("pebbles");
+      if (storedPebbles && Array.isArray(storedPebbles)) {
+        this.hot.pebbles = storedPebbles;
+        console.log(`[pond init] restored ${storedPebbles.length} pebbles from storage`);
+      }
     }
 
     // Force-reschedule the alarm on every init. setAlarm overwrites
@@ -361,6 +457,7 @@ export class Pond extends DurableObject<Env> {
       world,
       koi: initialCohort,
       food: [],
+      pebbles: [],
       tierLevel: 0,
       monthSpendUsd: 0,
       rngState: rng.snapshot(),
@@ -512,6 +609,13 @@ export class Pond extends DurableObject<Env> {
       },
       koi,
       food,
+      // Pebbles restored from durable storage. They were written via
+      // ctx.storage.put("pebbles", ...) on each submission. Falls back
+      // to empty if the key doesn't exist (first-run pond or no pebbles
+      // yet placed). The async load happens in init; this synchronous
+      // path uses a fast-path empty array, and init populates the real
+      // list before the alarm fires.
+      pebbles: [],
       tierLevel: wRow["tier_level"] as 0 | 1 | 2 | 3,
       monthSpendUsd: wRow["month_spend_usd"] as number,
       rngState: wRow["rng_state"] as number,
@@ -554,6 +658,18 @@ export class Pond extends DurableObject<Env> {
         tier_level: this.hot.tierLevel,
         sessions: this.ctx.getWebSockets().length,
       });
+    }
+
+    // ─── Donation ingest from Next.js (Stripe-verified) ──────────
+    // Next.js verifies Stripe payment, then POSTs here with the drop
+    // metadata. Body is HMAC-signed using POND_INGEST_SECRET so the
+    // worker only trusts callers who know the shared secret — the
+    // public internet cannot spawn free pellets by hitting this URL.
+    if (url.pathname === "/visitor/drop-pellet") {
+      if (request.method !== "POST") {
+        return new Response("method not allowed", { status: 405 });
+      }
+      return this.handleDropPellet(request);
     }
 
     // ─── Admin / dev console endpoints ────────────────────────────
@@ -906,24 +1022,73 @@ export class Pond extends DurableObject<Env> {
     // Stage 10 will wire these to actual world effects. For Stage 0,
     // we log them as events so the research instrument sees them.
     switch (parsed.data.t) {
-      case "pebble":
+      case "pebble": {
+        const inscription = (parsed.data.inscription ?? "").toString().trim();
+        if (!inscription || inscription.length > 280) {
+          // Reject silently — frontend should have validated.
+          break;
+        }
+        if (/[\u0000-\u0008\u000B-\u001F\u007F]/.test(inscription)) {
+          break;
+        }
+        // One pebble per visitor, across refreshes. The visitorHash is
+        // stable for a given browser identity, so this enforces the
+        // limit even after page reload. Silent rejection — the frontend
+        // should also localStorage-gate to give user-facing feedback.
+        const alreadyPlaced = this.hot.pebbles.some(
+          (p) => p.donorHash === visitorHash,
+        );
+        if (alreadyPlaced) {
+          console.log(
+            `[pebble] rejected — visitor ${visitorHash} already placed a pebble`,
+          );
+          break;
+        }
+        // Clamp drop position to pond bounds with margin.
+        const POND_R = 10.0;
+        const MARGIN = 0.5;
+        const dist = Math.hypot(parsed.data.x, parsed.data.z);
+        let px = parsed.data.x, pz = parsed.data.z;
+        if (dist > POND_R - MARGIN) {
+          const scale = (POND_R - MARGIN) / dist;
+          px *= scale; pz *= scale;
+        }
+        const pebble = {
+          id: `peb_${this.hot.tick}_${Math.random().toString(36).slice(2, 8)}`,
+          x: px,
+          z: pz,
+          inscription,
+          placedAt: Date.now(),
+          donorHandle: attachment?.handle ?? "anonymous",
+          donorHash: visitorHash,
+        };
+        this.hot.pebbles.push(pebble);
+        // Persist immediately — pebbles are permanent additions, not
+        // transient state. The cost is one storage write per submission,
+        // which is fine given pebble drops are inherently low-rate.
+        await this.ctx.storage.put("pebbles", this.hot.pebbles);
+
+        // Broadcast to every connected client so the pebble appears in
+        // their pond immediately. New connections receive the full
+        // list via the snapshot path.
+        this.broadcastPebblePlaced(pebble);
+
         await emit(this.sql, this.env.AE_EVENTS,
           { pondId: this.pondId, configHash: this.configHash },
           {
             tick: this.hot.tick,
             actor: `visitor:${visitorHash}`,
             type: "visitor_pebble_placed",
-            payload: {
-              x: parsed.data.x, z: parsed.data.z,
-              inscription: parsed.data.inscription ?? null,
-            },
+            payload: { x: px, z: pz, inscription, pebble_id: pebble.id },
           },
         );
-        // Nearby koi receive the arousal appraisal from § VIII.
-        this.applyAmbientToNearby(parsed.data.x, parsed.data.z, {
-          kind: "visitor_pebble_placed",
-        });
+        this.applyAmbientToNearby(px, pz, { kind: "visitor_pebble_placed" });
+        console.log(
+          `[pebble] placed at (${px.toFixed(2)},${pz.toFixed(2)}) ` +
+          `from ${pebble.donorHandle}: "${inscription.slice(0, 40)}"`,
+        );
         break;
+      }
 
       case "food": {
         // Rate limit: 3 pellets per minute per visitor hash (§ XIV).
@@ -1355,6 +1520,86 @@ export class Pond extends DurableObject<Env> {
           },
         },
       );
+
+      // Gift witness — if this consumed pellet was registered as a
+      // donation via /visitor/drop-pellet, the gift mechanism fires
+      // on top of the normal feed handling. The visitor sees a
+      // pond-voice whisper acknowledging their gift was received by
+      // a specific koi; the koi's PAD spikes harder than a found
+      // insect would produce; and its next cognition cycle is forced
+      // to fire within ~2 ticks instead of waiting for the normal
+      // 30–60s interval, so the gremlin utterance ("nom nom" /
+      // "taste gooood") lands while the gift is still felt.
+      const gift = this.pendingGifts.get(c.foodId);
+      if (gift) {
+        this.pendingGifts.delete(c.foodId);
+
+        // Pond-voice whisper into the chat ring. Fragment-y on
+        // purpose so it doesn't dominate the chat surface — the
+        // gift is the visitor's gesture, not the pond's announcement.
+        const giftMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          handle: "pond",
+          text: `a gift from ${gift.donorHandle} — ${c.koiName}`,
+          at: Date.now(),
+          kind: "pond",
+        };
+        this.addToChatRing(giftMsg);
+        this.broadcastChat(giftMsg);
+        this.chatTotal += 1;
+        await this.ctx.storage.put("chat_total", this.chatTotal);
+
+        // Extra PAD nudge on top of the consume baseline. The gift
+        // is qualitatively different from finding an insect — it's
+        // care arriving from outside the pond. Higher pleasure and
+        // a small arousal bump so the koi reads as awake to it.
+        const koi = this.hot.koi.find((k) => k.id === c.koiId);
+        if (koi) {
+          koi.pad.p = Math.max(-1, Math.min(1, koi.pad.p + 0.20));
+          koi.pad.a = Math.max(0, Math.min(1, koi.pad.a + 0.15));
+          // Force cognition to fire within ~2 ticks (~220ms at 9Hz)
+          // so the utterance lands in the moment of receiving, not
+          // 30–60s later when the moment has passed.
+          koi.nextCognitionTick = newTick + 2;
+        }
+
+        await emit(this.sql, this.env.AE_EVENTS,
+          { pondId: this.pondId, configHash: this.configHash },
+          {
+            tick: newTick, actor: `visitor:${gift.donorHandle}`,
+            type: "interaction",
+            payload: {
+              subtype: "gift_received",
+              gift_id: gift.giftId,
+              amount_usd: gift.amountUsd,
+              koi_id: c.koiId,
+              koi_name: c.koiName,
+              food_id: c.foodId,
+            },
+          },
+        );
+
+        console.log(
+          `[gift] ${gift.donorHandle} → ${c.koiName} ` +
+          `($${gift.amountUsd.toFixed(2)})`,
+        );
+      }
+    }
+
+    // GC pendingGifts whose pellet has decayed without being eaten.
+    // The food.filter(decayAtTick > newTick) inside stepNutrition has
+    // already removed the pellet from hot.food; we just need to drop
+    // the corresponding gift metadata so the map doesn't leak. Silent
+    // — no witness fires for an uneaten gift. The visitor's donation
+    // still landed; just no koi happened to find this particular
+    // handful in time.
+    if (this.pendingGifts.size > 0) {
+      const liveFoodIds = new Set(this.hot.food.map((f) => f.id));
+      for (const giftFoodId of this.pendingGifts.keys()) {
+        if (!liveFoodIds.has(giftFoodId)) {
+          this.pendingGifts.delete(giftFoodId);
+        }
+      }
     }
 
     // 4. Intent renewal — fish whose cognition clock has expired get
@@ -1727,12 +1972,34 @@ export class Pond extends DurableObject<Env> {
       });
     }
 
-    // 8. Persist hot state back to SQLite
+    // 8. Persist hot state back to SQLite — throttled to once per 5
+    //    minutes. The original per-tick persistence at 9 Hz produced
+    //    ~315 writes/sec on the pond DO (1 world row + 3-5 koi rows +
+    //    30+ food rows × 9 ticks/sec). That generated ~27M writes/day,
+    //    which cost ~$1000/day in DO storage. Stage transitions,
+    //    deaths, food consumptions, and chat events still persist
+    //    immediately via their own code paths — those are meaningful
+    //    state changes that warrant the write cost. Per-tick position
+    //    drift does not.
+    //
+    //    Food is no longer persisted at all. Pollen/algae/insects all
+    //    regenerate naturally; visitor-dropped pellets typically live
+    //    for less than a minute. The visual continuity cost of food
+    //    not surviving a DO restart is nil.
+    //
+    //    Koi positions/PAD/hunger persist every 5 minutes. On a DO
+    //    cold-start visitors may see koi pop to slightly stale
+    //    positions, then resume smooth motion. Acceptable cost.
     this.hot.tick = newTick;
     this.hot.rngState = rng.snapshot();
-    this.persistWorld();
-    for (const k of this.hot.koi) this.updateKoiRow(k);
-    this.persistFood();
+    const PERSIST_EVERY_TICKS = SIM.tickHz * 60 * 5;  // 5 minutes
+    if (newTick % PERSIST_EVERY_TICKS === 0) {
+      this.persistWorld();
+      for (const k of this.hot.koi) this.updateKoiRow(k);
+      console.log(
+        `[persist] tick=${newTick} wrote world + ${this.hot.koi.length} koi rows`,
+      );
+    }
 
     // 9. Broadcast tick frame to WS clients — gated to broadcastHz, not
     //    tickHz. Physics steps at SIM.tickHz (smooth integration); the
@@ -1783,6 +2050,207 @@ export class Pond extends DurableObject<Env> {
     }
   }
 
+  /** Handle a validated donation-pellet drop from Next.js.
+   *
+   *  Flow upstream of this:
+   *    1. Visitor pays at Stripe Checkout
+   *    2. Stripe redirects to /pond/gift-success?session_id=...
+   *    3. Next.js fetches the session from Stripe, confirms paid
+   *    4. Next.js extracts metadata (handle, drop_x, drop_z, count)
+   *    5. Next.js POSTs here with an HMAC signature
+   *
+   *  This handler trusts steps 1-3 happened on the Next.js side
+   *  (which holds STRIPE_SECRET_KEY) — we just validate the HMAC
+   *  proves the caller is that Next.js side, then spawn the pellets.
+   *
+   *  Pellets carry gift metadata in `this.pendingGifts` (keyed by
+   *  food.id). The consumption-side witness layer reads from there
+   *  to fire the gift mechanism with donor context when a koi eats
+   *  one. */
+  private async handleDropPellet(request: Request): Promise<Response> {
+    const secret = this.env.POND_INGEST_SECRET;
+    if (!secret) {
+      console.error("[drop-pellet] POND_INGEST_SECRET not configured");
+      return new Response("server misconfigured", { status: 500 });
+    }
+
+    const bodyText = await request.text();
+    const sigHeader = request.headers.get("X-Pond-Signature");
+    const valid = await verifyPondSignature(sigHeader, bodyText, secret);
+    if (!valid) {
+      return new Response("invalid signature", { status: 401 });
+    }
+
+    let body: {
+      stripe_session_id: string;
+      visitor_handle: string;
+      drop_x: number;
+      drop_z: number;
+      pellet_count: number;
+      amount_usd: number;
+    };
+    try {
+      body = JSON.parse(bodyText);
+    } catch {
+      return new Response("invalid json", { status: 400 });
+    }
+
+    // Field validation.
+    if (
+      typeof body.stripe_session_id !== "string" || body.stripe_session_id.length === 0 ||
+      typeof body.visitor_handle !== "string" || body.visitor_handle.length === 0 ||
+      typeof body.drop_x !== "number" || !Number.isFinite(body.drop_x) ||
+      typeof body.drop_z !== "number" || !Number.isFinite(body.drop_z) ||
+      typeof body.pellet_count !== "number" || body.pellet_count < 1 || body.pellet_count > 20 ||
+      typeof body.amount_usd !== "number" || body.amount_usd < 0
+    ) {
+      return new Response("invalid body shape", { status: 400 });
+    }
+
+    // Idempotency — Stripe may retry the Next.js call on transient
+    // errors, the visitor may refresh the success page, etc. Each
+    // session id spawns pellets exactly once.
+    if (this.giftIdsProcessed.has(body.stripe_session_id)) {
+      return Response.json({
+        status: "already_processed",
+        stripe_session_id: body.stripe_session_id,
+      });
+    }
+
+    // Drop point: makeVisitorPellet internally clampToPonds to keep
+    // the pellet inside water. We don't need a separate guard here —
+    // the HMAC gate above already restricts who can call this, and
+    // the finite-number check above rejects NaN/Infinity.
+
+    // Spawn the cluster. Pellets distributed on a small ring around
+    // the drop point so they look like a handful tossed in, not a
+    // single point. Light jitter on radius keeps each cluster
+    // unique-looking.
+    const spawned: string[] = [];
+    const SPREAD = 0.5;
+    const POND_R = 10.0;
+    const EDGE_MARGIN = 0.5;
+    const MAX_R = POND_R - EDGE_MARGIN;
+    for (let i = 0; i < body.pellet_count; i++) {
+      const angle = (i / body.pellet_count) * 2 * Math.PI +
+                    (Math.random() - 0.5) * 0.3;
+      const rad = SPREAD * (0.4 + Math.random() * 0.6);
+      let px = body.drop_x + Math.cos(angle) * rad;
+      let pz = body.drop_z + Math.sin(angle) * rad;
+      // Clamp to pond bounds with margin — even if the cluster spread
+      // pushes a pellet near the edge, this keeps it inside the
+      // navigable area so koi can actually reach it.
+      const dist = Math.hypot(px, pz);
+      if (dist > MAX_R) {
+        const scale = MAX_R / dist;
+        px *= scale;
+        pz *= scale;
+      }
+      const pellet = makeVisitorPellet(px, pz, this.hot.tick);
+      this.hot.food.push(pellet);
+      this.pendingGifts.set(pellet.id, {
+        donorHandle: body.visitor_handle,
+        giftId: body.stripe_session_id,
+        amountUsd: body.amount_usd,
+      });
+      spawned.push(pellet.id);
+    }
+
+    // Mark idempotency BEFORE the side-effect emit/ambient, so even
+    // if those throw we don't double-spawn on retry.
+    this.giftIdsProcessed.add(body.stripe_session_id);
+
+    await emit(this.sql, this.env.AE_EVENTS,
+      { pondId: this.pondId, configHash: this.configHash },
+      {
+        tick: this.hot.tick,
+        actor: `visitor:${body.visitor_handle}`,
+        type: "visitor_fed",
+        payload: {
+          x: body.drop_x, z: body.drop_z,
+          pellet_count: body.pellet_count,
+          amount_usd: body.amount_usd,
+          stripe_session_id: body.stripe_session_id,
+          gift: true,
+        },
+      },
+    );
+
+    // PAD-nudge nearby koi as if they noticed the drop. Reuses the
+    // visitor_fed appraisal — same affective surface as the existing
+    // free-feed path, since from the koi's body-perspective a fed
+    // pond is a fed pond regardless of who paid for it.
+    this.applyAmbientToNearby(body.drop_x, body.drop_z, {
+      kind: "visitor_fed",
+    });
+
+    // GUARANTEED ENGAGEMENT — find the nearest living, eating-capable
+    // koi to the drop point and direct it at the first pellet, even
+    // if it's not hungry enough for applyHungerOverride to trigger.
+    // A gift is a real event in the pond, not opportunistic forage;
+    // we promise visitors that *someone* will receive their gift.
+    // Also force that koi's next cognition cycle to fire within ~5
+    // ticks (~550ms at 9Hz) so the utterance about the gift lands
+    // while it's still on screen, not 30-60s later.
+    if (spawned.length > 0) {
+      const firstPellet = this.hot.food.find(
+        (f) => f.id === spawned[0],
+      );
+      if (firstPellet) {
+        let attendant: typeof this.hot.koi[number] | null = null;
+        let attendantDist = Infinity;
+        for (const k of this.hot.koi) {
+          if (k.stage === "egg" || k.stage === "dying") continue;
+          const d = Math.hypot(
+            k.x - firstPellet.x,
+            k.z - firstPellet.z,
+          );
+          if (d < attendantDist) {
+            attendant = k;
+            attendantDist = d;
+          }
+        }
+        if (attendant) {
+          attendant.intent = {
+            ...attendant.intent,
+            kind: "feed_approach",
+            target: {
+              x: firstPellet.x,
+              y: firstPellet.y,
+              z: firstPellet.z,
+            },
+            targetId: undefined,
+            atTick: this.hot.tick,
+          };
+          // No pre-eating cognition force — the per-tick pellet
+          // override (applyHungerOverride) will keep this intent
+          // sticky, and the post-eating gift witness will force
+          // cognition right after the koi consumes, which is the
+          // right moment to produce the gremlin utterance.
+          console.log(
+            `[drop-pellet] directed ${attendant.id} ` +
+            `(${attendantDist.toFixed(2)}m away) to attend gift`,
+          );
+        }
+      }
+    }
+
+    console.log(
+      `[drop-pellet] spawned ${body.pellet_count} pellets ` +
+      `at (${body.drop_x.toFixed(2)},${body.drop_z.toFixed(2)}) ` +
+      `from ${body.visitor_handle} ($${body.amount_usd.toFixed(2)})`,
+    );
+
+    return Response.json({
+      status: "spawned",
+      stripe_session_id: body.stripe_session_id,
+      pellet_ids: spawned,
+      drop_x: body.drop_x,
+      drop_z: body.drop_z,
+      tick: this.hot.tick,
+    });
+  }
+
   private async emitWorldTransition(tick: SimTick, t: unknown): Promise<void> {
     // Narrow by discriminator without pulling the types up again.
     const trans = t as { kind: string } & Record<string, unknown>;
@@ -1831,9 +2299,62 @@ export class Pond extends DurableObject<Env> {
   // ─────────────────────────────────────────────────────────────────
 
   private applyHungerOverride(k: KoiState, atTick: SimTick): void {
-    if (k.hunger <= HUNGER.preoccupationThreshold) return;
     if (k.stage === "egg" || k.stage === "dying") return;
-    const food = nearestFood(k, this.hot.food, 6.0);
+
+    // Sticky target: if this koi is already in feed_approach toward a
+    // pellet that still exists in the pond, don't retarget. Without
+    // this, the per-tick "nearest pellet" lookup oscillates between
+    // cluster pellets as the koi moves, producing orbital motion
+    // around the cluster instead of an arrival on any single pellet.
+    if (k.intent.kind === "feed_approach" && k.intent.target) {
+      const t = k.intent.target;
+      const stillExists = this.hot.food.some(
+        (f) =>
+          f.kind === "pellet" &&
+          Math.abs(f.x - t.x) < 0.05 &&
+          Math.abs(f.z - t.z) < 0.05,
+      );
+      if (stillExists) {
+        // Keep current intent; just refresh atTick so other systems
+        // know it's still active.
+        k.intent.atTick = atTick;
+        return;
+      }
+    }
+
+    // Priority 1: pellets — pursued opportunistically regardless of
+    // hunger. Real koi go after novel food (a fresh pellet drop) even
+    // when they're well-fed; it's a salience response, not a survival
+    // one. By running this per-tick at 9 Hz, the directed intent
+    // stays sticky across cognition cycles (which fire every 120s and
+    // would otherwise overwrite intent.target back to undefined).
+    let nearestPellet: { x: number; y: number; z: number } | null = null;
+    let nearestPelletD = 10.0;
+    for (const f of this.hot.food) {
+      if (f.kind !== "pellet") continue;
+      const d = Math.hypot(f.x - k.x, f.z - k.z);
+      if (d < nearestPelletD) {
+        nearestPellet = { x: f.x, y: f.y, z: f.z };
+        nearestPelletD = d;
+      }
+    }
+    if (nearestPellet) {
+      k.intent = {
+        ...k.intent,
+        kind: "feed_approach",
+        target: nearestPellet,
+        targetId: undefined,
+        atTick,
+      };
+      return;
+    }
+
+    // Priority 2: natural food when actually hungry — the original
+    // starvation-override behavior. Pollen/algae/insects are
+    // background sustenance, not events; only chase them when the
+    // body needs to.
+    if (k.hunger <= HUNGER.preoccupationThreshold) return;
+    const food = nearestFood(k, this.hot.food, 10.0);
     if (!food) return;
     k.intent = {
       ...k.intent,
@@ -1943,7 +2464,46 @@ export class Pond extends DurableObject<Env> {
       tDay > 0.86 && tDay < 0.92 &&
       newTick - k.lastTwilightTick > Math.floor(SIM.tickHz * 3600 * 12);
 
-    // 7. Call cognition.
+    // 7. Compose ambient — the koi's perception of what's happening
+    //    in the pond beyond their direct visual range of other koi.
+    //    Three sources, each filtered to a tight recency window:
+    //      - recent visitor chat (last ~60 real seconds, last 2)
+    //      - other koi's recent utterances (within ~30 sim-seconds)
+    //      - nearest food within perceptible range (6m)
+    //    Capped at 4 entries to keep prompts focused. Without this
+    //    the cognition runs with an empty ambient and koi cannot
+    //    react to anything they don't directly see another koi doing
+    //    — chat is invisible, food drifts unnoticed, and the pond
+    //    feels like an empty token-game rather than an inhabited
+    //    world.
+    const ambient: string[] = [];
+    const ambNowMs = Date.now();
+    for (const m of this.chatRing) {
+      if (ambNowMs - m.at < 60_000) {
+        ambient.push(`a voice from above said: "${m.text}"`);
+      }
+    }
+    // Trim chat-derived entries to the most recent 2 if there were more.
+    if (ambient.length > 2) ambient.splice(0, ambient.length - 2);
+
+    const utteranceWindow = Math.floor(SIM.tickHz * 30);
+    for (const other of this.hot.koi) {
+      if (other.id === k.id) continue;
+      if (!other.lastUtterance) continue;
+      if (newTick - other.lastUtteranceTick > utteranceWindow) continue;
+      ambient.push(`${other.name} said: "${other.lastUtterance}"`);
+    }
+
+    const ambFood = nearestFood(k, this.hot.food, 10.0);
+    if (ambFood) {
+      const fd = Math.hypot(ambFood.x - k.x, ambFood.z - k.z);
+      ambient.push(`food (${ambFood.kind}) drifting, ${fd.toFixed(1)}m`);
+    }
+
+    // Hard cap.
+    if (ambient.length > 4) ambient.length = 4;
+
+    // 8. Call cognition.
     const result = await runCognition(this.env, {
       self: k,
       visible,
@@ -1952,7 +2512,7 @@ export class Pond extends DurableObject<Env> {
       memories,
       world: this.hot.world,
       tickHz: SIM.tickHz,
-      ambient: [],
+      ambient,
       isTwilight,
     }, this.hot.monthSpendUsd);
 
@@ -2987,6 +3547,7 @@ export class Pond extends DurableObject<Env> {
       now: Date.now(),
       fish,
       food,
+      pebbles: this.hot.pebbles.slice(),
       pondMeta: {
         version: this.pondVersion,
         created_at: Date.now(),            // approximate; real value in pond_meta
@@ -3051,6 +3612,20 @@ export class Pond extends DurableObject<Env> {
       chatTotal: this.chatTotal,
       kind: msg.kind ?? "visitor",
     };
+    const payload = JSON.stringify(envelope);
+    for (const ws of this.ctx.getWebSockets()) {
+      try { ws.send(payload); } catch { /* closed */ }
+    }
+  }
+
+  /** Broadcast a freshly-placed pebble to every connected client.
+   *  New connections receive the full pebble list via the snapshot
+   *  path; this is for the live "someone just placed a pebble" event. */
+  private broadcastPebblePlaced(pebble: {
+    id: string; x: number; z: number;
+    inscription: string; placedAt: number; donorHandle: string;
+  }): void {
+    const envelope = { t: "pebble_placed" as const, pebble };
     const payload = JSON.stringify(envelope);
     for (const ws of this.ctx.getWebSockets()) {
       try { ws.send(payload); } catch { /* closed */ }

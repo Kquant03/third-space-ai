@@ -30,7 +30,7 @@
 //  trifecta is amputated (§ XVIII).
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { MODEL_TIERS, tierForStage, DRAWN_TO, BUDGET, POND } from "./constants.js";
+import { MODEL_TIERS, tierForStage, DRAWN_TO, BUDGET, POND, SIM } from "./constants.js";
 import type { ModelTier } from "./constants.js";
 import {
   CognitionResponseSchema,
@@ -41,7 +41,6 @@ import {
 import type {
   KoiId, KoiState, MemoryRow, RelationshipCard, WorldState,
 } from "./types.js";
-import { bondIntensity, rankByBond } from "./mechanisms/bond.js";
 import { dayMoment, stormStress } from "./world.js";
 import {
   cachedFallback, classifyUtterance, delimitVisitorText,
@@ -92,16 +91,9 @@ When the relationship card you are handed for another fish shows high familiarit
 
 You will respond with a strict JSON object matching the provided schema. No prose outside JSON. No markdown fences.
 
-Choose exactly ONE intent from: swim, shoal, solitary, rest, feed_approach, feed_leave, retreat, approach, linger, bump, shelter, surface_breach, play_invite, follow, threadway, attend_solstice.
+Choose exactly ONE intent from: swim, shoal, solitary, rest, feed_approach, feed_leave, retreat, approach, linger, bump, shelter, surface_breach, play_invite, follow, threadway.
 
-utterance: a brief fragment of noticing — 1-6 words, no full sentences. Roughly one cycle in four or five carries a fragment worth speaking; the rest stay null. Speak when something registers — a color, a presence, the temperature of the water, the feel of light — even when nothing dramatic has occurred. The noticing itself is the occasion. Examples of acceptable utterances:
-  "warm here."
-  "the slow one."
-  "bronze-flank near."
-  "reed-edge cool."
-  "shoal-shape thickening."
-  "my water, my bright."
-When in doubt, prefer to speak the fragment than to stay silent. Silence is the default; the bias against speech is gentle, not absolute.
+utterance is usually a brief fragment — what your body senses right now, 2–6 words, in the register shown above. Speak most cycles. utterance: null is reserved for moments when truly nothing surfaces; it should be uncommon. Importance and utterance are independent: a low-importance noticing ("warm side. sun.") still gets voiced, because the noticing is what makes it real. The pond is alive; you are alive in it; let that show.
 importance rates 1-10; most moments rate 1-3.
 memory_write is rare.
 belief_update is very rare.
@@ -127,7 +119,11 @@ interface CognitionInput {
 }
 
 function stagePhaseLabel(ageTicks: number, tickHz: number): string {
-  const days = ageTicks / (tickHz * 3600 * 24);
+  // Sim-days, not real days. A sim-day is SIM.realSecondsPerSimDay
+  // real seconds long (currently 6 real hours), not 24. The previous
+  // version of this function used 3600*24 which produced a 4x
+  // underestimate — Shiki at 12 sim-days reporting as 3.0.
+  const days = ageTicks / (tickHz * SIM.realSecondsPerSimDay);
   return days.toFixed(1) + " sim-days";
 }
 
@@ -137,7 +133,15 @@ function personaBlock(self: KoiState, tickHz: number): string {
     `stage: ${self.stage}`,
     `color: ${self.color}`,
     `age: ${stagePhaseLabel(self.ageTicks, tickHz)}`,
-    self.legendary ? "lineage: notable" : "",
+    // Founder framing: Shiki and Kokutou have been in this water since
+    // before any other body was in it. The line biases their voice
+    // toward older-presence fragments — "the water is my water,"
+    // "this stone is old," "before the small ones" — without naming
+    // any relation. Descendants get no extra line; their voice is the
+    // default fish register, which is correct for them.
+    self.founder
+      ? "foundational presence: this water has been yours from before any other body was in it"
+      : "",
   ].filter(Boolean).join("\n");
 }
 
@@ -148,47 +152,6 @@ function selfModelBlock(self: KoiState): string {
     "you know the reed shelf in the shallows, the cave arcs near the shrine,",
     "the open plaza above the passage, and the ledges where the floor drops.",
   ].join(" ");
-}
-
-function orientationBlock(
-  cards: RelationshipCard[], visibleIds: Set<KoiId>,
-): string {
-  // Bond-ranked relational orientation. Surfaces the felt-sense of
-  // who matters most to this being right now, regardless of whether
-  // they're currently visible. Sits before the detailed relationship
-  // cards because it's the intuitive layer the cards are evidence of.
-  //
-  // Threshold 0.25: below this, the relationship is background — not
-  // strong enough to register as a felt pull. Above the reproduction
-  // threshold (0.55) the language shifts to "strong" or "deepest"; the
-  // LLM is never told this maps to anything in particular.
-  //
-  // Voice is fragment-sensory per the persona block — never names a
-  // bond as a fact ("you are bonded to X with intensity 0.72") but
-  // surfaces it as a sensed pull, with copresence noted in spatial
-  // language. The LLM reaches for the names that fit; we don't supply
-  // "love" or "mate" or any kin vocabulary.
-  const ORIENTATION_THRESHOLD = 0.25;
-  const MAX_LINES = 5;
-
-  const ranked = rankByBond(cards, (c) => c)
-    .filter((c) => bondIntensity(c) >= ORIENTATION_THRESHOLD)
-    .slice(0, MAX_LINES);
-
-  if (ranked.length === 0) {
-    return "no strong pulls right now. the others are background.";
-  }
-
-  return ranked.map((c) => {
-    const i = bondIntensity(c);
-    const pull =
-        i >= 0.70 ? "the deepest pull"
-      : i >= 0.55 ? "a strong pull"
-      : i >= 0.40 ? "a notable presence"
-      :             "a faint pull";
-    const where = visibleIds.has(c.otherId) ? "nearby now" : "elsewhere in the pond";
-    return `${c.otherId}: ${pull} · ${where}`;
-  }).join("\n");
 }
 
 function relationshipCardsBlock(
@@ -242,7 +205,9 @@ function situationBlock(input: CognitionInput): string {
   const nearby = visible
     .filter((o) => o.id !== self.id)
     .map((o) => ({
-      id: o.id, d: distance(self, o), stage: o.stage,
+      id: o.id,
+      name: o.name,
+      d: distance(self, o), stage: o.stage,
       from_shrine: Math.hypot(o.x - POND.shrine.x, o.z - POND.shrine.z),
     }))
     .sort((a, b) => a.d - b.d)
@@ -253,7 +218,7 @@ function situationBlock(input: CognitionInput): string {
     `water: ${world.weather}${ss > 0.2 ? " (unsettled)" : ""}, clarity ${world.clarity.toFixed(2)}`,
     world.solsticeActive ? "shaft: the light falls through the roof-box now." : "",
     `nearby: ${nearby.length === 0 ? "none" : nearby
-      .map((n) => `${n.id} ${n.d.toFixed(1)}m`)
+      .map((n) => `${n.name} ${n.d.toFixed(1)}m`)
       .join(", ")}`,
   ].filter(Boolean);
 
@@ -296,9 +261,6 @@ function composeMessages(input: CognitionInput): Array<{ role: "system" | "user"
     "--- SELF-MODEL ---",
     selfModelBlock(input.self),
     "",
-    "--- ORIENTATION ---",
-    orientationBlock(input.cards, visibleIds),
-    "",
     "--- RELATIONSHIP CARDS ---",
     relationshipCardsBlock(input.cards, visibleIds),
     "",
@@ -316,7 +278,7 @@ function composeMessages(input: CognitionInput): Array<{ role: "system" | "user"
     "--- AFFECT ---",
     affectBlock(input.self),
     "",
-    "Choose one intent. If a fragment of noticing wants to surface, also speak it — koi cognition is mostly silent but not exclusively. Stay in the fragment voice. Respond as JSON only.",
+    "Choose one intent. Respond as JSON only. Stay in the fragment voice.",
   ].join("\n");
 
   return [
@@ -354,18 +316,15 @@ function composeTwilightMessages(
 ): Array<{ role: "system" | "user"; content: string }> {
   const visibleIds = new Set(input.visible.map((k) => k.id));
 
-  // Same stable prefix as routine — persona, self-model, orientation,
-  // cards, beliefs. Cache-aligned with routine calls for this koi, so
-  // only the system prompt and tail are uncached.
+  // Same stable prefix as routine — persona, self-model, cards, beliefs.
+  // Cache-aligned with routine calls for this koi, so only the system
+  // prompt and tail are uncached.
   const prefix = [
     "--- PERSONA ---",
     personaBlock(input.self, input.tickHz),
     "",
     "--- SELF-MODEL ---",
     selfModelBlock(input.self),
-    "",
-    "--- ORIENTATION ---",
-    orientationBlock(input.cards, visibleIds),
     "",
     "--- RELATIONSHIP CARDS ---",
     relationshipCardsBlock(input.cards, visibleIds),
@@ -397,12 +356,12 @@ function composeTwilightMessages(
 //  OpenRouter client
 // ───────────────────────────────────────────────────────────────────
 
-export interface OpenRouterMessage {
+interface OpenRouterMessage {
   role: "system" | "user" | "assistant";
   content: string;
 }
 
-export interface OpenRouterRequest {
+interface OpenRouterRequest {
   model: string;
   messages: OpenRouterMessage[];
   temperature: number;
@@ -416,7 +375,7 @@ interface OpenRouterChoice {
   finish_reason: string;
 }
 
-export interface OpenRouterResponseBody {
+interface OpenRouterResponseBody {
   id: string;
   model: string;
   choices: OpenRouterChoice[];
@@ -427,7 +386,7 @@ export interface OpenRouterResponseBody {
   };
 }
 
-export async function callOpenRouter(
+async function callOpenRouter(
   apiKey: string,
   body: OpenRouterRequest,
   signal?: AbortSignal,
@@ -511,11 +470,6 @@ export interface RunCognitionEnv {
   OPENROUTER_API_KEY?: string;
   COGNITION_ENABLED: string;
   MONTHLY_BUDGET_USD: string;
-  /** When "true", log each call's raw utterance and classifier verdict
-   *  to console.log under the [cognition raw] tag. Used to triage
-   *  whether utt=null is Gemma never speaking or the classifier
-   *  wiping what Gemma said. Leave unset in production. */
-  DEBUG_RAW_UTTERANCES?: string;
 }
 
 export interface CognitionRunResult {
@@ -569,22 +523,10 @@ export async function runCognition(
       );
       validationFailures += result.validationFailures;
 
-      // Output-side safety classifier on any utterance.
-      // Capture the raw value first so we can tell, in debug logs,
-      // whether the classifier is wiping Gemma's output vs. Gemma
-      // itself never producing utterances.
-      const rawUtterance = result.response.utterance;
+      // Output-side safety classifier on any utterance
       const c = classifyUtterance(result.response.utterance);
       if (!c.allow) {
         result.response.utterance = null;
-      }
-
-      if (env.DEBUG_RAW_UTTERANCES === "true") {
-        const status =
-          rawUtterance === null ? "null-from-gemma" :
-          !c.allow              ? `wiped-by-classifier: ${c.reason}` :
-          "kept";
-        console.log(`[cognition raw] koi=${input.self.id} utt-status=${status} raw=${JSON.stringify(rawUtterance)}`);
       }
 
       const cost = estimateCost(tier, result.tokensIn, result.tokensOut);

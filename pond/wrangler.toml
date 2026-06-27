@@ -71,6 +71,7 @@ TICK_HZ = "2"
 # and you're ready to spend real money. Until then, the pond runs in
 # Meditation mode — kinematics at full fidelity, no LLM calls.
 COGNITION_ENABLED = "true"
+POND_INGEST_SECRET = "8f3a2b1e9d7c4a6f5e2d8c1b7a9f4e3d6c5b8a2f7e1d9c4b6a3f5e8d2c7b1a9e"
 # Soft budget ceiling; when exceeded, the pond drops a tier (see § XVII).
 MONTHLY_BUDGET_USD = "100"
 

@@ -83,16 +83,14 @@ export interface KoiFrame {
   m?: { v: number; a: number };
   /** Hunger 0..1. Optional for backward compatibility with pre-commit-3 servers. */
   hu?: number;
+  /** Founder flag — set on Shiki and Kokutou. The renderer reads this
+   *  to take the founder-palette branch in getPheno() (otherwise they
+   *  get the magical-offspring rendering meant for Sylvanas). */
+  founder?: boolean;
   // v3 action-state fields
   i?: IntentKind;
   t?: string | null;
   mech?: string;
-  /** Age in ticks since hatch. Optional; the diagnostic shows "—" when
-   *  absent. Wire shorthand key 'at' to keep payloads small. */
-  at?: number;
-  /** True for the founder koi (Shiki, Kokutou). Must match KoiFrameSchema
-   *  in protocol.ts — both definitions are kept in sync by hand. */
-  founder?: boolean;
 }
 
 /** Food items from the server, rendered on the motion-trace plot
@@ -103,31 +101,6 @@ export interface FoodFrame {
   x: number;
   y: number;
   z: number;
-}
-
-// ─── Chat types — wire-aligned ────────────────────────────────────────────
-// Shapes flow from the worker:
-//   - ChatMessage is what arrives in `chat` array of the snapshot AND
-//     what each chat_message broadcast envelope carries.
-//   - ChatRejection is what each chat_rejected envelope carries
-//     (delivered only to the submitting socket).
-// PondChat reads these via the hook surface (getChat/getLastChatRejection
-// and so on).
-export interface ChatMessage {
-  id: string;
-  text: string;
-  handle: string;            // visitor handle ("Crepuscular-Heimdall" etc.)
-  at: number;                // ms epoch
-  /** "visitor" = sent by a person; "pond" = the pond observing itself
-   *  (see pond-utterance.ts on the worker). Optional only because the
-   *  initial snapshot's chat ring may carry messages from older worker
-   *  builds that didn't set kind. */
-  kind?: "visitor" | "pond";
-}
-
-export interface ChatRejection {
-  reason: string;            // human-readable why-rejected
-  text: string;              // the rejected attempt
 }
 
 export interface PondMeta {
@@ -147,15 +120,12 @@ export interface ShaderFish {
   stage?: string;
   name?: string;
   color?: string;
+  founder?: boolean;
   mood?: { v: number; a: number };
   // v3 action-state fields — renderers use these to animate intent.
   intent?: IntentKind;
   target?: string | null;
   mechanism?: string;
-  /** True for the founder koi (Shiki, Kokutou). Renderer reads this to
-   *  switch into the founder phenotype palette (wisteria/cobalt) instead
-   *  of the archetype default (kohaku/asagi). */
-  founder?: boolean;
 }
 
 /** A body-point sample for wake-field injection. Each moving koi
@@ -222,6 +192,16 @@ interface PondState {
    *  static; the diagnostic HUD and (future) shader just read the
    *  latest values. */
   food: FoodFrame[];
+  /** Visitor-placed pebbles with inscriptions. Persistent — appended
+   *  on pebble_placed messages, full list received on snapshot. */
+  pebbles: Array<{
+    id: string;
+    x: number;
+    z: number;
+    inscription: string;
+    placedAt: number;
+    donorHandle: string;
+  }>;
   meta: PondMeta | null;
 }
 
@@ -295,13 +275,8 @@ interface KineState {
   stage?: string;
   name?: string;
   color?: string;
-  mood?: { v: number; a: number };
-  /** True for the founder koi (Shiki, Kokutou). Carried through from
-   *  the wire so kineToShader can hand it to the renderer. */
   founder?: boolean;
-  /** Age in ticks since hatch — carried through to DebugKine for the
-   *  diagnostic's koi-life-age display (sim-days / sim-hours). */
-  ageTicks?: number;
+  mood?: { v: number; a: number };
 
   // Stage-derived speed multiplier (used by visual flourishes)
   speedMult: number;
@@ -371,9 +346,8 @@ function makeKineState(f: KoiFrame, nowMs: number): KineState {
     stage: f.stage,
     name: f.name,
     color: f.c,
-    mood: f.m,
     founder: f.founder,
-    ageTicks: f.at,
+    mood: f.m,
     speedMult: STAGE_SPEED_MULT[f.stage ?? "adult"] ?? 1.0,
     breachPhase: 0,
     lingerPhase: hashToUnit(f.id + ":lp") * Math.PI * 2,
@@ -417,9 +391,8 @@ function updateKineTarget(k: KineState, f: KoiFrame, nowMs: number): void {
   k.mechanism = f.mech;
   k.stage = f.stage ?? k.stage;
   k.color = f.c ?? k.color;
-  k.mood = f.m ?? k.mood;
   k.founder = f.founder ?? k.founder;
-  k.ageTicks = f.at ?? k.ageTicks;
+  k.mood = f.m ?? k.mood;
   if (f.stage) k.speedMult = STAGE_SPEED_MULT[f.stage] ?? 1.0;
 }
 
@@ -433,6 +406,7 @@ class PondStore {
     fishPrevTime: 0,
     fishCurrTime: 0,
     food: [],
+    pebbles: [],
     meta: null,
   };
   private listeners = new Set<Listener>();
@@ -440,24 +414,6 @@ class PondStore {
   private speechBuffer: SpeechEvent[] = [];
   private mechanismListeners = new Set<MechanismListener>();
   private mechanismBuffer: MechanismEvent[] = [];
-
-  // ─── Chat surface ──────────────────────────────────────────────────
-  // Mirrors the speech/mechanism subscriber pattern: a buffer of
-  // recent messages, a Set of listener callbacks notified on any
-  // change. Chat differs in that newly-connected visitors receive
-  // the existing buffer via the snapshot envelope (worker's
-  // chatRing) — speech and mechanism events are ephemeral, chat is
-  // history.
-  private chatBuffer: ChatMessage[] = [];
-  private chatTotal: number = 0;
-  private yourHandle: string | null = null;
-  private lastChatRejection: ChatRejection | null = null;
-  private sessionChatCount: number = 0;
-  private chatListeners = new Set<() => void>();
-  /** Cap on the rendered chat history. Worker's CHAT_RING_BUFFER_SIZE
-   *  governs what arrives in the snapshot; this is the runtime cap on
-   *  what we keep visible after live broadcasts accumulate. */
-  private static readonly CHAT_BUFFER_CAP = 100;
 
   /** Continuous kinematic state per fish, keyed by id. This is what
    *  the renderer ultimately reads — it moves smoothly every frame
@@ -659,93 +615,6 @@ class PondStore {
     return () => this.mechanismListeners.delete(l);
   };
 
-  // ─── Chat surface ──────────────────────────────────────────────────
-  subscribeToChat = (l: () => void): (() => void) => {
-    this.chatListeners.add(l);
-    return () => this.chatListeners.delete(l);
-  };
-
-  private notifyChat(): void {
-    for (const l of this.chatListeners) {
-      try { l(); } catch { /* swallow per-listener errors */ }
-    }
-  }
-
-  /** Returns a shallow copy of the chat buffer. Components that re-read
-   *  on every chat change get a fresh array, which forces re-render in
-   *  consumers that compare by identity. */
-  getChatBuffer = (): ChatMessage[] => this.chatBuffer.slice();
-
-  getYourHandle = (): string | null => this.yourHandle;
-
-  getChatTotal = (): number => this.chatTotal;
-
-  getLastChatRejection = (): ChatRejection | null => this.lastChatRejection;
-
-  getSessionChatCount = (): number => this.sessionChatCount;
-
-  applyChatMessage(msg: {
-    id: string; handle: string; text: string; at: number;
-    chatTotal?: number; kind?: "visitor" | "pond";
-  }): void {
-    // Dedup defense: if this message id is already in the buffer, drop
-    // the append but still update chatTotal (the broadcast may carry a
-    // fresher counter than our mirror). Without this, the SAME message
-    // can land in the buffer twice — typically when applySnapshot
-    // replaces the buffer with the worker's chat ring just before or
-    // after a near-simultaneous chat_message envelope, or under React
-    // StrictMode double-mounting in dev. React's duplicate-key warning
-    // fires when the duplicates render. Visitors perceive "a billion"
-    // messages because each render of the same id stacks.
-    if (this.chatBuffer.some(m => m.id === msg.id)) {
-      if (typeof msg.chatTotal === "number") {
-        this.chatTotal = msg.chatTotal;
-      }
-      this.notifyChat();
-      return;
-    }
-    // Append to buffer, cap at CHAT_BUFFER_CAP from the front.
-    this.chatBuffer = [
-      ...this.chatBuffer,
-      {
-        id: msg.id,
-        handle: msg.handle,
-        text: msg.text,
-        at: msg.at,
-        kind: msg.kind ?? "visitor",
-      },
-    ].slice(-PondStore.CHAT_BUFFER_CAP);
-    // Server's chatTotal is the source of truth — it counts all-time
-    // across reconnects. Update local mirror on every broadcast.
-    if (typeof msg.chatTotal === "number") {
-      this.chatTotal = msg.chatTotal;
-    }
-    // Count only messages that originated from this session (handle
-    // match). This lets the UI show "you've spoken N times today"
-    // without phantom counts from other visitors.
-    if (msg.handle === this.yourHandle) {
-      this.sessionChatCount += 1;
-    }
-    this.notifyChat();
-  }
-
-  applyChatRejected(msg: {
-    text: string; reason: string; at: number;
-  }): void {
-    this.lastChatRejection = {
-      text: msg.text,
-      reason: msg.reason,
-    };
-    this.notifyChat();
-  }
-
-  clearChatRejection(): void {
-    if (this.lastChatRejection !== null) {
-      this.lastChatRejection = null;
-      this.notifyChat();
-    }
-  }
-
   getSnapshot = (): PondState => this.state;
   peek = (): PondState => this.state;
 
@@ -758,8 +627,10 @@ class PondStore {
   applySnapshot(msg: {
     tick: number; now: number; fish: KoiFrame[];
     food?: FoodFrame[]; pondMeta?: PondMeta;
-    chat?: ChatMessage[]; yourHandle?: string;
-    chatTotal?: number;
+    pebbles?: Array<{
+      id: string; x: number; z: number;
+      inscription: string; placedAt: number; donorHandle: string;
+    }>;
   }): void {
     // NB: use performance.now() (matches interpolator clock), not
     // Date.now() (wall-clock epoch, vastly different magnitude).
@@ -775,37 +646,25 @@ class PondStore {
       fishPrevTime: msg.now,
       fishCurrTime: msg.now,
       food: msg.food ?? [],
+      pebbles: msg.pebbles ?? [],
       meta: msg.pondMeta ?? this.state.meta,
     };
-    // Chat: snapshot is authoritative on history. Replace the buffer
-    // wholesale with what the worker just sent, dedup'd by id as a
-    // defense-in-depth measure (the worker's chatRing shouldn't have
-    // duplicates, but if it ever did, applying them here would seed
-    // permanent React key warnings until the next reconnect).
-    // Handle and total are session-sticky on the worker side and
-    // survive across reconnect, so we always update them when present.
-    // sessionChatCount resets here because this is a fresh socket —
-    // earlier session counts belong to the prior connection.
-    if (msg.chat !== undefined) {
-      const seen = new Set<string>();
-      const deduped: ChatMessage[] = [];
-      for (const m of msg.chat) {
-        if (!seen.has(m.id)) {
-          seen.add(m.id);
-          deduped.push(m);
-        }
-      }
-      this.chatBuffer = deduped.slice(0, PondStore.CHAT_BUFFER_CAP);
-    }
-    if (msg.yourHandle !== undefined) {
-      this.yourHandle = msg.yourHandle;
-    }
-    if (msg.chatTotal !== undefined) {
-      this.chatTotal = msg.chatTotal;
-    }
-    this.sessionChatCount = 0;
     this.notify();
-    this.notifyChat();
+  }
+
+  applyPebblePlaced(msg: { pebble: {
+    id: string; x: number; z: number;
+    inscription: string; placedAt: number; donorHandle: string;
+  } }): void {
+    // Idempotent: if we already have this pebble id (e.g. from a
+    // snapshot we just received), skip. Prevents duplicate render
+    // when a client reconnects mid-placement.
+    if (this.state.pebbles.some((p) => p.id === msg.pebble.id)) return;
+    this.state = {
+      ...this.state,
+      pebbles: [...this.state.pebbles, msg.pebble],
+    };
+    this.notify();
   }
 
   applyTick(msg: {
@@ -944,19 +803,44 @@ export interface UsePondResult {
    *  trace, and (in a later commit) by the shader for surface rendering. */
   getFood: () => FoodFrame[];
 
-  // ─── Chat surface ───────────────────────────────────────────────────────
-  // Wired against the worker's chat pipeline. The hook delegates reads
-  // and subscriptions to the store; sendChat ships the visitor's text
-  // over the open WebSocket as a `t: "chat"` envelope and the worker
-  // (a) rate-limits, (b) Gemma-classifies, (c) broadcasts or rejects.
+  /** Returns the current list of visitor-placed pebbles. Pebbles are
+   *  permanent — added via pebble_placed messages, full list received
+   *  on snapshot. Not reactive; callers re-read inside their animation
+   *  loop. PebbleOverlay uses this for projection. */
+  getPebbles: () => Array<{
+    id: string; x: number; z: number;
+    inscription: string; placedAt: number; donorHandle: string;
+  }>;
+
+  /** Chat method stubs — non-functional for tonight's demo build.
+   *  Real chat wiring lands post-hackathon. */
   getChat: () => ChatMessage[];
   getChatTotal: () => number;
-  getLastChatRejection: () => ChatRejection | null;
   getSessionChatCount: () => number;
   getYourHandle: () => string | null;
-  sendChat: (text: string) => void;
-  subscribeToChat: (l: () => void) => () => void;
+  getLastChatRejection: () => ChatRejection | null;
   clearChatRejection: () => void;
+  sendChat: (text: string) => void;
+  subscribeToChat: (listener: (msg: ChatMessage) => void) => () => void;
+}
+
+/** Chat message broadcast from worker — visitor messages or pond-voice
+ *  observations. Mirrors the server-side ChatMessage in protocol.ts. */
+export interface ChatMessage {
+  id: string;
+  handle: string;
+  text: string;
+  at: number;
+  kind?: "visitor" | "pond";
+}
+
+/** Chat rejection envelope — server-side moderation rejected a
+ *  visitor's chat submission. Surfaced to the submitter only so they
+ *  can rewrite. */
+export interface ChatRejection {
+  text: string;
+  reason: string;
+  at: number;
 }
 
 export function usePond(opts: UsePondOptions): UsePondResult {
@@ -965,12 +849,6 @@ export function usePond(opts: UsePondOptions): UsePondResult {
   const reconnectRef = useRef<{ attempts: number; timer: ReturnType<typeof setTimeout> | null }>({
     attempts: 0, timer: null,
   });
-  // Client-side send floor. Prevents rapid-fire chat duplicates that
-  // could come from holding Enter, React event re-fires, or multiple
-  // WebSocket connections from the same browser (hot-reload leftovers
-  // each have an independent server-side cooldown attachment, so the
-  // server's 2-second per-socket cooldown isn't sufficient on its own).
-  const lastSendAtRef = useRef(0);
 
   const state = useSyncExternalStore(
     store.subscribe,
@@ -1000,8 +878,7 @@ export function usePond(opts: UsePondOptions): UsePondResult {
             else if (msg.t === "tick") store.applyTick(msg);
             else if (msg.t === "speech") store.applySpeech(msg);
             else if (msg.t === "mechanism") store.applyMechanism(msg);
-            else if (msg.t === "chat_message") store.applyChatMessage(msg);
-            else if (msg.t === "chat_rejected") store.applyChatRejected(msg);
+            else if (msg.t === "pebble_placed") store.applyPebblePlaced(msg);
           } catch (err) {
             console.warn("pond: bad message", err);
           }
@@ -1135,7 +1012,6 @@ export function usePond(opts: UsePondOptions): UsePondResult {
         springVx: k.vx,
         springVz: k.vz,
         hunger: hungerById.get(k.id),
-        ageTicks: k.ageTicks,
       });
     }
     return out;
@@ -1157,42 +1033,27 @@ export function usePond(opts: UsePondOptions): UsePondResult {
      *  animation loop (which the diagnostic does). */
     getFood: (): FoodFrame[] => state.food,
 
-    // ─── Chat surface — REAL IMPLEMENTATION ─────────────────────────
-    // All state lives on the store; the hook just wires the WebSocket
-    // for the outbound side and delegates reads/subscriptions.
-    getChat: store.getChatBuffer,
-    getChatTotal: store.getChatTotal,
-    getLastChatRejection: store.getLastChatRejection,
-    getSessionChatCount: store.getSessionChatCount,
-    getYourHandle: store.getYourHandle,
-    sendChat: (text: string): void => {
-      // Client-side send floor — 500ms minimum between any two sends.
-      // The worker enforces a longer per-socket cooldown (2s attempt,
-      // 15s post-success) but that's per-socket: in a hot-reload dev
-      // scenario where stale WebSockets linger, each socket has its
-      // own server-side attachment and could each pass cooldown
-      // independently. This client-side floor caps actual outbound
-      // frequency from this browser regardless of socket count.
-      const now = Date.now();
-      if (now - lastSendAtRef.current < 500) return;
-      lastSendAtRef.current = now;
+    /** Returns the current pebbles list. Same shape contract as
+     *  getFood — pure snapshot. PebbleOverlay polls inside its RAF
+     *  loop and re-projects on changes. */
+    getPebbles: (): Array<{
+      id: string; x: number; z: number;
+      inscription: string; placedAt: number; donorHandle: string;
+    }> => state.pebbles ?? [],
 
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      // No further client-side rate limit beyond the floor above — the
-      // worker enforces both the attempt cooldown and the 15-second
-      // post-success window, and surfaces the rejection back via
-      // chat_rejected. Letting attempts through here means the visitor
-      // sees the worker's actual verdict ("speaking slower here — Xs
-      // before another message") rather than a silent client drop.
-      const trimmed = text.trim();
-      if (trimmed.length === 0 || trimmed.length > 280) return;
-      try {
-        ws.send(JSON.stringify({ t: "chat", text: trimmed }));
-      } catch { /* socket transitioned to closed mid-call */ }
+    /** Chat method stubs — non-functional for tonight's demo. Returning
+     *  empty/null so PondChat renders without errors but shows no
+     *  messages. Real chat broadcast wiring lands post-hackathon. */
+    getChat: (): ChatMessage[] => [],
+    getChatTotal: (): number => 0,
+    getSessionChatCount: (): number => 0,
+    getYourHandle: (): string | null => null,
+    getLastChatRejection: (): ChatRejection | null => null,
+    clearChatRejection: (): void => {},
+    sendChat: (_text: string): void => {},
+    subscribeToChat: (_listener: (msg: ChatMessage) => void): (() => void) => {
+      return () => {};
     },
-    subscribeToChat: store.subscribeToChat,
-    clearChatRejection: (): void => { store.clearChatRejection(); },
   };
 }
 
@@ -1216,9 +1077,8 @@ export interface DebugKine {
   springVz: number;
   /** Hunger 0..1. Undefined only if the server hasn't sent it yet. */
   hunger?: number;
-  /** Age in ticks since hatch. Diagnostic divides by ticks-per-sim-day
-   *  to display sim-day / sim-hour values. Undefined only if the
-   *  server hasn't sent it yet (pre-'at'-field worker builds). */
+  /** Age in simulation ticks. Optional — server-provided when
+   *  available; PondDiagnostic converts to sim-days for display. */
   ageTicks?: number;
 }
 
@@ -1243,7 +1103,6 @@ function toShader(f: KoiFrame): ShaderFish {
     intent: f.i,
     target: f.t,
     mechanism: f.mech,
-    founder: f.founder,
   };
 }
 
@@ -1313,11 +1172,17 @@ function kineToShader(k: KineState): ShaderFish {
     stage: k.stage,
     name: k.name,
     color: k.color,
+    // founder MUST be forwarded — getPheno() uses it to take the
+    // founder-palette branch (phenoCache.get("founder:" + color)).
+    // Without it, Shiki and Kokutou fall into the !founder + koiId
+    // branch meant for Sylvanas's wisteria-cobalt offspring palette,
+    // making Kokutou pink and Shiki blue. Propagation restores their
+    // intended appearance.
+    founder: k.founder,
     mood: k.mood,
     intent: k.intent,
     target: k.target,
     mechanism: k.mechanism,
-    founder: k.founder,
   };
 }
 

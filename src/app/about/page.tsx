@@ -794,6 +794,20 @@ export default function About() {
             >
               ...so much belief in our ability to conquer the universe, completely unaware that the only thing we will ever conquer is ourselves.
             </p>
+            <p
+              style={{
+                marginTop: 16,
+                marginBottom: 0,
+                fontFamily: FONT.body,
+                fontSize: 14,
+                lineHeight: 1.72,
+                color: COLOR.inkBody,
+                maxWidth: "60ch",
+                fontWeight: 1600,
+              }}
+            >
+              A system that only optimizes for external metrics is a cancer, not a mind.
+            </p>
           </div>
 
           <div

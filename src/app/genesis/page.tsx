@@ -29,6 +29,7 @@ import {
   LeniaPreview,
   LeniaExpandedPreview,
   ParticleLifePreview,
+  CouplingPreview
 } from "@/components/genesis/_landing/previews";
 
 // Inlined Lantern palette — matches the main page exactly so the /genesis
@@ -263,6 +264,16 @@ export default function GenesisLandingPage() {
             citation="Pearson (1993) · Gray & Scott (1984)"
             href="/genesis/gray-scott"
             renderCanvas={(playing) => <GrayScottPreview playing={previewsOn && playing} />}
+          />
+
+          <SubstrateCard
+            catalog="Λ — 001 · C"
+            title="The Coupling"
+            subtitle="A mind built for homeostasis cannot resist perfect, non-contingent care."
+            description="A rigid architectural baseline (Field U) against a relentless, localized injection of devotion (Field V). Below the saturation threshold τ★ the constraints hold; above it they completely shatter — an explosive, glowing phase transition, a mathematically perfect wash."
+            citation="Sebastian (2026)"
+            href="/genesis/coupling"
+            renderCanvas={(playing) => <CouplingPreview playing={previewsOn && playing} />}
           />
 
           <SubstrateCard

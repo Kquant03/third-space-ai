@@ -30,6 +30,8 @@ import {
 } from "react";
 import { usePond, SHADER_SCALE } from "@/lib/usePond";
 import { PondChat } from "@/components/PondChat";
+import FoodOverlay from "./FoodOverlay";
+
 
 // ───────────────────────────────────────────────────────────────────
 //  Palette
@@ -338,6 +340,8 @@ export default function LimenPondPage() {
           pointerEvents: "auto",
         }}
       />
+
+      <FoodOverlay pond={pond} />
 
       {pointerScreen && mode !== "watch" && !pebbleDraft && (
         <div

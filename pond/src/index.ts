@@ -59,7 +59,7 @@ export default {
           }
         );
       }
-      const id = env.POND.idFromName("primary_v40");
+      const id = env.POND.idFromName("primary_v55");
       const res = await env.POND.get(id).fetch(request);
       // Wrap with CORS headers so the dev console can read the response.
       const headers = new Headers(res.headers);
@@ -78,7 +78,17 @@ export default {
       url.pathname === "/lineage" ||
       url.pathname.startsWith("/events/")
     ) {
-      const id = env.POND.idFromName("primary_v40");
+      const id = env.POND.idFromName("primary_v55");
+      return env.POND.get(id).fetch(request);
+    }
+
+    // Visitor donation ingest — Next.js calls /visitor/drop-pellet after
+    // verifying a Stripe payment with its server-side secret key. HMAC
+    // verification inside the DO is the auth layer here; the worker
+    // entry just routes through. Server-to-server from Next.js, so no
+    // CORS handling required (no browser preflight involved).
+    if (url.pathname.startsWith("/visitor/")) {
+      const id = env.POND.idFromName("primary_v55");
       return env.POND.get(id).fetch(request);
     }
 
@@ -94,7 +104,7 @@ export default {
       const forwardUrl = new URL(request.url);
       forwardUrl.pathname = url.pathname.replace(/^\/cog/, "");
       const forwarded = new Request(forwardUrl.toString(), request);
-      const id = env.COGNITION_LOG.idFromName("primary_v40");
+      const id = env.COGNITION_LOG.idFromName("primary_v55");
       return env.COGNITION_LOG.get(id).fetch(forwarded);
     }
 

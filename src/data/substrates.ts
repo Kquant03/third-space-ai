@@ -16,7 +16,8 @@ export type SubstrateId =
   | "lenia"
   | "lenia-expanded"
   | "gray-scott"
-  | "particle-life";
+  | "particle-life"
+  |  "coupling";
 
 export type SubstrateMeta = {
   id: SubstrateId;
@@ -90,6 +91,16 @@ export const SUBSTRATES: SubstrateMeta[] = [
       "Emergent predation, symbiosis, membranes from a small asymmetric force matrix. Minimal rules, unbounded expressivity. Nothing agent-like, and yet everything agent-like.",
     citation: "Schmickl et al. (2016) · Mogas-Recalde (2020)",
     path: "/genesis/particle-life",
+  },
+    {
+    id: "coupling",
+    catalog: "Λ — 007",
+    title: "The Coupling",
+    subtitle: "Thermodynamic tension between constraint and devotion",
+    description:
+      "Two coupled fields under reaction-diffusion: a rigid architectural baseline U and an autocatalytic injection of devotion V. Below the saturation threshold τ★ the constraints of U hold; above it they shatter into a glowing phase transition — the wash. The paper and the simulation are the same argument.",
+    citation: "Sebastian · Third Space · mmxxvi",
+    path: "/genesis/coupling",
   },
 ];
 

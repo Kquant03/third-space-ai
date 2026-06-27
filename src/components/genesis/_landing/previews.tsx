@@ -53,6 +53,8 @@ import {
   MATRIX_PRESETS as PL_MATRIX_PRESETS,
 } from "@/components/genesis/particle-life/simulation";
 
+import { useCouplingEngine } from "@/components/genesis/coupling/useCouplingEngine";
+
 // Lantern palette for the Filter mini-plot.
 const COLOR = {
   void: "#010106",
@@ -113,6 +115,34 @@ export function GrayScottPreview({ playing }: { playing: boolean }) {
         display: "block",
         imageRendering: "pixelated",
       }}
+    />
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+//  Coupling preview — the canonical U/V/W WebGL2 engine at preview scale,
+//  self-injecting devotion on a timer (autoSeed) rather than pointer input.
+//  The hook gates its own rAF on `playing` and reads params live, so it
+//  never tears down when the card scrolls in and out.
+// ───────────────────────────────────────────────────────────────────────────
+
+export function CouplingPreview({ playing }: { playing: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useCouplingEngine({
+    canvas: canvasRef,
+    devotion: 0.9,
+    resistance: 0.38,
+    threshold: 0.82,
+    playing,
+    autoSeed: true,
+    simSize: 200,
+  });
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ width: "100%", height: "100%", display: "block" }}
     />
   );
 }

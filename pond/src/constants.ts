@@ -162,45 +162,51 @@ export interface ModelTier {
 export const MODEL_TIERS: Record<string, ModelTier> = {
   // Young beings — fry, juvenile, adolescent. Pre-verbal-ish; their
   // utterance density is low and their intent vocabulary a subset.
-  // Haiku 4.5 at modest context, modest temperature.
+  // Gemma 4 26B A4B as the production primary (Gemma-4-Good Hackathon
+  // target model), with the OpenRouter free tier as fallback if the
+  // paid endpoint is rate-limited or unavailable.
   young: {
     stage: "young",
-    primary: "anthropic/claude-haiku-4.5",
-    fallbacks: ["anthropic/claude-3-5-haiku-latest"],
+    primary: "google/gemma-4-26b-a4b-it",
+    fallbacks: ["google/gemma-4-26b-a4b-it:free"],
     temperature: 0.7,
     contextTokens: 2000,
     maxOutputTokens: 200,
-    approxUsdPerMTokIn: 1.00,
-    approxUsdPerMTokOut: 5.00,
+    approxUsdPerMTokIn: 0.06,
+    approxUsdPerMTokOut: 0.33,
   },
 
-  // Adult — the workhorse. Most cognition cycles run here. Haiku 4.5
-  // at full context. This is the slot the eventual fine-tuned
-  // Gemma-4-E4B student will occupy once trained on the Apocrypha and
-  // Sandevistan datasets; until then, Haiku.
+  // Adult — the workhorse. Most cognition cycles run here. Gemma 4
+  // 26B A4B (MoE) at full context. This is the slot the eventual
+  // fine-tuned Gemma-4-E4B student will occupy once trained on the
+  // Apocrypha and Sandevistan datasets; until then, Gemma 4 26B A4B
+  // serves directly. Cost ~16x lower than the prior Haiku setup and
+  // satisfies the hackathon's open-weights requirement.
   adult: {
     stage: "adult",
-    primary: "anthropic/claude-haiku-4.5",
-    fallbacks: ["anthropic/claude-3-5-haiku-latest"],
+    primary: "google/gemma-4-26b-a4b-it",
+    fallbacks: ["google/gemma-4-26b-a4b-it:free"],
     temperature: 0.75,
     contextTokens: 4000,
     maxOutputTokens: 220,
-    approxUsdPerMTokIn: 1.00,
-    approxUsdPerMTokOut: 5.00,
+    approxUsdPerMTokIn: 0.06,
+    approxUsdPerMTokOut: 0.33,
   },
 
-  // Elder and dying — the register's hardest moments. Sonnet 4.5 at
-  // reduced temperature so the voice doesn't drift under stress.
-  // Haiku as fallback preserves warmth if Sonnet is unavailable.
+  // Elder and dying — the register's hardest moments. Same model
+  // family for voice coherence across the lifespan, lower temperature
+  // so the register doesn't drift under stress. The 26B-A4B's MoE
+  // capability gives enough headroom that we don't need to swap to
+  // a larger model the way the prior Haiku→Sonnet pairing did.
   elder_dying: {
     stage: "elder_dying",
-    primary: "anthropic/claude-sonnet-4-5",
-    fallbacks: ["anthropic/claude-haiku-4.5"],
+    primary: "google/gemma-4-26b-a4b-it",
+    fallbacks: ["google/gemma-4-26b-a4b-it:free"],
     temperature: 0.5,
     contextTokens: 6000,
     maxOutputTokens: 280,
-    approxUsdPerMTokIn: 3.00,
-    approxUsdPerMTokOut: 15.00,
+    approxUsdPerMTokIn: 0.06,
+    approxUsdPerMTokOut: 0.33,
   },
 };
 
@@ -297,7 +303,7 @@ export const HUNGER = {
    *  food-seeking language ("a pull toward food-smells"). Below this,
    *  hunger is a background sensation; above, it becomes a primary
    *  driver of intent choice. */
-  preoccupationThreshold: 0.55,
+  preoccupationThreshold: 0.20,
 } as const;
 
 // ───────────────────────────────────────────────────────────────────────
@@ -321,7 +327,7 @@ export const HUNGER = {
 
 export const FOOD = {
   /** Radius in meters within which a koi consumes a food item. */
-  consumptionRadius: 0.20,
+  consumptionRadius: 2.00,
 
   /** Maximum concurrent food items — caps runaway growth if the pond
    *  goes quiet (no fish eating for a long time). */

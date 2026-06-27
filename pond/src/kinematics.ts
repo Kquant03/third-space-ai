@@ -316,8 +316,9 @@ function intentPull(
       // hasn't found anything yet.
       if (self.intent.target) {
         const d = mag(self.intent.target.x - self.x, self.intent.target.z - self.z);
-        // Stop distance slightly smaller than consumption radius so the
-        // fish arrives at the food and triggers the consumption check.
+        // Stop distance well inside consume radius (2m). The wide
+        // consume zone means the koi will eat during approach without
+        // needing arrival damping.
         if (d <= 0.15) return { x: 0, z: 0, strength: 0 };
         return toward(self.intent.target.x, self.intent.target.z, 0.7);
       }
@@ -491,12 +492,23 @@ export function stepKoi(
   // 1. Intent pull
   const goal = intentPull(self, others);
 
-  // 2. Flocking — only for shoaling stages (eggs already returned above)
-  const canFlock = self.stage !== "dying";
+  // 2. Flocking — only for shoaling stages (eggs already returned above).
+  //    Suppressed during focused feed_approach: a koi pursuing a specific
+  //    pellet should ignore the group, otherwise three koi chasing a
+  //    cluster get pulled sideways into orbiting each other instead of
+  //    landing on individual food items. Real fish lock onto food.
+  const seeking = self.intent.kind === "feed_approach" && !!self.intent.target;
+  const canFlock = self.stage !== "dying" && !seeking;
   const fl = canFlock ? flock(self, others) : { x: 0, z: 0 };
 
-  // 3. Curl-noise ambient current
-  const curl = sampleCurlXZ(self.x, self.z, simTime, KINEMATICS.flowStrength);
+  // 3. Curl-noise ambient current — suppressed during seek. The curl
+  //    is divergence-free, so around any fixed target point it
+  //    produces tangential force. Combined with the radial seek force,
+  //    this creates orbital motion — koi spirals around the pellet
+  //    instead of landing on it. During focused feed, kill the drift.
+  const curl = seeking
+    ? { vx: 0, vz: 0 }
+    : sampleCurlXZ(self.x, self.z, simTime, KINEMATICS.flowStrength);
 
   // 4. Boundary pushback (gourd SDF)
   const bd = boundaryPushback(self);
@@ -507,8 +519,11 @@ export function stepKoi(
 
   // PAD modulation: higher arousal → stronger drive; lower valence →
   // separation stronger (handled in flocking radii indirectly, but we
-  // also scale overall accel slightly).
-  const arousalBoost = 0.8 + 0.4 * self.pad.a;
+  // also scale overall accel slightly). Damped during feed_approach so
+  // anticipatory arousal doesn't make the koi fly past its target.
+  const arousalBoost = seeking
+    ? 0.7 + 0.2 * self.pad.a
+    : 0.8 + 0.4 * self.pad.a;
   ax *= arousalBoost;
   az *= arousalBoost;
 
@@ -524,15 +539,8 @@ export function stepKoi(
   self.vx = v.x; self.vz = v.z;
 
   // 8. Light damping — prevents velocity runaway in still water.
-  // Time-aware: 0.970 is the per-second damping factor, applied via
-  // Math.pow(base, dt) so the per-second behavior is preserved
-  // regardless of tickHz. At dt=0.5s this gives ~0.985 (the original
-  // hardcoded value); at dt=0.111s (9 Hz) this gives ~0.997 per tick,
-  // which compounds to the same 0.970/sec.
-  const DAMP_PER_SEC = 0.970;
-  const dampFactor = Math.pow(DAMP_PER_SEC, dt);
-  self.vx *= dampFactor;
-  self.vz *= dampFactor;
+  self.vx *= 0.985;
+  self.vz *= 0.985;
 
   // 9. Position integrate
   self.x += self.vx * dt;

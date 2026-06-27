@@ -41,6 +41,13 @@
 //  Previews only run while on-screen, via an IntersectionObserver. Cards
 //  receive a `playing` prop they can read to pause their simulation
 //  loops; the parent /genesis page also has a "previews on / off" toggle.
+//
+//  The canvas is also *lazy-mounted*: renderCanvas is not called until the
+//  card first nears the viewport (`entered`). Before that the plate shows
+//  its void background only. This matters once a card carries a WebGL
+//  preview — it stops the page from spinning up every GL context (and its
+//  framebuffers) on load when most cards are far below the fold. Once
+//  entered, the card stays mounted and `playing` handles pause/resume.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { ReactNode, useEffect, useRef, useState } from "react";
@@ -98,6 +105,9 @@ export function SubstrateCard({
 }: SubstrateCardProps) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(false);
+  // Latches true the first time the card nears the viewport and never
+  // resets — gates the lazy mount of renderCanvas (see header note).
+  const [entered, setEntered] = useState(false);
 
   // Only run the preview while the card is in (or near) the viewport.
   // 200px rootMargin gives a beat of warm-up before the card scrolls
@@ -105,7 +115,10 @@ export function SubstrateCard({
   useEffect(() => {
     if (!ref.current) return;
     const observer = new IntersectionObserver(
-      ([entry]) => setVisible(entry.isIntersecting),
+      ([entry]) => {
+        setVisible(entry.isIntersecting);
+        if (entry.isIntersecting) setEntered(true);
+      },
       { rootMargin: "200px 0px", threshold: 0 },
     );
     observer.observe(ref.current);
@@ -132,7 +145,7 @@ export function SubstrateCard({
             the column's row height wins. On default and featured-
             narrow, aspect-ratio drives canvas height. */}
         <div className="substrate-card-canvas" style={{ aspectRatio: aspect }}>
-          {renderCanvas(visible)}
+          {entered ? renderCanvas(visible) : null}
           {/* Inset glow — faint atmospheric shadow so the preview reads
               as a window rather than a flat tile. */}
           <div
