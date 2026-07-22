@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import fs from "node:fs";
-import path from "node:path";
 import PaperView from "@/components/PaperView";
 import type { PaperDoc } from "@/components/PaperReflow";
 import PaperBindingTrigger from "@/components/PaperBindingTrigger";
@@ -33,14 +31,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 // Load the compiled reflow doc for a slug, or null if this paper hasn't
 // been compiled yet (missing .tex, or not in the build script's SOURCES).
-// Read at the server — the JSON is committed, so this is a filesystem read
-// at build time for statically-generated routes, not a client fetch.
-function loadReflow(slug: string): PaperDoc | null {
+//
+// Deliberately a dynamic import rather than fs.readFileSync. The read
+// version worked, but Next's watcher only tracks the MODULE GRAPH — an
+// arbitrary fs read is invisible to it, so regenerating a paper's JSON
+// changed nothing on screen until the dev server restarted or .next was
+// cleared. That produced a genuinely confusing failure mode: the file on
+// disk was correct, the page was stale, and nothing indicated which you
+// were looking at.
+//
+// Importing puts the JSON in the module graph, so `npm run dev` picks up
+// a rebuild immediately and production bundles it at build time. The
+// template literal makes Turbopack create a context module over the whole
+// directory, which is what allows the per-slug lookup.
+async function loadReflow(slug: string): Promise<PaperDoc | null> {
   try {
-    const p = path.join(process.cwd(), "src/data/papers-rendered", `${slug}.json`);
-    return JSON.parse(fs.readFileSync(p, "utf8")) as PaperDoc;
+    const mod = await import(`@/data/papers-rendered/${slug}.json`);
+    return ((mod as { default?: PaperDoc }).default ?? mod) as PaperDoc;
   } catch {
-    return null;
+    return null; // no compiled edition for this paper — PDF only
   }
 }
 
@@ -49,7 +58,7 @@ export default async function PaperReader({ params }: Props) {
   const entry = getEntry(slug);
   if (!entry || !entry.pdfHref) notFound();
 
-  const doc = loadReflow(slug);
+  const doc = await loadReflow(slug);
   const metaLine = [entry.id, entry.date, entry.version].filter(Boolean).join(" · ");
 
   return (
@@ -59,6 +68,7 @@ export default async function PaperReader({ params }: Props) {
       {/* Return link. Keyed to the measured header like everything else —
           the old hardcoded top:160 is gone. */}
       <nav
+        className="reader-return-nav"
         style={{
           position: "fixed",
           top: "calc(var(--header-height, 128px) + 20px)",
@@ -110,8 +120,14 @@ export default async function PaperReader({ params }: Props) {
             border-color: rgba(127,175,179,0.3) !important;
           }
         }
-        @media (pointer: coarse) {
-          .reader-return { letter-spacing: 0.28em !important; }
+        /* The return chip is removed on small screens. It floats over the
+           paper's masthead, and the header's own RESEARCH link already
+           goes to the archive — so on a phone it was a redundant control
+           occupying the top-left of every paper, overlapping the title it
+           sits on top of. Desktop keeps it: there's room, and it's the
+           faster path back when the header is scrolled away. */
+        @media (pointer: coarse), (max-width: 820px) {
+          .reader-return-nav { display: none !important; }
         }
       `}</style>
     </>

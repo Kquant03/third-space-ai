@@ -152,7 +152,17 @@ const TRACE_MAX_POINTS = 120;
 function isDesktopClass(): boolean {
   if (typeof window === "undefined") return false;
   if (typeof window.matchMedia !== "function") return true;
-  return window.matchMedia("(pointer: fine)").matches;
+  // Pointer AND width. Pointer alone was the rule, and it's wrong under
+  // device-emulation modes: Firefox RDM and Chrome's device toolbar resize
+  // the viewport but keep reporting `pointer: fine`, so this panel — a
+  // fixed, ten-column forensic table — kept rendering over a phone-sized
+  // test window in dev, where it has nowhere to go and overlaps the page.
+  // Requiring real width too means emulated-mobile testing behaves like
+  // mobile, which is the entire point of testing that way.
+  return (
+    window.matchMedia("(pointer: fine)").matches &&
+    window.matchMedia("(min-width: 1000px)").matches
+  );
 }
 
 function shouldShow(): boolean {
@@ -259,8 +269,14 @@ export default function PondDiagnostic() {
   const [available, setAvailable] = useState(false);
 
   // Deferred to an effect so SSR and the first client render agree
-  // (shouldShow reads window).
-  useEffect(() => { setAvailable(shouldShow()); }, []);
+  // (shouldShow reads window). Re-evaluated on resize so narrowing the
+  // window in devtools removes the panel instead of leaving it stranded.
+  useEffect(() => {
+    const apply = () => setAvailable(shouldShow());
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, []);
 
   if (!available) return null;
   return <PondDiagnosticPanel />;

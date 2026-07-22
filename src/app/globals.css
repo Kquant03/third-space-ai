@@ -838,6 +838,11 @@ a:hover { text-decoration: none; }
     /* The MiniPlayer is fixed, full-bleed on mobile, and effectively
        always present. Without this the colophon — the last thing on
        the page — is permanently underneath it. */
+    /* The mini-player now starts hidden on small screens (AudioControl
+       defaults it dismissed when there's no stored preference), so this
+       reserves room only for the case where the visitor has opened it.
+       Kept because when it IS open it's full-bleed and would otherwise
+       sit on top of the colophon — the last thing on the page. */
     padding-bottom: calc(var(--miniplayer-clearance) + env(safe-area-inset-bottom, 0px)) !important;
   }
   .footer-grid {
@@ -1064,6 +1069,46 @@ a:hover { text-decoration: none; }
 /* A citation whose key has no matching reference — a content bug, so
    make it visible rather than letting it read as ordinary text. */
 .prose-lantern [data-unresolved-cite] {
+  color: #d87f7f;
+  border-bottom: 1px dotted #d87f7f;
+}
+
+/* A bare URL written as \texttt{} in the source becomes a tappable link
+   in the reflowed reader. Keep the mono face (it's still a URL, and the
+   monospace signals that) but mark it as a link with the ghost accent. */
+.prose-lantern a > code {
+  color: var(--ghost);
+  background: rgba(127, 175, 179, 0.06);
+  border-bottom: 1px solid rgba(127, 175, 179, 0.3);
+  /* Long repo URLs must be able to break on a phone. */
+  overflow-wrap: anywhere;
+}
+@media (hover: hover) and (pointer: fine) {
+  .prose-lantern a:hover > code {
+    color: var(--ink);
+    border-bottom-color: var(--ghost);
+  }
+}
+
+/* Display equations in the reflowed reader. KaTeX pre-renders these at
+   build time; the wrapper is what keeps a wide equation from forcing the
+   page wider on a phone — it scrolls inside its own bounds instead. */
+.prose-lantern .reflow-math {
+  margin: 1.75rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+  min-width: 0;
+}
+.prose-lantern .reflow-math .katex-display { margin: 0; }
+.prose-lantern .reflow-math::-webkit-scrollbar { height: 3px; }
+.prose-lantern .reflow-math::-webkit-scrollbar-thumb {
+  background: rgba(127, 175, 179, 0.3);
+}
+
+/* A cross-reference whose label doesn't resolve — visible, like an
+   unresolved citation, because a dangling \ref is a content bug. */
+.prose-lantern [data-unresolved-ref] {
   color: #d87f7f;
   border-bottom: 1px dotted #d87f7f;
 }

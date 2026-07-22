@@ -56,13 +56,41 @@ const SOURCES = {
 
 // Custom-operator map for KaTeX. Grows as later papers introduce macros;
 // pneuma needs none, but the wiring is proven here so pass 2 is a data edit.
-const MATH_MACROS = {
-  "\\Lcrit": "L_{\\text{crit}}",
-  "\\Lenv": "L_{\\text{env}}",
-  "\\kBT": "k_{B}T",
-  "\\taustar": "\\tau^{*}",
-  "\\Lsun": "L_{\\odot}",
-};
+// Custom math macros, extracted from each paper's own preamble at build
+// time (see collectMacros). Hardcoding them was a maintenance trap: this
+// paper defines \LR and \LE, which the hardcoded table lacked, so those
+// symbols rendered as literal "\LR" in the equations. Reading the source
+// means a paper's macros always work without anyone remembering to add
+// them here. This object is repopulated per paper.
+let MATH_MACROS = {};
+
+// Pull \newcommand{\foo}{...} / \newcommand{\foo}[n]{...} out of the
+// preamble. Brace-matched rather than regex-captured, because the bodies
+// contain nested braces (L_{\text{crit}}) that a lazy regex truncates —
+// which is exactly how \Lcrit became "L_{\text{crit" in an earlier pass.
+function collectMacros(src) {
+  const out = {};
+  const re = /\\newcommand\{\\([A-Za-z]+)\}(\[(\d)\])?\s*\{/g;
+  let m;
+  while ((m = re.exec(src))) {
+    const [, name, , argc] = m;
+    let i = re.lastIndex, depth = 1, body = "";
+    while (i < src.length && depth > 0) {
+      const ch = src[i];
+      if (ch === "{") depth++;
+      else if (ch === "}") { depth--; if (!depth) break; }
+      if (src[i - 1] !== "\\" || ch !== "%") body += ch;
+      i++;
+    }
+    // Skip macros whose bodies are text-mode layout (rules, boxes); KaTeX
+    // only needs the math ones and chokes on \rule/\vspace bodies.
+    const isLayout = /\\(vspace|hrule|rule|noindent|centering|par|hfill)/.test(body);
+    TEXT_MACRO_DEFS.set(name, { body, argc: argc ? Number(argc) : 0, isLayout });
+    if (isLayout) continue; // KaTeX chokes on text-mode layout bodies
+    out["\\" + name] = body;
+  }
+  return out;
+}
 
 // ── Figure aliases ───────────────────────────────────────────────────────
 // The .tex files reference generic figureN_label.png names that don't match
@@ -86,8 +114,15 @@ const OUT_DIR = process.env.PAPERS_OUT_DIR || "src/data/papers-rendered";
 //  Small AST helpers
 // ─────────────────────────────────────────────────────────────────────────
 
-const envName = (n) =>
-  Array.isArray(n.env) ? n.env.map((x) => x.content || "").join("") : n.env;
+// mathenv stores `env` as a single string NODE (an object with .content),
+// while environment stores it as an array of nodes or a bare string. All
+// three shapes have to normalise, or display math is unidentifiable.
+const envName = (n) => {
+  const e = n.env;
+  if (Array.isArray(e)) return e.map((x) => x.content || "").join("");
+  if (e && typeof e === "object") return e.content || "";
+  return e || "";
+};
 
 const findEnv = (nodes, name) =>
   nodes.find((n) => n.type === "environment" && envName(n) === name) || null;
@@ -144,12 +179,35 @@ const TEXT_MACRO = {
   ",": "\u202f", // thin space
   textasciitilde: "~",
   "\\": "<br/>", // \\ line break inside a paragraph
+  S: "\u00a7", // section sign — 64 uses in grabby alone ("\S 6.4")
+  P: "\u00b6",
+  copyright: "\u00a9",
+  dag: "\u2020",
+  ddag: "\u2021",
+  hfill: " ",
+  newblock: " ",
+  hspace: " ",
+  linewidth: "",
+  arraybackslash: "",
+  addcontentsline: "",
+  smallskip: " ",
+  medskip: " ",
 };
 
 // Citation key → reference number, built in a first pass over the
 // bibliography before any prose is rendered (references appear LAST in the
 // document, but the numbers are needed throughout). Reset per paper.
 let CITE_MAP = new Map();
+
+// label → { kind, n } for \ref / \eqref resolution. Reset per paper.
+let LABEL_MAP = new Map();
+
+// Text-mode expansions for the paper's own \newcommand macros, e.g.
+// \spc{X} → \textit{X}, \DV → \spc{D.\ ventilans}. Without these, a
+// paper's private vocabulary renders as nothing at all — Dihypersphaerome
+// alone used \DV 46 times. Expanded as source text and re-parsed, so a
+// macro whose body contains other macros resolves recursively.
+let TEXT_MACRO_DEFS = new Map();
 
 // The natbib family. The corpus uses \cite (194), \citet (103),
 // \citep (57) and \citealt (1). All render as a numbered superscript —
@@ -220,9 +278,34 @@ function renderInline(nodes) {
         else if (c === "href") {
           const url = nodes_to_plain(n.args?.[0]?.content || []);
           out += `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${renderInline(lastGroupArg(n))}</a>`;
+        } else if (c === "ref" || c === "eqref") {
+          // Resolve to the number LaTeX would have assigned. An unresolved
+          // ref shows the label rather than vanishing — a dangling
+          // cross-reference is a content bug worth seeing.
+          const key = nodes_to_plain(lastGroupArg(n)).trim();
+          const hit = LABEL_MAP.get(key);
+          if (hit) out += c === "eqref" ? `(${hit.n})` : String(hit.n);
+          else out += `<span data-unresolved-ref="${esc(key)}">${esc(key)}</span>`;
+        } else if (c === "textsubscript") {
+          out += `<sub>${renderInline(lastGroupArg(n))}</sub>`;
+        } else if (c === "textsuperscript") {
+          out += `<sup>${renderInline(lastGroupArg(n))}</sup>`;
         } else if (c in TEXT_MACRO) out += TEXT_MACRO[c];
-        else if (c === "noindent" || c === "normalfont" || c === "normalsize")
-          out += ""; // formatting-only, no output
+        else if (["noindent","normalfont","normalsize","label","centering","raggedright"].includes(c))
+          out += ""; // metadata or formatting-only: no readable output
+        else if (TEXT_MACRO_DEFS.has(c)) {
+          // Expand the paper's own macro. Arguments substitute for #1..#n;
+          // the result is re-parsed so nested macros resolve. Depth-capped
+          // because a self-referential definition would otherwise spin.
+          const def = TEXT_MACRO_DEFS.get(c);
+          if (def.isLayout) { out += ""; break; }
+          let body = def.body;
+          for (let a = 1; a <= def.argc; a++) {
+            const arg = n.args?.[a - 1]?.content ?? [];
+            body = body.split("#" + a).join(nodes_to_tex(arg));
+          }
+          out += macroDepth < 8 ? expandTex(body) : "";
+        } else if (BLOCK_LAYOUT_MACROS.has(c)) out += "";
         else out += `<span data-unhandled-macro="${esc(c)}"></span>`;
         break;
       }
@@ -262,6 +345,20 @@ function autolinkCode(innerHtml) {
 // "Bostrom2012,Bostrom2014" → <sup>[3,4]</sup>, each linked to its entry.
 // An unknown key keeps the key visible rather than vanishing silently — a
 // citation pointing at nothing is a content bug worth seeing.
+// Re-parse an expanded macro body and render it. Depth-guarded: a macro
+// defined in terms of itself would otherwise recurse without bound.
+let macroDepth = 0;
+function expandTex(tex) {
+  macroDepth++;
+  try {
+    return renderInline(getParser().parse(tex).content);
+  } catch {
+    return "";
+  } finally {
+    macroDepth--;
+  }
+}
+
 function renderCitation(rawKeys) {
   const keys = rawKeys.split(",").map((k) => k.trim()).filter(Boolean);
   if (!keys.length) return "";
@@ -289,6 +386,23 @@ function nodes_to_tex(nodes) {
 const nodes_to_plain = (nodes) =>
   (nodes || []).map((n) => (n.type === "string" ? n.content : n.type === "whitespace" ? " " : "")).join("");
 
+// KaTeX renders `equation` bodies directly, but `align`, `aligned`, `cases`
+// and `gather` need their environment wrapper preserved or the alignment
+// markers (&) and row breaks (\\) are syntax errors. Strip LaTeX's
+// numbering-only starred forms; KaTeX treats both the same.
+// \label lives inside the math environment but is metadata, not maths.
+// Left in place it renders as literal "\labeleq:taustar" beside the
+// equation.
+function stripMathLabels(tex) {
+  return tex.replace(/\\label\s*\{[^}]*\}/g, "").trim();
+}
+
+function wrapMathEnv(name, tex) {
+  const bare = name.replace(/\*$/, "");
+  if (bare === "equation" || bare === "displaymath" || bare === "math") return tex;
+  return `\\begin{${bare}}${tex}\\end{${bare}}`;
+}
+
 function renderMath(tex, display) {
   try {
     return katex.renderToString(tex.trim(), {
@@ -311,9 +425,19 @@ function renderMath(tex, display) {
 //  Block walker — the flat document body → an ordered list of blocks
 // ─────────────────────────────────────────────────────────────────────────
 
+// Macros that only affect page layout and produce no readable content.
+const BLOCK_LAYOUT_MACROS = new Set([
+  "vspace", "hspace", "noindent", "bigskip", "medskip", "smallskip",
+  "titleformat", "titlespacing", "twocolumn", "onecolumn", "maketitle",
+  "clearpage", "newpage", "pagebreak", "thispagestyle", "pagestyle",
+  "tableofcontents", "raggedbottom", "flushbottom", "columnbreak",
+]);
+
 function walkBlocks(nodes) {
   const blocks = [];
   let buffer = []; // accumulating inline nodes for the current paragraph
+  let expectOptionalBracket = false; // just saw \twocolumn
+  let optionalBracketDepth = 0;      // inside its [ … ]
 
   const flushPara = () => {
     const html = renderInline(buffer);
@@ -332,6 +456,26 @@ function walkBlocks(nodes) {
       flushPara();
       const level = n.content === "section" ? 2 : n.content === "subsection" ? 3 : 4;
       blocks.push({ kind: "heading", level, html: renderInline(lastGroupArg(n)) });
+      continue;
+    }
+
+    // ── Display math ─────────────────────────────────────────────────
+    // equation / align / cases arrive as `mathenv`, NOT `environment`, so
+    // they never reached the environment branch below and fell through to
+    // the inline buffer, where renderInline's default case dropped them
+    // silently. Eight display equations — the paper's cusp derivation and
+    // envelope — vanished from the reader with no marker of any kind. The
+    // unhandled-block safety net only covered `environment`; this is the
+    // gap it left.
+    if (n.type === "mathenv") {
+      flushPara();
+      const name = envName(n);
+      const tex = nodes_to_tex(n.content);
+      blocks.push({
+        kind: "math",
+        env: name,
+        html: renderMath(wrapMathEnv(name, stripMathLabels(tex)), true),
+      });
       continue;
     }
 
@@ -432,8 +576,34 @@ function walkBlocks(nodes) {
     }
 
     // \vspace, \noindent etc. between blocks — ignore as block-level.
-    if (n.type === "macro" && ["vspace", "noindent", "bigskip", "medskip", "smallskip", "titleformat", "titlespacing"].includes(n.content)) {
+    // ── Layout-only macros at block level ────────────────────────────
+    // \twocolumn takes a bracketed optional argument holding the title
+    // block and abstract:  \twocolumn[ \maketitle \begin{onecolabstract}…]
+    // unified-latex has no signature for it, so the "[" and "]" arrive as
+    // bare string nodes and were rendering as literal brackets — one
+    // stranded at the top of the paper, its partner further down. Ignoring
+    // the macro isn't enough; the delimiters have to be swallowed too.
+    if (n.type === "macro" && BLOCK_LAYOUT_MACROS.has(n.content)) {
+      if (n.content === "twocolumn" || n.content === "onecolumn") {
+        expectOptionalBracket = true;
+      }
       continue;
+    }
+
+    // Swallow the "[" that opens \twocolumn's optional argument, and the
+    // "]" that closes it. Only bare, block-level bracket tokens qualify —
+    // brackets inside prose or math (e.g. e ∈ [0,1]) live inside their own
+    // nodes and never reach here.
+    if (n.type === "string" && (n.content === "[" || n.content === "]")) {
+      if (n.content === "[" && expectOptionalBracket) {
+        expectOptionalBracket = false;
+        optionalBracketDepth++;
+        continue;
+      }
+      if (n.content === "]" && optionalBracketDepth > 0) {
+        optionalBracketDepth--;
+        continue;
+      }
     }
 
     // Otherwise it's inline content: accumulate into the current paragraph.
@@ -534,6 +704,24 @@ function verbatimText(nodes) {
 // A figure environment → a figure block: first \includegraphics path +
 // \caption text. LaTeX paths are repo-relative; the site serves them from
 // /papers/, so figures/foo.png → /papers/figures/foo.png.
+// The number LaTeX assigned this float, via its \label. Captions read
+// "Figure 3." in the PDF; without this the reader's captions were bare
+// prose and didn't match the paper.
+function figureNumberOf(node) {
+  let found = null;
+  (function dig(x) {
+    if (found || !x) return;
+    if (Array.isArray(x)) return x.forEach(dig);
+    if (typeof x !== "object") return;
+    if (x.type === "macro" && x.content === "label") {
+      const hit = LABEL_MAP.get(nodes_to_plain(lastGroupArg(x)).trim());
+      if (hit) found = hit.n;
+    }
+    for (const k of ["content", "args", "body"]) if (x[k]) dig(x[k]);
+  })(node.content);
+  return found;
+}
+
 function figureBlock(node) {
   let src = "", caption = "";
   const walk = (nodes) => {
@@ -552,7 +740,7 @@ function figureBlock(node) {
   const base = src.replace(/^figures\//, "");
   const resolved = FIGURE_ALIASES[base] || base;
   const web = `/papers/figures/${resolved}`;
-  return { kind: "figure", src: web, caption };
+  return { kind: "figure", src: web, caption, number: figureNumberOf(node) };
 }
 
 // A table float → an HTML table: the inner tabular/tabularx converted,
@@ -570,7 +758,7 @@ function tableBlock(node) {
   };
   walk(node.content);
   if (!inner) return { kind: "unhandled", note: "table:no-tabular" };
-  return { kind: "table", caption, rows: tabularRows(inner) };
+  return { kind: "table", caption, rows: tabularRows(inner), number: figureNumberOf(node) };
 }
 
 // tabular content → rows of cell-HTML. & splits cells, \\ splits rows,
@@ -621,6 +809,47 @@ function build(slug, texFile) {
   // prose is rendered. Without this every \cite renders its raw BibTeX
   // key. Order is the bibliography's own order, which is the numbering
   // the paper's own PDF uses.
+  TEXT_MACRO_DEFS = new Map();
+  MATH_MACROS = collectMacros(src);
+
+  // ── Pass 1b: figure / table / equation numbering ─────────────────────
+  // The paper's \ref and \eqref point at labels, and the PDF resolves
+  // them to auto-generated numbers. The reader had no numbering at all, so
+  // every cross-reference rendered as nothing and captions lost their
+  // "Figure N." prefix — which is why the reader's figures didn't read the
+  // way the paper's do. Numbering follows document order, exactly as
+  // LaTeX assigns it.
+  LABEL_MAP = new Map();
+  {
+    const count = { figure: 0, table: 0, equation: 0 };
+    const labelsIn = (node) => {
+      const out = [];
+      (function dig(x) {
+        if (Array.isArray(x)) return x.forEach(dig);
+        if (!x || typeof x !== "object") return;
+        if (x.type === "macro" && x.content === "label")
+          out.push(nodes_to_plain(lastGroupArg(x)).trim());
+        for (const k of ["content", "args", "body"]) if (x[k]) dig(x[k]);
+      })(node.content);
+      return out;
+    };
+    (function scan(nodes) {
+      for (const n of nodes || []) {
+        const name = (n.type === "environment" || n.type === "mathenv") ? envName(n) : null;
+        if (name === "figure" || name === "figure*") {
+          count.figure++;
+          labelsIn(n).forEach((l) => LABEL_MAP.set(l, { kind: "figure", n: count.figure }));
+        } else if (name === "table" || name === "table*") {
+          count.table++;
+          labelsIn(n).forEach((l) => LABEL_MAP.set(l, { kind: "table", n: count.table }));
+        } else if (n.type === "mathenv") {
+          count.equation++;
+          labelsIn(n).forEach((l) => LABEL_MAP.set(l, { kind: "equation", n: count.equation }));
+        } else if (n.content && Array.isArray(n.content)) scan(n.content);
+      }
+    })(doc.content);
+  }
+
   CITE_MAP = new Map();
   const bibEnv = findEnvDeep(doc.content, "thebibliography");
   if (bibEnv) {

@@ -31,8 +31,9 @@ type Block =
   | { kind: "quote"; html: string }
   | { kind: "list"; ordered: boolean; items: string[] }
   | { kind: "code"; lang?: string; caption?: string; text: string }
-  | { kind: "figure"; src: string; caption?: string; alt?: string }
-  | { kind: "table"; caption?: string; rows: string[][] }
+  | { kind: "figure"; src: string; caption?: string; alt?: string; number?: number }
+  | { kind: "table"; caption?: string; rows: string[][]; number?: number }
+  | { kind: "math"; env: string; html: string }
   | { kind: "card"; label: string | null; html: string }
   | { kind: "bibliography"; items: { key: string; html: string }[] }
   | { kind: "rule"; variant?: "tapered" | "ornament" }
@@ -190,8 +191,14 @@ function BlockView({ block }: { block: Block }) {
                 marginTop: 12,
                 lineHeight: 1.5,
               }}
-              dangerouslySetInnerHTML={{ __html: block.caption }}
-            />
+            >
+              {block.number != null && (
+                <span style={{ fontFamily: FONT.mono, fontStyle: "normal", fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: COLOR.ghost, marginRight: 8 }}>
+                  Fig. {block.number}
+                </span>
+              )}
+              <span dangerouslySetInnerHTML={{ __html: block.caption }} />
+            </figcaption>
           )}
         </figure>
       );
@@ -342,6 +349,17 @@ function BlockView({ block }: { block: Block }) {
             ))}
           </ol>
         </section>
+      );
+
+    case "math":
+      // Display equations. KaTeX pre-rendered these at build time; the
+      // wrapper scrolls horizontally so a wide equation doesn't force the
+      // whole page wider on a phone.
+      return (
+        <div
+          className="reflow-math"
+          dangerouslySetInnerHTML={{ __html: block.html }}
+        />
       );
 
     case "rule":

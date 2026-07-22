@@ -7,9 +7,10 @@
 //  typesetting on a screen that can show it. Mobile (pointer: coarse) gets
 //  PaperReflow — the reflowed, native-HTML edition compiled at build time.
 //
-//  Same fork the rest of the site uses (PondDiagnostic). `pointer: coarse`
-//  rather than a width breakpoint: a narrow desktop window is still a
-//  machine that renders the PDF well; a tablet is not.
+//  The fork is `pointer: coarse` OR `max-width: 820px`. Pointer alone was
+//  the original rule and it fails under every browser's device-emulation
+//  mode, which resizes the viewport but keeps reporting a fine pointer —
+//  so testing on a phone-sized window silently served the desktop PDF.
 //
 //  The choice is deferred to an effect so SSR and first client render agree
 //  (matchMedia reads a real client capability). Until it resolves we render
@@ -43,13 +44,35 @@ export default function PaperView({
   const [kind, setKind] = useState<Kind>("unknown");
 
   useEffect(() => {
-    const coarse =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(pointer: coarse)").matches;
-    // Fall back to the PDF if the reflow doc is missing for this slug
-    // (e.g. a paper whose .tex hasn't been compiled yet). The desktop
-    // artifact always exists; the mobile one is best-effort per paper.
-    setKind(coarse && doc ? "reflow" : "pdf");
+    if (typeof window.matchMedia !== "function") {
+      setKind("pdf");
+      return;
+    }
+
+    // Coarse pointer OR narrow viewport.
+    //
+    // This used to test `pointer: coarse` alone, which is correct for real
+    // hardware and wrong for every way anyone actually tests. Firefox's
+    // Responsive Design Mode (and Chrome's device toolbar without touch
+    // emulation) resizes the viewport but leaves `pointer` reporting
+    // `fine` — so a phone-sized test window fell through to the PDF branch
+    // and rendered the full desktop PDF viewer, which overflows a narrow
+    // window and pushes the page sideways. Every other page on the site
+    // keys off width, which RDM does emulate, so the paper viewer was the
+    // only thing that looked broken — and it looked broken in the one way
+    // that reads as "the mobile CSS isn't loading."
+    //
+    // 820px matches the site's own first real mobile breakpoint. A narrow
+    // desktop window now gets the reflowed edition too, which is the right
+    // answer anyway: the PDF is unreadable at that width.
+    const mq = window.matchMedia("(pointer: coarse), (max-width: 820px)");
+    const apply = () => setKind(mq.matches && doc ? "reflow" : "pdf");
+    apply();
+
+    // Live, so resizing in devtools swaps the reader instead of needing a
+    // reload to re-evaluate.
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
   }, [doc]);
 
   if (kind === "unknown") return null;

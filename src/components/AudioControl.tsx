@@ -153,13 +153,21 @@ export default function AudioControl({
           position: "relative",
         }}
       >
-        {/* A fermata — the musical instruction to hold a note as long as
-            the conductor wishes. The music that makes time pause. */}
+        {/* A beamed pair of quavers.
+            This was a fermata — the instruction to hold a note as long as
+            the conductor wishes, which is the right idea for a control
+            that suspends the programme. But at 12–14px an arc over a dot
+            doesn't read as music to anyone who isn't looking for it; it
+            reads as an eyebrow. The note is the glyph everyone knows, so
+            the control announces itself instead of needing explanation.
+            Drawn rather than typed (♫) because the character renders in
+            whatever emoji or fallback font the device happens to have,
+            at a size and weight we don't control. */}
         <svg
           aria-hidden
           viewBox="0 0 16 16"
-          width={compact ? 12 : 14}
-          height={compact ? 12 : 14}
+          width={compact ? 13 : 15}
+          height={compact ? 13 : 15}
           style={{
             display: "block",
             filter: playing
@@ -168,14 +176,29 @@ export default function AudioControl({
             transition: "filter 0.6s ease",
           }}
         >
+          {/* beam */}
           <path
-            d="M3 9 Q3 4 8 4 Q13 4 13 9"
+            d="M5.6 4.2 L12.9 2.5 L12.9 4.3 L5.6 6.0 Z"
+            fill="currentColor"
+          />
+          {/* stems */}
+          <path
+            d="M5.6 4.6 V11.2 M12.9 2.9 V9.6"
             stroke="currentColor"
-            strokeWidth="1.1"
-            fill="none"
+            strokeWidth="1.05"
             strokeLinecap="round"
           />
-          <circle cx="8" cy="11" r="1" fill="currentColor" />
+          {/* note heads */}
+          <ellipse
+            cx="3.9" cy="11.5" rx="1.95" ry="1.45"
+            fill="currentColor"
+            transform="rotate(-20 3.9 11.5)"
+          />
+          <ellipse
+            cx="11.2" cy="9.9" rx="1.95" ry="1.45"
+            fill="currentColor"
+            transform="rotate(-20 11.2 9.9)"
+          />
         </svg>
 
         {loading && (
@@ -294,25 +317,41 @@ export function MiniPlayer() {
   const dismissed = useAudioStore((s) => s.programmeDismissed);
   const setDismissed = useAudioStore((s) => s.setProgrammeDismissed);
 
-  // Read sessionStorage on mount.
+  // Read sessionStorage on mount, and choose a sensible default when the
+  // visitor hasn't expressed a preference this session.
   useEffect(() => {
+    let stored: string | null = null;
     try {
-      const stored = sessionStorage.getItem("third-space-audio-dismissed");
-      if (stored === "1") setDismissed(true);
+      stored = sessionStorage.getItem("third-space-audio-dismissed");
     } catch {
       // sessionStorage might be unavailable (incognito, sandboxed iframe)
     }
+
+    if (stored === "1") { setDismissed(true); return; }
+    if (stored === "0") return; // visitor opened it deliberately — respect that
+
+    // No stored preference. On a phone the mini-player is full-bleed and
+    // pinned to the bottom of a screen that's mostly reading area, so it
+    // arrives as an obstruction rather than an offer. Start hidden; the
+    // note in the header still opens it, and once opened the choice is
+    // remembered for the session.
+    const small =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse), (max-width: 820px)").matches;
+    if (small) setDismissed(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Mirror dismissed → sessionStorage on every change.
   useEffect(() => {
     try {
-      if (dismissed) {
-        sessionStorage.setItem("third-space-audio-dismissed", "1");
-      } else {
-        sessionStorage.removeItem("third-space-audio-dismissed");
-      }
+      // "0" rather than removing the key: absence now means "no choice
+      // made this session", which is what lets the mobile default above
+      // apply once and then stop overriding the visitor.
+      sessionStorage.setItem(
+        "third-space-audio-dismissed",
+        dismissed ? "1" : "0",
+      );
     } catch {
       /* noop */
     }

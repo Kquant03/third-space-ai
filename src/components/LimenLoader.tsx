@@ -212,7 +212,20 @@ export default function LimenLoader() {
            the 200px top padding (sized for the desktop masthead)
            comes down to something a 667px-tall phone can hold. */
         @media (max-width: 720px) {
-          .limen-loader-section { padding-top: 96px !important; }
+          /* Vertical budget. The loader lives in a position:fixed,
+             overflow:hidden box, so anything past the viewport is CLIPPED
+             rather than scrolled. The desktop composition totals ~763px of
+             content, which overflows a 667px phone outright and, on taller
+             phones, pins ~210px of dead space at the foot so the wordmark
+             floats well above centre. Reclaiming that space is what makes
+             the loader read as a title page instead of a mis-sized one. */
+          .limen-loader-section { padding-top: 56px !important; }
+          .limen-loader-stage { padding: 16px 20px !important; }
+          .limen-loader-titleblock { padding: clamp(20px, 5vw, 44px) 0 !important; }
+          /* The foot spacer reserves room for the HOME page's scroll hint.
+             The loader has no scroll hint, so on a phone it is pure dead
+             space competing with the wordmark. */
+          .limen-loader-foot { display: none !important; }
           .limen-loader-gutter {
             padding-left: 20px !important;
             padding-right: 20px !important;
@@ -240,8 +253,12 @@ export default function LimenLoader() {
             letter-spacing: 0.24em !important;
             line-height: 2 !important;
           }
-          .limen-loader-meta > *:last-child { text-align: center !important; }
-          .limen-loader-meta > * { letter-spacing: 0.3em !important; }
+          .limen-loader-meta > * {
+            text-align: center !important;
+            /* Was 0.3em here and 0.24em on the parent — the child rule won
+               and quietly undid the tracking reduction. One value. */
+            letter-spacing: 0.24em !important;
+          }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -258,6 +275,17 @@ export default function LimenLoader() {
           style={{
             position: "fixed",
             inset: 0,
+            // `inset: 0` sizes against the containing block, which is the
+            // viewport ONLY if no ancestor has a transform, filter,
+            // perspective, will-change or contain. If one does — anywhere
+            // up the tree, including a route-specific wrapper — the fixed
+            // root silently inherits that wider box and its centred
+            // contents slide off to the right, which is exactly the
+            // failure seen on the grabby route: rules visible, wordmark
+            // parked past the right edge. Clamping to the viewport makes
+            // the loader immune to that regardless of cause.
+            maxWidth: "100vw",
+            maxHeight: "100dvh",
             zIndex: 100,
             background: COLOR.void,
             pointerEvents: "none",
@@ -283,6 +311,9 @@ export default function LimenLoader() {
             className="limen-loader-section"
             style={{
               position: "relative",
+              width: "100%",
+              maxWidth: "100%",
+              overflowX: "hidden",
               minHeight: "100svh",
               display: "flex",
               flexDirection: "column",
@@ -326,7 +357,7 @@ export default function LimenLoader() {
             </div>
 
             <div
-              className="limen-loader-gutter"
+              className="limen-loader-gutter limen-loader-stage"
               style={{
                 flex: 1,
                 display: "flex",
@@ -355,6 +386,7 @@ export default function LimenLoader() {
                 />
 
                 <div
+                  className="limen-loader-titleblock"
                   style={{
                     padding: "clamp(40px, 7vw, 92px) 0",
                     position: "relative",
@@ -373,6 +405,8 @@ export default function LimenLoader() {
                       lineHeight: 0.85,
                       letterSpacing: "-0.035em",
                       color: COLOR.ink,
+                      maxWidth: "100%",
+                      overflowWrap: "break-word",
                       textShadow: isExiting
                         ? "0 0 200px rgba(127,175,179,0.45), 0 0 70px rgba(244,246,251,0.18)"
                         : "0 0 140px rgba(127,175,179,0.10), 0 0 40px rgba(244,246,251,0.05)",
@@ -450,7 +484,10 @@ export default function LimenLoader() {
               </div>
             </div>
 
-            <div className="limen-loader-gutter" style={{ padding: "0 40px 72px" }}>
+            <div
+              className="limen-loader-gutter limen-loader-foot"
+              style={{ padding: "0 40px 72px" }}
+            >
               <div
                 style={{
                   maxWidth: 1440,
