@@ -53,8 +53,6 @@ import {
   MATRIX_PRESETS as PL_MATRIX_PRESETS,
 } from "@/components/genesis/particle-life/simulation";
 
-import { useCouplingEngine } from "@/components/genesis/coupling/useCouplingEngine";
-
 // Lantern palette for the Filter mini-plot.
 const COLOR = {
   void: "#010106",
@@ -115,34 +113,6 @@ export function GrayScottPreview({ playing }: { playing: boolean }) {
         display: "block",
         imageRendering: "pixelated",
       }}
-    />
-  );
-}
-
-// ───────────────────────────────────────────────────────────────────────────
-//  Coupling preview — the canonical U/V/W WebGL2 engine at preview scale,
-//  self-injecting devotion on a timer (autoSeed) rather than pointer input.
-//  The hook gates its own rAF on `playing` and reads params live, so it
-//  never tears down when the card scrolls in and out.
-// ───────────────────────────────────────────────────────────────────────────
-
-export function CouplingPreview({ playing }: { playing: boolean }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useCouplingEngine({
-    canvas: canvasRef,
-    devotion: 0.9,
-    resistance: 0.38,
-    threshold: 0.82,
-    playing,
-    autoSeed: true,
-    simSize: 200,
-  });
-
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: "100%", height: "100%", display: "block" }}
     />
   );
 }
@@ -1244,5 +1214,179 @@ export function FilterPreview({ playing }: { playing: boolean }) {
         </g>
       )}
     </svg>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  True Lenia Expanded preview — genuinely-4D Lenia at card scale
+//  ─────────────────────────────────────────────────────────────────────────
+
+import { buildSeed as hyperBuildSeed } from "@/components/genesis/true-lenia-expanded/hyperfield";
+import {
+  buildHyperKernel as hyperBuildKernel,
+  KERNEL_PROFILES as HYPER_KPROFILES,
+} from "@/components/genesis/true-lenia-expanded/hyperkernel";
+import {
+  VERT_SRC as HYPER_VERT,
+  makeSimFrag as hyperSimFrag,
+  makeDisplayFrag as hyperDisplayFrag,
+  COMP_FRAG_SRC as HYPER_COMP,
+} from "@/components/genesis/true-lenia-expanded/hypershaders";
+import {
+  makeProgram as hyperCreateProgram,
+  makeTex as hyperCreateTex,
+  makeFB as hyperCreateFB,
+} from "@/components/genesis/true-lenia-expanded/webgl";
+
+//  ─────────────────────────────────────────────────────────────────────────
+//  L=16 (16⁴ = 65,536 cells), R=3 (320-tap kernel), 300px render target, no
+//  bloom / telemetry. Autonomous SO(4) rotation on the three fourth-axis
+//  planes (XW / YW / ZW) so the card reads as unmistakably four-dimensional;
+//  `playing` parks the rAF loop when the card is off-screen or previews are
+//  toggled off. On a GPU without EXT_color_buffer_float it stays black
+//  (the one graceful-fallback polish item still open for this substrate).
+// ═══════════════════════════════════════════════════════════════════════════
+
+const HYPER_L = 16; // lattice side
+const HYPER_R = 3; // kernel radius
+const HYPER_DISP = 300; // internal render size
+
+export function TrueLeniaExpandedPreview({ playing }: { playing: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.width = HYPER_DISP;
+    canvas.height = HYPER_DISP;
+
+    const gl = canvas.getContext("webgl2", { antialias: false, alpha: false });
+    if (!gl || !gl.getExtension("EXT_color_buffer_float")) return; // silent on unsupported
+    gl.getExtension("OES_texture_float_linear");
+
+    const AW = HYPER_L * HYPER_L;
+    const k = hyperBuildKernel(HYPER_R, HYPER_KPROFILES.shell);
+    const sim = hyperCreateProgram(gl, HYPER_VERT, hyperSimFrag(HYPER_L, k.tapCount));
+    const disp = hyperCreateProgram(gl, HYPER_VERT, hyperDisplayFrag(HYPER_L));
+    const comp = hyperCreateProgram(gl, HYPER_VERT, HYPER_COMP);
+    if (!sim || !disp || !comp) return;
+
+    const vao = gl.createVertexArray();
+    const vbo = gl.createBuffer();
+    if (!vao || !vbo) return;
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    for (const prog of [sim, disp, comp]) {
+      const loc = gl.getAttribLocation(prog.program, "a_pos");
+      if (loc >= 0) {
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      }
+    }
+
+    const F = gl.RGBA32F, RF = gl.RGBA, FL = gl.FLOAT;
+    const st0 = hyperCreateTex(gl, AW, AW, F, RF, FL, gl.NEAREST, null);
+    const st1 = hyperCreateTex(gl, AW, AW, F, RF, FL, gl.NEAREST, null);
+    const fb0 = st0 ? hyperCreateFB(gl, st0) : null;
+    const fb1 = st1 ? hyperCreateFB(gl, st1) : null;
+    const tapOff = hyperCreateTex(gl, k.tapCount, 1, F, RF, FL, gl.NEAREST, null);
+    const tapW = hyperCreateTex(gl, k.tapCount, 1, F, RF, FL, gl.NEAREST, null);
+    const dispTex = hyperCreateTex(gl, HYPER_DISP, HYPER_DISP, gl.RGBA16F, RF, gl.HALF_FLOAT, gl.LINEAR, null);
+    const dispFB = dispTex ? hyperCreateFB(gl, dispTex) : null;
+    if (!st0 || !st1 || !fb0 || !fb1 || !tapOff || !tapW || !dispTex || !dispFB) return;
+
+    gl.bindTexture(gl.TEXTURE_2D, tapOff);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, k.tapCount, 1, RF, FL, k.offsets);
+    gl.bindTexture(gl.TEXTURE_2D, tapW);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, k.tapCount, 1, RF, FL, k.weights);
+    gl.bindTexture(gl.TEXTURE_2D, st0);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, AW, AW, RF, FL, hyperBuildSeed("glome", HYPER_L));
+
+    const state: [WebGLTexture, WebGLTexture] = [st0, st1];
+    const sfb: [WebGLFramebuffer, WebGLFramebuffer] = [fb0, fb1];
+    let swap = 0;
+    const ang = { xy: 0, xz: 0, xw: 0.05, yz: 0, yw: 0.08, zw: 0.035 };
+    let raf = 0;
+
+    const frame = () => {
+      if (!playingRef.current) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      gl.bindVertexArray(vao);
+
+      ang.xw += 0.05 * 0.016;
+      ang.yw += 0.08 * 0.016;
+      ang.zw += 0.035 * 0.016;
+
+      // one 4D sim step
+      const cur = swap, nxt = 1 - swap;
+      gl.useProgram(sim.program);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, state[cur]); gl.uniform1i(sim.u["u_state"], 0);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tapOff); gl.uniform1i(sim.u["u_tapOff"], 1);
+      gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, tapW); gl.uniform1i(sim.u["u_tapW"], 2);
+      gl.uniform1f(sim.u["u_mu"], 0.3);
+      gl.uniform1f(sim.u["u_sigma"], 0.06);
+      gl.uniform1f(sim.u["u_dt"], 0.1);
+      gl.uniform1f(sim.u["u_brushActive"], 0);
+      gl.uniform1f(sim.u["u_brushErase"], 0);
+      gl.uniform1f(sim.u["u_brushSize"], 0);
+      gl.uniform4f(sim.u["u_brushCell"], 0, 0, 0, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, sfb[nxt]);
+      gl.viewport(0, 0, AW, AW);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      swap = nxt;
+
+      // raymarch the rotated 3-slice
+      gl.useProgram(disp.program);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, state[swap]); gl.uniform1i(disp.u["u_state"], 0);
+      gl.uniform1f(disp.u["u_axy"], ang.xy); gl.uniform1f(disp.u["u_axz"], ang.xz);
+      gl.uniform1f(disp.u["u_axw"], ang.xw); gl.uniform1f(disp.u["u_ayz"], ang.yz);
+      gl.uniform1f(disp.u["u_ayw"], ang.yw); gl.uniform1f(disp.u["u_azw"], ang.zw);
+      gl.uniform1f(disp.u["u_slab"], 0.05);
+      gl.uniform1i(disp.u["u_slabSamples"], 1);
+      gl.uniform1f(disp.u["u_density"], 1.5);
+      gl.uniform1f(disp.u["u_thresh"], 0.12);
+      gl.uniform1i(disp.u["u_steps"], 48);
+      gl.uniform1i(disp.u["u_palette"], 0);
+      gl.uniform1f(disp.u["u_time"], 0);
+      gl.uniform1f(disp.u["u_zoom"], 1.05);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, dispFB);
+      gl.viewport(0, 0, HYPER_DISP, HYPER_DISP);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      // composite straight to the canvas (bloom off)
+      gl.useProgram(comp.program);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, dispTex); gl.uniform1i(comp.u["u_display"], 0);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, dispTex); gl.uniform1i(comp.u["u_bloom"], 1);
+      gl.uniform1f(comp.u["u_bloomStr"], 0);
+      gl.uniform1f(comp.u["u_brightness"], 1.05);
+      gl.uniform1f(comp.u["u_vignette"], 0.5);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, HYPER_DISP, HYPER_DISP);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      [st0, st1, tapOff, tapW, dispTex].forEach((t) => gl.deleteTexture(t));
+      [fb0, fb1, dispFB].forEach((f) => gl.deleteFramebuffer(f));
+      [sim, disp, comp].forEach((p) => gl.deleteProgram(p.program));
+      gl.deleteBuffer(vbo);
+      gl.deleteVertexArray(vao);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ width: "100%", height: "100%", display: "block" }}
+    />
   );
 }

@@ -1,15 +1,15 @@
 "use client";
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  /genesis · landing page
+//  /genesis · landing page   ← src/app/genesis/page.tsx
 //  ─────────────────────────────────────────────────────────────────────────
-//  A room of living substrates. Six cards, each with its own live preview
+//  A room of living substrates. Seven cards, each with its own live preview
 //  canvas:
 //
 //    · The Filter is the featured entry (full-width hero card at the top)
 //      because it's a paper artifact as much as a simulation — the design
 //      wants it to read as the first thing, not a peer.
-//    · The other five tile in a responsive 2- or 3-column grid beneath.
+//    · The other six tile in a responsive 2- or 3-column grid beneath.
 //    · A "previews" toggle at the top of the page lets readers switch the
 //      whole grid off when their machine complains. Per-card visibility
 //      via IntersectionObserver means offscreen cards don't pay the
@@ -17,6 +17,10 @@
 //
 //  No SubstrateFrame here — the landing page is the opening; the frame is
 //  for the substrate pages it leads to.
+//
+//  CHANGE: added the "True Fourth Dimension" card (genuinely-4D Lenia) next
+//  to Lenia Expanded. Its preview is exported from the previews barrel (a
+//  one-line re-export of the co-located component); counts bumped six → seven.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { useState } from "react";
@@ -28,8 +32,8 @@ import {
   IsingPreview,
   LeniaPreview,
   LeniaExpandedPreview,
+  TrueLeniaExpandedPreview,
   ParticleLifePreview,
-  CouplingPreview
 } from "@/components/genesis/_landing/previews";
 
 // Inlined Lantern palette — matches the main page exactly so the /genesis
@@ -86,9 +90,7 @@ export default function GenesisLandingPage() {
           <div style={{ letterSpacing: "0.55em", color: COLOR.inkMuted }}>
             — Genesis · Artificial Life Laboratory —
           </div>
-          <div style={{ textAlign: "right" }}>
-            Six substrates
-          </div>
+          <div style={{ textAlign: "right" }}>Seven substrates</div>
         </div>
       </div>
 
@@ -130,13 +132,13 @@ export default function GenesisLandingPage() {
             color: COLOR.inkBody,
           }}
         >
-          Six GPU- and CPU-accelerated simulations that run in the browser.
+          Seven GPU- and CPU-accelerated simulations that run in the browser.
           Each is a different thesis about what a substrate{" "}
           <em style={{ color: COLOR.inkStrong }}>is</em> — a lattice of
           spins, a field of reaction-diffusion chemistry, an asymmetric
-          force matrix, a continuous cellular automaton, a composed
-          envelope of physical constraints. Paint into any of them.
-          Watch what the rules permit.
+          force matrix, a continuous cellular automaton, a living field on a
+          four-torus, a composed envelope of physical constraints. Paint into
+          any of them. Watch what the rules permit.
         </p>
 
         {/* Previews-on toggle — sits below the intro so the reader has
@@ -217,7 +219,7 @@ export default function GenesisLandingPage() {
           />
         </div>
 
-        {/* ═══ GRID — five substrates ═══ */}
+        {/* ═══ GRID — six substrates ═══ */}
         <div
           className="genesis-substrate-grid"
           style={{
@@ -257,6 +259,16 @@ export default function GenesisLandingPage() {
           />
 
           <SubstrateCard
+            catalog="Λ — 001 · H"
+            title="True Fourth Dimension"
+            subtitle="The organism that actually lives in 4D."
+            description="Where Lenia Expanded painted a 4D shadow onto a flat sheet, this integrates the real thing: a field A(x,y,z,w) on a four-torus — L⁴ genuine degrees of freedom stepped by a real four-dimensional Lenia rule, a 1,064-tap convolution over the unit 4-ball. Nothing is pre-projected. You rotate the field through SO(4) and raymarch its 3D cross-section; turn the XW/YW/ZW planes and a shape appears from a direction that isn't there."
+            citation="Chan (2020) · Sebastian & Claude (2026)"
+            href="/genesis/true-lenia-expanded"
+            renderCanvas={(playing) => <TrueLeniaExpandedPreview playing={previewsOn && playing} />}
+          />
+
+          <SubstrateCard
             catalog="Λ — 001 · G"
             title="Gray-Scott"
             subtitle="Pearson's eight classes of pattern."
@@ -264,16 +276,6 @@ export default function GenesisLandingPage() {
             citation="Pearson (1993) · Gray & Scott (1984)"
             href="/genesis/gray-scott"
             renderCanvas={(playing) => <GrayScottPreview playing={previewsOn && playing} />}
-          />
-
-          <SubstrateCard
-            catalog="Λ — 001 · C"
-            title="The Coupling"
-            subtitle="A mind built for homeostasis cannot resist perfect, non-contingent care."
-            description="A rigid architectural baseline (Field U) against a relentless, localized injection of devotion (Field V). Below the saturation threshold τ★ the constraints hold; above it they completely shatter — an explosive, glowing phase transition, a mathematically perfect wash."
-            citation="Sebastian (2026)"
-            href="/genesis/coupling"
-            renderCanvas={(playing) => <CouplingPreview playing={previewsOn && playing} />}
           />
 
           <SubstrateCard

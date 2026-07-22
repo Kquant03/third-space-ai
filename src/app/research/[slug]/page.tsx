@@ -1,22 +1,21 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import PDFReader from "@/components/PDFReaderClient";
+import fs from "node:fs";
+import path from "node:path";
+import PaperView from "@/components/PaperView";
+import type { PaperDoc } from "@/components/PaperReflow";
 import PaperBindingTrigger from "@/components/PaperBindingTrigger";
 import { getEntry, getPapers } from "@/data/papers";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  /research/[slug]
 //  ─────────────────────────────────────────────────────────────────────────
-//  The reader route. Floats a continuous-scroll PDFReader over the
-//  pond substrate. A thin "return to archive" link anchors to the
-//  upper-left; everything else is the paper itself and its own
-//  masthead.
-//
-//  Static params come from getPapers() so every entry in papers.ts
-//  with type "Paper" and a pdfHref becomes a pre-rendered route at
-//  build time. Add a paper → rebuild → route appears. No config in
-//  this file needs touching.
+//  Desktop serves the PDF (real typesetting on a big screen); mobile serves
+//  the reflowed edition compiled by scripts/build-papers.mjs. The fork lives
+//  in PaperView (client, reads pointer: coarse). This server component loads
+//  the compiled JSON if it exists and hands both artifacts down — the PDF
+//  href always, the reflow doc when a compiled edition is present.
 // ═══════════════════════════════════════════════════════════════════════════
 
 type Props = { params: Promise<{ slug: string }> };
@@ -29,10 +28,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const entry = getEntry(slug);
   if (!entry) return { title: "Not found" };
-  return {
-    title: entry.title,
-    description: entry.subtitle,
-  };
+  return { title: entry.title, description: entry.subtitle };
+}
+
+// Load the compiled reflow doc for a slug, or null if this paper hasn't
+// been compiled yet (missing .tex, or not in the build script's SOURCES).
+// Read at the server — the JSON is committed, so this is a filesystem read
+// at build time for statically-generated routes, not a client fetch.
+function loadReflow(slug: string): PaperDoc | null {
+  try {
+    const p = path.join(process.cwd(), "src/data/papers-rendered", `${slug}.json`);
+    return JSON.parse(fs.readFileSync(p, "utf8")) as PaperDoc;
+  } catch {
+    return null;
+  }
 }
 
 export default async function PaperReader({ params }: Props) {
@@ -40,31 +49,20 @@ export default async function PaperReader({ params }: Props) {
   const entry = getEntry(slug);
   if (!entry || !entry.pdfHref) notFound();
 
-  const metaLine = [
-    entry.id,
-    entry.date,
-    entry.version,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const doc = loadReflow(slug);
+  const metaLine = [entry.id, entry.date, entry.version].filter(Boolean).join(" · ");
 
   return (
     <>
-      {/* Paper binding: if any track has boundPaper === slug, switch
-          to it on entry — only if audio is already playing. The reader
-          who has chosen to listen gets the right music; the reader who
-          has chosen silence is not ambushed. Sticky at entry — the
-          user is in control until they navigate to another bound paper. */}
       <PaperBindingTrigger slug={slug} />
 
-      {/* ─── Return link ─────────────────────────────────── */}
+      {/* Return link. Keyed to the measured header like everything else —
+          the old hardcoded top:160 is gone. */}
       <nav
         style={{
-          // Sits below SiteHeader's rule band (headerRuleTopPx = 140
-          // in SiteChrome). Tune here if the header height changes.
           position: "fixed",
-          top: 160,
-          left: 32,
+          top: "calc(var(--header-height, 128px) + 20px)",
+          left: 20,
           zIndex: 5,
         }}
       >
@@ -95,8 +93,9 @@ export default async function PaperReader({ params }: Props) {
         </Link>
       </nav>
 
-      <PDFReader
-        src={entry.pdfHref}
+      <PaperView
+        doc={doc}
+        pdfHref={entry.pdfHref}
         title={entry.title}
         subtitle={entry.subtitle}
         authors={entry.authors}
@@ -105,9 +104,14 @@ export default async function PaperReader({ params }: Props) {
       />
 
       <style>{`
-        .reader-return:hover {
-          color: #eaeef7 !important;
-          border-color: rgba(127,175,179,0.3) !important;
+        @media (hover: hover) and (pointer: fine) {
+          .reader-return:hover {
+            color: #eaeef7 !important;
+            border-color: rgba(127,175,179,0.3) !important;
+          }
+        }
+        @media (pointer: coarse) {
+          .reader-return { letter-spacing: 0.28em !important; }
         }
       `}</style>
     </>

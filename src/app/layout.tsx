@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import {
   Cormorant_Garamond,
   Source_Serif_4,
@@ -45,7 +45,14 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://thirdspace.ai"),
+  // The live site is third-space.ai (hyphenated) — verified against the
+  // deployed page, which was reporting og:url = thirdspace.ai from this
+  // very line while actually serving from third-space.ai. metadataBase
+  // resolves every canonical URL and relative OG image, so the mismatch
+  // meant social cards and canonicals pointed at a domain the site isn't
+  // served from. Note the contact address genuinely is @thirdspace.ai;
+  // the two are not the same string and only this one is a URL base.
+  metadataBase: new URL("https://third-space.ai"),
   title: {
     default: "Third Space",
     template: "%s · Third Space",
@@ -56,7 +63,7 @@ export const metadata: Metadata = {
     title: "Third Space",
     description:
       "Intelligence organizes around substrate coupling and integrative depth, not extraction and expansion.",
-    url: "https://thirdspace.ai",
+    url: "https://third-space.ai",
     siteName: "Third Space",
     type: "website",
   },
@@ -66,6 +73,19 @@ export const metadata: Metadata = {
     description:
       "Intelligence organizes around substrate coupling and integrative depth, not extraction and expansion.",
   },
+};
+
+// viewportFit: "cover" lets the substrate bleed into the notch/home-bar
+// insets — the pond should reach the physical edges of the glass. The
+// chrome compensates with env(safe-area-inset-*) padding in globals.css.
+// Zoom is deliberately left alone: no maximumScale, no userScalable:false.
+// Locking it out on a page of 9px letterspaced mono would be cruel.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#010106",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({

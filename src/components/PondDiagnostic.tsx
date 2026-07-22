@@ -69,6 +69,66 @@ function pondSDF(x: number, z: number): number {
   return dB * (1 - h) + dA * h - k * h * (1 - h);
 }
 
+// ── Gourd zero-contour, computed once ───────────────────────────────────
+//  This traces the pond outline by ray-marching the SDF outward along 128
+//  angles, up to 40 steps each — ~5,000 SDF evaluations. It depends on
+//  nothing but the GOURD constants above, and it was sitting inside
+//  MotionTrace's render body, so it ran on every render. The panel polls
+//  at 5 Hz, which made it ~25,000 SDF evaluations per second to redraw a
+//  shape that has never once changed. Module scope; computed on first
+//  import; free thereafter.
+const PLOT_W = 380;
+const PLOT_MIN_X = -5, PLOT_MAX_X = 5;
+const PLOT_MIN_Z = -4, PLOT_MAX_Z = 4;
+const PLOT_H = PLOT_W * ((PLOT_MAX_Z - PLOT_MIN_Z) / (PLOT_MAX_X - PLOT_MIN_X));
+
+function worldToPlot(x: number, z: number): [number, number] {
+  return [
+    ((x - PLOT_MIN_X) / (PLOT_MAX_X - PLOT_MIN_X)) * PLOT_W,
+    ((z - PLOT_MIN_Z) / (PLOT_MAX_Z - PLOT_MIN_Z)) * PLOT_H,
+  ];
+}
+
+const GOURD_PATH: string = (() => {
+  const pts: [number, number][] = [];
+  const N = 128;
+  for (let i = 0; i < N; i++) {
+    const ang = (i / N) * Math.PI * 2;
+    let r = 0.1;
+    for (let j = 0; j < 40; j++) {
+      const x = Math.cos(ang) * r;
+      const z = Math.sin(ang) * r;
+      const sd = pondSDF(x, z);
+      if (sd > 0) break;
+      r += Math.max(0.05, -sd * 0.6);
+    }
+    pts.push(worldToPlot(Math.cos(ang) * r, Math.sin(ang) * r));
+  }
+  return "M" + pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join("L") + "Z";
+})();
+
+// Deterministic per-fish hue. Hoisted for the same reason.
+function fishColor(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return `hsl(${((h % 360) + 360) % 360}, 60%, 65%)`;
+}
+
+function foodColor(kind: FoodFrame["kind"]): string {
+  switch (kind) {
+    case "pollen":  return "rgba(230, 220, 140, 0.70)";
+    case "algae":   return "rgba(130, 180, 130, 0.70)";
+    case "insect":  return "rgba(220, 170, 110, 0.85)";
+    case "pellet":  return "rgba(240, 240, 250, 0.95)";
+  }
+  // Unreachable while the union is complete — but if the worker starts
+  // emitting a food kind the client doesn't know about, the switch falls
+  // through and returns undefined into an SVG fill, which paints black
+  // and reads as "the diagnostic is lying to you". Grey is the honest
+  // answer: something is here, we don't know what.
+  return "rgba(180, 186, 200, 0.6)";
+}
+
 // ── Trace storage (per fish, in-component refs) ──────────────────────────
 interface TracePoint {
   t: number;     // performance.now() ms
@@ -79,8 +139,25 @@ interface TracePoint {
 const TRACE_WINDOW_MS = 30_000;
 const TRACE_MAX_POINTS = 120;
 
+// The panel is a desktop instrument. It is a fixed-width forensic table
+// of ten numeric columns plus a 380px SVG plot, toggled with a key that
+// phone keyboards don't have, pinned to a right-hand gutter phones don't
+// have either. There is no version of it that's useful at 390px, and the
+// honest thing is to not pretend otherwise.
+//
+// The check is `pointer: coarse` rather than a width breakpoint: a narrow
+// desktop window is still a machine with a keyboard and a cursor, and
+// Stanley debugging in a half-width browser should keep his instrument.
+// A 1024px tablet should not get one.
+function isDesktopClass(): boolean {
+  if (typeof window === "undefined") return false;
+  if (typeof window.matchMedia !== "function") return true;
+  return window.matchMedia("(pointer: fine)").matches;
+}
+
 function shouldShow(): boolean {
   if (typeof window === "undefined") return false;
+  if (!isDesktopClass()) return false;
   if (process.env.NODE_ENV === "development") return true;
   if (process.env.NEXT_PUBLIC_POND_DIAG === "true") return true;
   return false;
@@ -161,8 +238,38 @@ async function postAdmin(
   }
 }
 
+// The default export is a gate and nothing else. Everything with a hook
+// in it lives in PondDiagnosticPanel below.
+//
+// This split is load-bearing, not tidiness. usePond() opens the pond
+// WebSocket and takes 2 Hz snapshots for as long as the component is
+// mounted — and it was being called unconditionally, above the
+// `if (!enabled) return null`. So every visitor on every page opened and
+// held a pond socket to render a panel that would never appear: in
+// production, where shouldShow() is false; on phones, where it's now
+// false too — over cellular, at 2 Hz, forever.
+//
+// Hooks can't be conditional, so the only way to not call usePond is to
+// not mount the component that calls it. Hence the gate.
+//
+// Note this is specifically about the *diagnostic's* socket. If the
+// whispers components need pond state on mobile, they open their own —
+// that's their call to make, not this panel's.
 export default function PondDiagnostic() {
-  const [enabled, setEnabled] = useState(false);
+  const [available, setAvailable] = useState(false);
+
+  // Deferred to an effect so SSR and the first client render agree
+  // (shouldShow reads window).
+  useEffect(() => { setAvailable(shouldShow()); }, []);
+
+  if (!available) return null;
+  return <PondDiagnosticPanel />;
+}
+
+function PondDiagnosticPanel() {
+  // The gate above already decided this machine gets the panel; `enabled`
+  // is now purely the backtick show/hide.
+  const [enabled, setEnabled] = useState(true);
   const [debug, setDebug] = useState<DebugKine[]>([]);
   const [food, setFood] = useState<FoodFrame[]>([]);
   const [snapshotRateHz, setSnapshotRateHz] = useState(0);
@@ -180,11 +287,8 @@ export default function PondDiagnostic() {
   const [adminBusy, setAdminBusy] = useState<string | null>(null);
   const [adminLastResult, setAdminLastResult] = useState<string>("");
 
-  // Track the live header height so the diagnostic always sits just
-  // below the SiteHeader masthead — which is ~240px when expanded at
-  // top of page and ~60-70px when scrolled into compact mode. Default
-  // to the expanded value so the panel renders correctly before the
-  // first scroll event.
+  // Live header height. Default to the expanded value for the first
+  // paint; the ResizeObserver below corrects it before it matters.
   const [headerHeight, setHeaderHeight] = useState(256);
 
   // Measure snapshot cadence by counting tick changes per second.
@@ -194,9 +298,6 @@ export default function PondDiagnostic() {
   // Per-fish trace history. Keyed by id → array of trace points.
   const tracesRef = useRef<Map<string, TracePoint[]>>(new Map());
 
-  // Gate mount after first render so SSR and client agree.
-  useEffect(() => { setEnabled(shouldShow()); }, []);
-
   // Gate the DEV tab on a URL secret match. getDevSecretFromUrl()
   // returns non-null only when ?dev=<value> matches the build-time
   // NEXT_PUBLIC_POND_DEV_SECRET. Without that match, the tab doesn't
@@ -205,20 +306,37 @@ export default function PondDiagnostic() {
     setDevEnabled(getDevSecretFromUrl() !== null);
   }, []);
 
-  // Match the SiteHeader's own scroll threshold (64px) so the panel
-  // tracks the header's expanded ↔ compact mode transitions exactly.
-  // Hardcoded clearance values rather than DOM measurement — the
-  // SiteHeader masthead is ~240px expanded, ~60-70px compact, and
-  // measuring via querySelector("header") was unreliable (matched
-  // the wrong element or returned mid-transition values).
+  // Measure the header instead of guessing at it.
+  //
+  // This previously mirrored SiteHeader's 64px scroll threshold and
+  // hardcoded 256 / 76 as the two clearances. That's a duplicated
+  // constant across two files with no link between them: every time the
+  // masthead's padding or the scotch rule changes, this silently drifts
+  // until someone notices the panel overlapping the nav. It also snapped
+  // between the two values instantly while the header itself eased over
+  // 0.5s, so the panel jumped and the header followed.
+  //
+  // The old comment says querySelector("header") "matched the wrong
+  // element or returned mid-transition values". Both are addressable:
+  // SiteHeader now carries data-site-header so there's exactly one thing
+  // to match, and mid-transition values are precisely what we want —
+  // a ResizeObserver fires throughout the max-height animation, so the
+  // panel now rides the header down instead of teleporting ahead of it.
   useEffect(() => {
-    const onScroll = () => {
-      const scrolled = window.scrollY > 64;
-      setHeaderHeight(scrolled ? 76 : 256);
+    const el = document.querySelector<HTMLElement>("[data-site-header]");
+    if (!el) return;                       // chromeless route: no header
+
+    const apply = () => {
+      // Round: sub-pixel churn during the ease would re-render at 60fps
+      // for no visible gain.
+      const h = Math.round(el.getBoundingClientRect().height);
+      setHeaderHeight((prev) => (prev === h ? prev : h));
     };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   const pond = usePond({
@@ -311,9 +429,11 @@ export default function PondDiagnostic() {
         position: "fixed",
         right: 16,
         top: headerHeight,
-        // 12rem of clearance from viewport bottom (≈192px). Covers the
-        // MiniPlayer for Consequences of Infinity sitting at bottom-right.
-        bottom: "12rem",
+        // Clear the MiniPlayer. The 12rem here was a third hardcoded
+        // guess at another component's height; --miniplayer-clearance is
+        // defined once in globals.css and used by the footer too, so
+        // there's one number to correct when the player changes.
+        bottom: "calc(var(--miniplayer-clearance, 192px) + 16px)",
         zIndex: 50,
         width: "max-content",
         maxWidth: 520,
@@ -628,56 +748,9 @@ function MotionTrace({
   debug: DebugKine[];
   food: FoodFrame[];
 }) {
-  // Plot extents: gourd bounding box with a little padding.
-  // Gourd is roughly x ∈ [-4.6, 4.1], z ∈ [-3.6, 3.6].
-  const minX = -5, maxX = 5;
-  const minZ = -4, maxZ = 4;
-  const plotW = 380, plotH = plotW * ((maxZ - minZ) / (maxX - minX));
-  const worldToPlot = (x: number, z: number): [number, number] => [
-    ((x - minX) / (maxX - minX)) * plotW,
-    ((z - minZ) / (maxZ - minZ)) * plotH,
-  ];
-
-  // Gourd outline — sample 128 points along the SDF zero-contour
-  const gourdPath = (() => {
-    const pts: [number, number][] = [];
-    const N = 128;
-    for (let i = 0; i < N; i++) {
-      const ang = (i / N) * Math.PI * 2;
-      // Ray-march outward from origin until hitting SDF = 0
-      let r = 0.1;
-      for (let j = 0; j < 40; j++) {
-        const x = Math.cos(ang) * r;
-        const z = Math.sin(ang) * r;
-        const s = pondSDF(x, z);
-        if (s > 0) break;
-        r += Math.max(0.05, -s * 0.6);
-      }
-      const x = Math.cos(ang) * r;
-      const z = Math.sin(ang) * r;
-      pts.push(worldToPlot(x, z));
-    }
-    return "M" + pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join("L") + "Z";
-  })();
-
-  // Distinct colors per fish — deterministic from id
-  const fishColor = (id: string): string => {
-    let h = 0;
-    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-    const hue = ((h % 360) + 360) % 360;
-    return `hsl(${hue}, 60%, 65%)`;
-  };
-
-  // Per-kind food colors. Pale and understated — food is ambient information,
-  // the fish are the story. Pellet is the loudest because it's visitor-sourced.
-  const foodColor = (kind: FoodFrame["kind"]): string => {
-    switch (kind) {
-      case "pollen":  return "rgba(230, 220, 140, 0.70)";  // pale yellow
-      case "algae":   return "rgba(130, 180, 130, 0.70)";  // dull green
-      case "insect":  return "rgba(220, 170, 110, 0.85)";  // warm amber
-      case "pellet":  return "rgba(240, 240, 250, 0.95)";  // near-white
-    }
-  };
+  // Extents, projection, gourd contour and palettes all live at module
+  // scope now — see GOURD_PATH above. This component is pure layout.
+  const plotW = PLOT_W, plotH = PLOT_H;
 
   return (
     <svg
@@ -691,7 +764,7 @@ function MotionTrace({
     >
       {/* Gourd outline */}
       <path
-        d={gourdPath}
+        d={GOURD_PATH}
         fill="rgba(127, 175, 179, 0.05)"
         stroke="rgba(127, 175, 179, 0.30)"
         strokeWidth={1}

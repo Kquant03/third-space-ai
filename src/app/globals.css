@@ -19,6 +19,13 @@
 
   --ghost: #7fafb3;
   --ghost-soft: #5d8a8e;
+
+  /* Height reserved for the viewport-fixed programme MiniPlayer, so
+     things that must not sit under it (the footer colophon, the pond
+     diagnostic's lower edge) have one number to agree on instead of
+     three separate guesses in three files. Measure the collapsed
+     player and correct this if it's off — it is the only place. */
+  --miniplayer-clearance: 192px;
 }
 
 ::selection {
@@ -27,6 +34,15 @@
 }
 
 html { scroll-behavior: smooth; }
+
+/* Lenis drives scrolling itself and its docs are explicit that native
+   scroll-behavior must be off, or the two animate the same scroll at
+   different cadences and fight. Lenis puts .lenis on <html> when it
+   initialises, so this is inert until SmoothScroll is actually wired
+   into the tree — at which point it's already correct. (Importing
+   lenis/dist/lenis.css would also do this, plus the html/body height
+   rules Lenis wants. This is the minimum.) */
+html.lenis { scroll-behavior: auto; }
 
 body {
   background: #010106;
@@ -321,9 +337,733 @@ a:hover { text-decoration: none; }
 .prose-lantern .old-figures { font-feature-settings: 'onum'; }
 
 /* ─────────────────────────────────────────────────────────────
+   THE VERSAL
+   ─────────────────────────────────────────────────────────────
+   Lived in the home page's <style> block as .abstract, and in the
+   About page's as .prose-drop, one em apart, otherwise the same
+   declaration. Both pages use it; neither owned it. Here, once.
+   ───────────────────────────────────────────────────────────── */
+.abstract::first-letter {
+  float: left;
+  font-family: var(--font-display), 'Cormorant Garamond', Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 5.2em;
+  line-height: 0.82;
+  margin: 0.08em 0.14em 0 -0.04em;
+  color: var(--ink-strong);
+}
+
+/* ─────────────────────────────────────────────────────────────
    FOCUS
    ───────────────────────────────────────────────────────────── */
 *:focus-visible {
   outline: 1px solid rgba(127, 175, 179, 0.5);
   outline-offset: 3px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MOBILE
+   ─────────────────────────────────────────────────────────────
+   This site is built almost entirely from inline styles, which
+   media queries cannot reach. So the page components carry a thin
+   set of class hooks (.hero-gutter, .section-mark, .colophon-grid,
+   .data-head, .pub-title …) and the responsive behaviour lives
+   here. The !important flags are not laziness — an author rule
+   needs them to outrank a style="" attribute. That's the deal we
+   made when the layout went inline; this is the invoice.
+
+   Breakpoints:
+     1024 — desktop-ish, first concessions
+      900 — the frost comes off
+      720 — tablet/phone: multi-column grids collapse
+      560 — small phone: type scale and gutters tighten
+   ───────────────────────────────────────────────────────────── */
+
+/* NOTE — do not add `html { overflow-x: hidden }` here.
+   It was here, and it broke position: sticky across the whole site.
+
+   The viewport takes its overflow from <html>, EXCEPT when html's
+   overflow is `visible`, in which case it takes <body>'s instead and
+   body itself stays visible. body already sets overflow-x: hidden, and
+   that propagation is what makes it work. Setting it on html too stops
+   the propagation: body keeps the value, its overflow-y computes to
+   `auto`, body becomes a real scroll container, and every sticky
+   descendant starts sticking to body's scrollport — which never
+   scrolls. SectionShell's aside on /about was the casualty.
+
+   body's rule is a net, not a fix. It crops overflow silently rather
+   than reporting it. Everything below is the actual fix; the net stays
+   for the cases we haven't found yet. */
+
+/* ── 1024 ─────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .reading-plate.substrate-card--featured .substrate-card-canvas {
+    min-height: 300px;
+  }
+}
+
+/* ── 900 · the frost comes off ────────────────────────────────
+   Every .reading-plate is a backdrop-filter: blur(28px) over a
+   WebGL canvas that repaints every frame. On desktop the compositor
+   caches it. On a mobile GPU each plate forces a full re-blur of the
+   region behind it on every substrate frame — several of them, stacked,
+   over a live canvas. It is, measurably, the single most expensive
+   thing on the page, and it's the reason scrolling feels like it's
+   dragging an anchor.
+
+   So below 900px the plates become what they already look like: a
+   dark translucent wash. The substrate still shows through (0.86,
+   not 1.0), the colour cast still reads, the chromatic-lens idea
+   survives in reduced form — and the frame budget comes back.
+   ───────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .reading-plate,
+  .reading-plate.reading-plate--deep,
+  .glass,
+  .glass-nav {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .reading-plate { background: rgba(4, 8, 16, 0.86) !important; }
+  .reading-plate.reading-plate--deep { background: rgba(3, 6, 13, 0.92) !important; }
+  .glass { background: rgba(6, 9, 18, 0.9) !important; }
+  .glass-nav { background: rgba(1, 1, 6, 0.94) !important; }
+}
+
+/* ── 720 · THE OCTAVO EDITION ─────────────────────────────────
+   The desktop layout is landscape print: symmetric, centred, with the
+   metadata living out in the margins — Est. mmxxiv ── [wordmark] ── № 001.
+   The first mobile pass treated that as a broadsheet that wouldn't fit
+   and amputated whatever hung over the edge: the flanking stamps, the
+   corner marks, the §, the folios. The page stopped overflowing and
+   stopped being this page.
+
+   Portrait isn't a broken broadsheet. It's a book page — and this design
+   is already book-native (§, folios, versals, old-style figures, scotch
+   rules, Fin.). So nothing here is deleted. It's redistributed onto the
+   axis the format actually has, which is vertical. A running head that
+   won't fit the measure stacks; it doesn't get cut.
+   ───────────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+
+  /* Horizontal is where the constraint is. 40px each side of 375 is 21%
+     of the screen spent on margin. */
+  main > section,
+  .hero-gutter {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+
+  /* Vertical is NOT where the constraint is, and the first pass squeezed
+     it anyway (72 → 48). This site's whole affect is ceremonial and slow;
+     the loader spends 1.4s insisting on it. Compressing the rhythm makes
+     it read as an ordinary responsive site that happens to be dark.
+     Scrolling is free. Leave the air in. */
+  main > section { padding-top: 64px !important; padding-bottom: 72px !important; }
+
+  /* 104px was a guess and it was 24px short — the header is ~128px
+     here (hairline + masthead + scotch rule + nav rail), so it sat on
+     top of the running head. SiteHeader now publishes its measured
+     height as --header-height; the fallback is only for first paint. */
+  .hero { padding-top: calc(var(--header-height, 128px) + 28px) !important; }
+
+  /* 100vh on iOS is the viewport with the URL bar retracted, which it
+     isn't when you land. Only the home page wants a full-height title
+     page; /about's hero is 78vh on purpose — it's a profile, and its
+     standfirst should be visible under the fold line, not below it. */
+  .hero--full { min-height: 100svh !important; }
+
+  /* Anchor targets need the same clearance — #platform-ghouljamz was
+     landing under the header for the same reason. */
+  .platform-entry {
+    scroll-margin-top: calc(var(--header-height, 128px) + 16px) !important;
+  }
+  .reading-plate:not(.substrate-card) { padding: 26px 20px !important; }
+
+  /* ── The title page ──────────────────────────────────────────
+     Break the line, don't shrink the type. "Third Space" on one line
+     at 390px tops out around 47px — the signature moment becomes a
+     caption. Stacked, five characters have room to be enormous. This
+     is what a title page in portrait has always done.
+     22vw: 390 → 86px. Locked to LimenLoader's .limen-loader-title. */
+  .hero-title {
+    font-size: clamp(58px, 22vw, 92px) !important;
+    line-height: 0.82 !important;
+    letter-spacing: -0.03em !important;
+  }
+  .hero-title .hero-word { display: block; }
+
+  /* Crop marks, put where crop marks go. At left/right 4% they sat 15px
+     in from the edge, directly under the descenders. Corners of the
+     title block is both out of the way and more literally correct —
+     they're register marks, they belong at the corners. */
+  .hero-corner {
+    top: 4px !important;
+    transform: none !important;
+    opacity: 0.6;
+  }
+  .hero-corner:nth-of-type(1) { left: 0 !important; }
+  .hero-corner:nth-of-type(2) { right: 0 !important; }
+
+  /* ── Running heads: stack, don't delete ─────────────────────
+     May · mmxxvi / — Annual Bulletin · Vol. i — / Toledo · Ohio,
+     centred on three lines, IS a title page. It isn't a degraded
+     version of the hero; the hero is a title page already.
+
+     And the type goes UP, not down. The first pass took these to 8px
+     to buy width, which is the wrong trade twice over: 0.42em tracking
+     works on a 40px display stamp because word-shape recognition is
+     irrelevant at that size, and destroys legibility at 8px because
+     word-shape is all you have. Hold the size, buy the width back from
+     the tracking. Roughly width-neutral, materially more readable, and
+     at 0.24em it still reads as a stamp. */
+  .hero-meta,
+  .hero-toc {
+    grid-template-columns: minmax(0, 1fr) !important;
+    justify-items: center !important;
+    text-align: center !important;
+    gap: 4px !important;
+    font-size: 10px !important;
+    letter-spacing: 0.24em !important;
+    line-height: 2 !important;
+  }
+  .hero-meta > *,
+  .hero-toc > * {
+    text-align: center !important;
+    letter-spacing: 0.24em !important;
+  }
+
+  /* ── Chapter openings ────────────────────────────────────────
+     § I ──── Publications ──── 01 / 04 needs a width that isn't there.
+     A book folio already carries section and page on one line, so fold
+     the two mono stamps together above the label and let the flanking
+     rules become ornament arms:
+
+            § I · 01 / 04
+        ──── Publications ────
+
+     This was grid-template-areas + a spanning item, which was too
+     clever and didn't work: the two auto tracks size to the content of
+     "§ I" and "01 / 04", the label spans both, and a spanning item in
+     content-sized tracks doesn't centre across its span — it starts at
+     the span's edge and overflows, which put the label ~40px right of
+     the folio above it.
+
+     Flex has no track sizing to argue with. The parent wraps; order
+     puts the label last; flex-basis 100% forces it onto its own line
+     and gives it the full measure to centre within. */
+  .section-mark {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    align-items: baseline !important;
+    gap: 0 8px !important;
+    margin-bottom: 52px !important;
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+  }
+  .section-mark > *:nth-child(1) { order: 1; }   /* § I     */
+  .section-mark > *:nth-child(3) { order: 2; }   /* 01 / 04 */
+  .section-mark > *:nth-child(2) {               /* label   */
+    order: 3;
+    flex: 0 0 100%;
+    justify-content: center !important;
+    gap: 14px !important;
+    margin-top: 10px;
+  }
+  .section-mark > *:nth-child(1),
+  .section-mark > *:nth-child(3) {
+    font-size: 10px !important;
+    letter-spacing: 0.24em !important;
+    text-align: left !important;
+  }
+  .section-mark > *:nth-child(1)::after {
+    content: "·";
+    margin-left: 8px;
+    opacity: 0.7;
+  }
+  /* The arms are flex:1 inline — they'd eat the whole measure and push
+     the label off-centre again. Fixed width makes them ornament arms. */
+  .section-mark > *:nth-child(2) > span:first-child,
+  .section-mark > *:nth-child(2) > span:last-child {
+    flex: 0 0 40px !important;
+  }
+
+  /* ── Two-column entries ──────────────────────────────────────
+     minmax(180px, 1fr) 4fr: at 335px the metadata column takes its
+     180px minimum and leaves 155px for title, abstract and CTA. */
+  .pub-entry,
+  .platform-entry,
+  .dispatch-plate {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 22px !important;
+    padding: 30px 20px !important;
+  }
+  .pub-entry > aside,
+  .platform-entry > aside,
+  .dispatch-plate > aside {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: baseline !important;
+    gap: 8px 18px !important;
+    padding-top: 0 !important;
+  }
+
+  .pub-title      { font-size: clamp(30px, 8vw, 92px) !important; }
+  .platform-title { font-size: clamp(38px, 10.5vw, 128px) !important; }
+  .dispatch-title { font-size: clamp(34px, 9vw, 112px) !important; }
+  .pub-title, .platform-title, .dispatch-title, .data-title {
+    overflow-wrap: anywhere;
+    letter-spacing: -0.015em !important;
+  }
+
+  /* ── The versal rises instead of dropping ───────────────────
+     At a 60ch measure a 5.2em drop cap is elegant. At ~34ch it carves
+     a notch out of three lines and the rag never recovers, at any size.
+     The narrow-measure form is a raised initial: sits on the baseline,
+     ascends above the line, no float, no notch. */
+  .abstract::first-letter {
+    float: none !important;
+    font-size: 2.5em !important;
+    line-height: 1 !important;
+    margin: 0 0.02em 0 0 !important;
+  }
+
+  /* ── The manifest is a bibliography ─────────────────────────
+     1fr 3fr 2fr 2fr auto is a table, and a table is the one thing that
+     cannot be made to work at 335px. Stacking each field as its own
+     row is the generic answer and reads as a form. A catalogue entry
+     runs its metadata into one line with middots — which is what a
+     checklist or a bibliography has always looked like. */
+  .data-head { display: none !important; }
+  .data-row {
+    display: block !important;
+    padding: 24px 0 !important;
+    position: relative;
+  }
+  .data-row > *:first-child {
+    font-size: 10px !important;
+    letter-spacing: 0.24em !important;
+    padding-right: 24px;
+  }
+  .data-title {
+    font-size: clamp(20px, 5.5vw, 32px) !important;
+    margin-top: 4px;
+  }
+  .data-scope, .data-note { display: inline !important; }
+  .data-scope { font-size: 10px !important; letter-spacing: 0.14em !important; }
+  .data-note::before {
+    content: " · ";
+    color: var(--ink-ghost);
+  }
+  .data-row .data-arrow {
+    position: absolute;
+    top: 24px;
+    right: 0;
+    text-align: right !important;
+  }
+
+  /* ── Doorways ────────────────────────────────────────────────
+     Two pills of unequal width stacked reads as an accident. Equal
+     width reads as a pair of doors, which is the whole metaphor. */
+  .hero-doorways {
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 20px !important;
+  }
+  .hero-cta {
+    min-width: 260px !important;
+    justify-content: center !important;
+    padding: 16px 22px 16px 18px !important;
+    font-size: 11px !important;
+    letter-spacing: 0.26em !important;
+  }
+  .hero-cta-rule { width: 18px !important; }
+
+  /* The .section-shell rules used to live here. They're co-located in
+     components/editorial.tsx with the component now — see the note on
+     SectionShell. Short version: the hook shipped in the JS chunk and the
+     rule shipped in the CSS chunk, and they desynced three times. */
+
+  /* /about's h1 is a phrase, not a wordmark. .hero-title's 22vw is sized
+     for five characters on one line; "An independent" at 86px is 560px
+     wide. Its own floor was 64px — clamp(64px, 11vw, 160px) — which at
+     390px means the floor wins and it overflows by 170px. */
+  .hero-title--phrase {
+    font-size: clamp(38px, 11vw, 160px) !important;
+    line-height: 0.92 !important;
+    letter-spacing: -0.02em !important;
+  }
+  .hero-title--phrase .hero-word { display: block; }
+
+  /* Contact manifest — same call as the open-data one: the table head
+     goes, the rows become catalogue entries with the ↗ as a corner mark. */
+  .contact-head { display: none !important; }
+  .contact-row {
+    display: block !important;
+    padding: 20px 0 !important;
+    position: relative;
+  }
+  .contact-row > *:first-child {
+    font-size: 10px !important;
+    letter-spacing: 0.24em !important;
+    padding-right: 24px;
+  }
+  .contact-address {
+    font-size: clamp(17px, 4.6vw, 28px) !important;
+    margin-top: 4px;
+    overflow-wrap: anywhere;
+  }
+  .contact-arrow {
+    position: absolute;
+    top: 20px;
+    right: 0;
+    text-align: right !important;
+  }
+
+  /* Colophon: 2fr 1fr with a right-aligned second column. Stacked,
+     right-alignment reads as a mistake. */
+  .colophon-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 36px !important;
+  }
+  .colophon-grid > *:last-child {
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+}
+
+/* ── 560 · small phone ────────────────────────────────────── */
+@media (max-width: 560px) {
+  main > section,
+  .hero-gutter {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  .reading-plate:not(.substrate-card) { padding: 22px 16px !important; }
+  .pub-entry,
+  .platform-entry,
+  .dispatch-plate { padding: 26px 16px !important; }
+
+  /* Same correction as the running heads: the tracking gives, not the
+     size. These are 9px inline; at 0.38em that's unreadable on a screen
+     held a foot from the face. */
+  .hero-meta, .hero-toc { letter-spacing: 0.2em !important; }
+  .prose-lantern h4 { letter-spacing: 0.24em; }
+}
+
+/* ── Safe areas ───────────────────────────────────────────────
+   viewport-fit: cover lets the substrate reach the physical edges.
+   The type must not follow it under the notch. */
+@supports (padding: env(safe-area-inset-left)) {
+  @media (max-width: 900px) and (orientation: landscape) {
+    main > section,
+    .hero-gutter {
+      padding-left: max(20px, env(safe-area-inset-left)) !important;
+      padding-right: max(20px, env(safe-area-inset-right)) !important;
+    }
+  }
+}
+
+/* ── Motion ───────────────────────────────────────────────────
+   The reveal-on-scroll and route transitions are atmosphere. Honour
+   the OS switch — and note this also spares low-end phones the
+   compositor work. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .animate-breathe { animation: none; }
+  .reading-plate.substrate-card { transition: none; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PROGRAMME MINI-PLAYER · mobile
+   ─────────────────────────────────────────────────────────────
+   Targeted via its data attribute so AudioControl needs no edit.
+   At 375px, min(420px, 100vw - 48px) leaves a 327px panel floating
+   with a 24px margin over the home indicator — reachable, but the
+   indicator sits on top of the transport row. Full-bleed with a
+   safe-area-aware inset is both bigger and out of the way.
+   ───────────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  [data-programme-mini] {
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    /* Same trade as the reading plates: a 36px blur over a live
+       WebGL canvas, pinned to the viewport, re-blurring every frame
+       for the entire session. The panel is already 92% opaque. */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(1, 1, 6, 0.97) !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   FOOTER
+   ─────────────────────────────────────────────────────────────
+   The footer lives inline in SiteChrome.tsx (there is no Footer.tsx).
+   Its grid is `repeat(12, 1fr)` with gap: 40 — a 1400px desktop
+   canon. The gaps are a fixed 440px regardless of viewport, so:
+
+     1440px → 12 columns of 75px.  Fine.
+      768px → 12 columns of 22px.  "Organization" at 0.42em tracking
+                                   does not fit in a 3-span of 66px.
+      430px → free space goes NEGATIVE. The gaps alone are wider than
+              the content box, `1fr` falls back to its auto minimum,
+              and the whole grid runs off the right edge. Invisible
+              only because body has overflow-x: hidden.
+
+   Below 900 the 12-column canon is abandoned rather than patched:
+   two honest columns, brand across the top.
+   ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .footer-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 44px 28px !important;
+    padding: 56px 24px 16px !important;
+  }
+  .footer-brand { grid-column: 1 / -1 !important; }
+  .footer-col   { grid-column: auto !important; }
+  .footer-rule,
+  .footer-bottom { padding-left: 24px !important; padding-right: 24px !important; }
+}
+
+@media (max-width: 720px) {
+  .site-footer {
+    margin-top: 56px !important;
+    /* The MiniPlayer is fixed, full-bleed on mobile, and effectively
+       always present. Without this the colophon — the last thing on
+       the page — is permanently underneath it. */
+    padding-bottom: calc(var(--miniplayer-clearance) + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .footer-grid {
+    gap: 36px 20px !important;
+    padding: 44px 20px 12px !important;
+  }
+  .footer-rule { padding-left: 20px !important; padding-right: 20px !important; }
+
+  /* space-between across three uppercase mono stamps at 0.38em tracking
+     needs ~380px. At 335px they wrap, and space-between then strands
+     "Replete AI" alone against the left edge — which reads as a bug
+     rather than a colophon. Stack and centre instead. */
+  .footer-bottom {
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 10px !important;
+    padding: 20px 20px 8px !important;
+    font-size: 10px !important;
+    letter-spacing: 0.22em !important;
+    text-align: center !important;
+  }
+  .footer-bottom > * { text-align: center !important; }
+}
+
+@media (max-width: 560px) {
+  .footer-grid  { padding-left: 16px !important; padding-right: 16px !important; }
+  .footer-rule,
+  .footer-bottom { padding-left: 16px !important; padding-right: 16px !important; }
+  /* The two link columns still fit side by side at 375 — "Hugging Face ↗"
+     is ~110px in an ~148px column. Kept two-up deliberately: stacking
+     them would strand a lot of vertical space for four links. */
+  .footer-col-title { letter-spacing: 0.3em !important; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PROSE LISTS — for the reflowed paper reader (PaperReflow)
+   ─────────────────────────────────────────────────────────────
+   prose-lantern styled pre/code but never lists, because the pages
+   that used it had none. The compiled papers do. Kept understated:
+   the marker is a ghost-cyan glyph, not a heavy bullet, and the
+   measure holds the same rhythm as the body paragraphs. */
+.prose-lantern ul,
+.prose-lantern ol {
+  margin: 1.25rem 0;
+  padding-left: 1.6rem;
+}
+.prose-lantern li {
+  margin: 0.5rem 0;
+  padding-left: 0.4rem;
+  line-height: 1.7;
+}
+.prose-lantern ul > li { list-style: none; position: relative; }
+.prose-lantern ul > li::before {
+  content: "◦";
+  position: absolute;
+  left: -1.1rem;
+  color: var(--ghost);
+  opacity: 0.7;
+}
+.prose-lantern ol:not(.reflow-bib) { list-style: none; counter-reset: item; }
+.prose-lantern ol:not(.reflow-bib) > li { counter-increment: item; position: relative; }
+/* The bibliography draws its own numbers (a positioned mono span per
+   ref); without this exemption the prose counter paints a SECOND number,
+   giving the "01 inside the box, 01 outside" doubling. */
+.prose-lantern ol.reflow-bib,
+.prose-lantern ol.reflow-bib > li { counter-reset: none; }
+.prose-lantern ol.reflow-bib > li::before { content: none; }
+.prose-lantern ol:not(.reflow-bib) > li::before {
+  content: counter(item, decimal-leading-zero);
+  position: absolute;
+  left: -1.9rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  top: 0.28rem;
+}
+
+/* Inline citation markers from \cite — a mono superscript in ghost-cyan. */
+.prose-lantern .cite {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.62em;
+  color: var(--ghost);
+  padding-left: 1px;
+}
+
+/* Display math that overflows the measure scrolls rather than clipping —
+   the honest behaviour for a wide equation on a narrow screen. */
+.prose-lantern .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5rem 0;
+}
+.prose-lantern .katex-display::-webkit-scrollbar { height: 4px; }
+.prose-lantern .katex-display::-webkit-scrollbar-thumb {
+  background: rgba(127, 175, 179, 0.25);
+}
+
+/* Build-time render errors, if any survive to the page, shouldn't be
+   invisible — tint them so they're caught in review. */
+.prose-lantern [data-math-error],
+.prose-lantern [data-unhandled-macro] {
+  color: #d87f7f;
+  border-bottom: 1px dotted #d87f7f;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   READER PLATE — the surface under a reflowed paper (PaperReflow)
+   ─────────────────────────────────────────────────────────────
+   A paper is the one place prose sits over the LIVING substrate for a
+   long, slow read rather than a scroll-past. So the plate under it is a
+   touch more opaque than a stock reading-plate, and its inner glow is
+   dialled up slightly — enough that a bright koi drifting directly
+   behind a line of body text is felt as ambient colour, not read as a
+   fish swimming through the words.
+
+   On desktop this keeps the full chromatic lens (inherits the base
+   .reading-plate backdrop-filter). On mobile it inherits the 900px
+   frost-off — no live re-blur over the canvas — and just deepens the
+   flat wash. Same perf posture as every other plate on a phone. */
+.reading-plate--reader {
+  padding: clamp(32px, 5vw, 60px) clamp(22px, 4vw, 52px);
+  background: rgba(4, 8, 16, 0.52);
+  box-shadow:
+    inset 0 0 120px rgba(127, 175, 179, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+@media (max-width: 900px) {
+  /* Deeper than the stock 0.86 mobile wash. A koi is bright; a reader is
+     still. 0.92 hides the fish behind a paragraph without going flat
+     black — the ghost-cyan cast still tints through faintly at rest. */
+  .reading-plate--reader {
+    background: rgba(3, 6, 14, 0.92) !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .reading-plate--reader {
+    padding: clamp(24px, 6vw, 40px) 20px !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   REFLOW READER — overflow containment
+   ─────────────────────────────────────────────────────────────
+   Everything below fixes wide content (inline math, tables, long
+   unbreakable tokens) bleeding off a phone. The through-line: give
+   the plate permission to shrink to the viewport, and let genuinely
+   un-wrappable things scroll inside their own bounds instead of
+   pushing the whole page wide. */
+
+/* The plate is the reader's width authority. Without min-width:0 a wide
+   descendant (a long inline equation, a code line) sets the plate's min
+   content-width and the whole article grows past the viewport — the
+   "bleeds off every screen" symptom. This lets the plate hold the
+   viewport width and pass the constraint down. */
+.paper-reflow,
+.reading-plate--reader {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+/* Inline math (\(...\)) can't line-break. A long one — grabby-expansion
+   has several — overflows the measure. KaTeX renders each as an
+   inline-block .katex; capping it at the measure and letting it scroll
+   keeps the equation whole and the page narrow. It reads as a tiny
+   swipe-able strip rather than a horizontal-scroll on the entire page. */
+.prose-lantern .katex {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* KaTeX sets white-space:nowrap internally; keep that, just bound it. */
+  vertical-align: middle;
+}
+/* Thin, unobtrusive scrollbar for the ones that do overflow. */
+.prose-lantern .katex::-webkit-scrollbar { height: 3px; }
+.prose-lantern .katex::-webkit-scrollbar-thumb {
+  background: rgba(127, 175, 179, 0.3);
+}
+
+/* Tables: the wrapper already scrolls (overflow-x:auto inline), but the
+   wrapper itself must be allowed to shrink or it pushes the plate wide
+   before its own scroll ever engages. Same min-width:0 story. */
+.paper-reflow figure { min-width: 0; max-width: 100%; }
+.paper-reflow figure > div { min-width: 0; }
+
+/* Code blocks: pre already scrolls; ensure it can't set the plate width. */
+.prose-lantern pre { max-width: 100%; }
+
+/* Long unbreakable tokens in prose (URLs, model names, hyphenated species
+   like Dihypersphaerome) — allow a break rather than an overflow. */
+.prose-lantern p,
+.prose-lantern li { overflow-wrap: anywhere; }
+
+/* ── Citations in the reflowed reader ─────────────────────────────
+   \cite / \citet / \citep all render as a numbered superscript linked
+   to its entry in the reference list. Kept small and ghost-cyan so a
+   paragraph with six citations still reads as prose rather than as a
+   field of brackets — but with a real tap target, since on a phone
+   this is the only way to reach the reference. */
+.prose-lantern .cite {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6em;
+  color: var(--ghost);
+  padding-left: 1px;
+  white-space: nowrap;
+}
+.prose-lantern .cite a {
+  color: inherit;
+  border-bottom: none;
+  /* Widen the hit area without disturbing the line box. */
+  padding: 0 1px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .prose-lantern .cite a:hover { color: var(--ink); }
+}
+@media (hover: none) {
+  .prose-lantern .cite a:active { color: var(--ink); }
+}
+
+/* A citation whose key has no matching reference — a content bug, so
+   make it visible rather than letting it read as ordinary text. */
+.prose-lantern [data-unresolved-cite] {
+  color: #d87f7f;
+  border-bottom: 1px dotted #d87f7f;
 }

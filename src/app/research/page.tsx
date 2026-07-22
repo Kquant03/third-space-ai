@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ENTRIES, groupByYear } from "@/data/papers";
 import type { ResearchEntry } from "@/data/papers";
+import { COLOR, FONT } from "@/components/editorial";
 
 export const metadata: Metadata = {
   title: "Research",
@@ -19,22 +20,6 @@ export const metadata: Metadata = {
 //  out to its canonical home. Colophon lives in SiteChrome's footer.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const COLOR = {
-  ink: "#f4f6fb",
-  inkStrong: "#eaeef7",
-  inkBody: "#c8cfe0",
-  inkMuted: "#8a9bba",
-  inkFaint: "#5a6780",
-  inkGhost: "#3a4560",
-  ghost: "#7fafb3",
-} as const;
-
-const FONT = {
-  display: "var(--font-display), 'Cormorant Garamond', Georgia, serif",
-  body: "var(--font-body), 'Source Serif 4', Georgia, serif",
-  mono: "var(--font-mono), 'JetBrains Mono', monospace",
-} as const;
-
 export default function Research() {
   const byYear = groupByYear(ENTRIES);
 
@@ -42,6 +27,7 @@ export default function Research() {
     <>
       {/* ─── Masthead ────────────────────────────────────── */}
       <section
+        className="archive-masthead"
         style={{
           maxWidth: 1100,
           margin: "0 auto",
@@ -49,6 +35,7 @@ export default function Research() {
         }}
       >
         <div
+          className="archive-rail"
           style={{
             display: "grid",
             gridTemplateColumns: "1fr auto 1fr",
@@ -73,6 +60,7 @@ export default function Research() {
 
         <div style={{ maxWidth: 720 }}>
           <h1
+            className="archive-h1"
             style={{
               margin: 0,
               fontFamily: FONT.display,
@@ -111,13 +99,17 @@ export default function Research() {
             marginTop: 72,
             height: 1,
             background:
-              "linear-gradient(90deg, transparent 0%, rgba(127,175,179,0.08) 15%, rgba(127,175,179,0.38) 50%, rgba(127,175,179,0.08) 85%, transparent 100%)",
+              // Plateau, not peak — matches TaperedRule(accent). The old
+              // 15/50/85 stops made a lens that only read as a rule at
+              // desktop width; see editorial.tsx.
+              "linear-gradient(90deg, transparent 0, rgba(127,175,179,0.34) clamp(20px, 8%, 112px), rgba(127,175,179,0.34) calc(100% - clamp(20px, 8%, 112px)), transparent 100%)",
           }}
         />
       </section>
 
       {/* ─── Archive ─────────────────────────────────────── */}
       <section
+        className="archive-list"
         style={{
           maxWidth: 1100,
           margin: "0 auto",
@@ -129,6 +121,7 @@ export default function Research() {
         ))}
 
         <div
+          className="archive-endcap"
           style={{
             marginTop: 72,
             display: "flex",
@@ -148,10 +141,78 @@ export default function Research() {
       </section>
 
       <style>{`
-        .archive-row:hover .archive-title { color: ${COLOR.ghost} !important; }
-        .archive-row:hover .archive-read {
-          color: ${COLOR.ghost} !important;
-          border-color: ${COLOR.ghost} !important;
+        @media (hover: hover) and (pointer: fine) {
+          .archive-row:hover .archive-title { color: ${COLOR.ghost} !important; }
+          .archive-row:hover .archive-read {
+            color: ${COLOR.ghost} !important;
+            border-color: ${COLOR.ghost} !important;
+          }
+        }
+        @media (hover: none) {
+          .archive-row:active .archive-title { color: ${COLOR.ghost} !important; }
+        }
+
+        /* ── octavo ─────────────────────────────────────────────────
+           This page owns its own responsive rules rather than adding to
+           globals.css — same reasoning as SectionShell (editorial.tsx):
+           the hook and the rule ship together and can't desync. */
+        @media (max-width: 720px) {
+          .archive-masthead { padding: calc(var(--header-height, 128px) + 28px) 20px 56px !important; }
+          .archive-list     { padding: 32px 20px 72px !important; }
+
+          /* Masthead rail: Third Space ── The Archive ── Toledo · Ohio.
+             The flanks are structural noise on a phone; the centre plate
+             carries it, stacked and centred like every other rail. */
+          .archive-rail {
+            grid-template-columns: minmax(0, 1fr) !important;
+            justify-items: center !important;
+            text-align: center !important;
+            gap: 4px !important;
+            margin-bottom: 48px !important;
+            font-size: 10px !important;
+            letter-spacing: 0.24em !important;
+            line-height: 2 !important;
+          }
+          .archive-rail > *:first-child,
+          .archive-rail > *:last-child { display: none !important; }
+
+          .archive-h1 { font-size: clamp(52px, 15vw, 96px) !important; }
+
+          /* The row is the whole point of the page. minmax(150px,1fr) 4fr
+             starves the title to ~80px at phone width — the metadata rail
+             becomes a run-in header line above the entry instead, exactly
+             like the open-data manifest on the home page. */
+          .archive-row {
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 14px !important;
+            padding: 32px 0 !important;
+          }
+          .archive-aside {
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            align-items: baseline !important;
+            gap: 6px 16px !important;
+            padding-top: 0 !important;
+          }
+          .archive-aside > div {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+          }
+          /* The date block uses <br> for version; in a run-in row that
+             forces an unwanted wrap. Neutralise it. */
+          .archive-aside br { display: none; }
+
+          .archive-title { font-size: clamp(26px, 7vw, 48px) !important; overflow-wrap: anywhere; }
+
+          /* space-between strands "NN entries" alone on a phone. Stack. */
+          .archive-endcap {
+            flex-direction: column !important;
+            align-items: center !important;
+            gap: 10px !important;
+            text-align: center !important;
+            letter-spacing: 0.24em !important;
+          }
         }
       `}</style>
     </>
@@ -241,6 +302,7 @@ function ArchiveRow({ entry }: { entry: ResearchEntry }) {
       }}
     >
       <aside
+        className="archive-aside"
         style={{
           display: "flex",
           flexDirection: "column",

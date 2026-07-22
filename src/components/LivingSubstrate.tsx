@@ -2208,20 +2208,69 @@ export default function LivingSubstrate() {
       return { tex, fbo };
     };
 
+    const disposeFBO = (f: ReturnType<typeof makeFBO> | null) => {
+      if (!f) return;
+      gl.deleteTexture(f.tex);
+      gl.deleteFramebuffer(f.fbo);
+    };
+
     let W = 0, H = 0;
     let fieldFBO: ReturnType<typeof makeFBO> | null = null;
     let koiFBO:   ReturnType<typeof makeFBO> | null = null;
     let bloomA:   ReturnType<typeof makeFBO> | null = null;
     let bloomB:   ReturnType<typeof makeFBO> | null = null;
 
+    // Touch devices get a lower ceiling on the backing store. A 3×-DPR
+    // phone rendering four RGBA8 framebuffers at native resolution is
+    // asking a mobile GPU to push ~4× the fill rate of a desktop at the
+    // same apparent size, for pixels nobody can resolve. 1.5 keeps the
+    // koi rims and bloom clean and roughly quarters the work.
+    const isCoarse =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+
+    // iOS and Android collapse the URL bar as you scroll. That changes
+    // window.innerHeight by 60–90px and fires `resize` — mid-scroll,
+    // repeatedly. Reallocating the whole FBO chain on each one stutters
+    // visibly and buys nothing, so on touch devices we size to the
+    // tallest height we've seen and only re-latch when the *width*
+    // changes (rotation, or a real layout change).
+    let lastCssW = 0;
+    let lockedCssH = 0;
+
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      W = Math.floor(window.innerWidth * dpr);
-      H = Math.floor(window.innerHeight * dpr);
+      const dpr = Math.min(window.devicePixelRatio || 1, isCoarse ? 1.5 : 2);
+      const cssW = window.innerWidth;
+      let cssH = window.innerHeight;
+
+      if (isCoarse) {
+        if (cssW !== lastCssW) lockedCssH = cssH;
+        else cssH = lockedCssH = Math.max(lockedCssH, cssH);
+      }
+      lastCssW = cssW;
+
+      const nextW = Math.floor(cssW * dpr);
+      const nextH = Math.floor(cssH * dpr);
+      if (nextW === W && nextH === H) return;
+
+      W = nextW;
+      H = nextH;
       canvas.width = W;
       canvas.height = H;
-      canvas.style.width  = window.innerWidth  + "px";
-      canvas.style.height = window.innerHeight + "px";
+      canvas.style.width  = cssW + "px";
+      canvas.style.height = cssH + "px";
+
+      // Free the previous generation before allocating the next. Without
+      // this, every resize event leaked four textures and four
+      // framebuffers. On desktop that's invisible — resize is a rare,
+      // deliberate act. On mobile the URL bar turns it into a per-scroll
+      // event, and the tab dies of GPU memory exhaustion in about a
+      // minute of reading.
+      disposeFBO(fieldFBO);
+      disposeFBO(koiFBO);
+      disposeFBO(bloomA);
+      disposeFBO(bloomB);
+
       fieldFBO = makeFBO(W, H);
       koiFBO   = makeFBO(W, H);
       bloomA   = makeFBO(Math.floor(W / 2), Math.floor(H / 2));
@@ -2229,6 +2278,7 @@ export default function LivingSubstrate() {
     };
     resize();
     window.addEventListener("resize", resize);
+    window.addEventListener("orientationchange", resize);
 
     let scroll = 0;
     const onScroll = () => { scroll = window.scrollY; };
@@ -2532,8 +2582,19 @@ export default function LivingSubstrate() {
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
+      window.removeEventListener("orientationchange", resize);
       window.removeEventListener("scroll", onScroll);
       document.removeEventListener("visibilitychange", onVis);
+
+      // Hand the GPU memory back. Mobile Safari caps a page at a small
+      // number of live WebGL contexts and is not gracious about it —
+      // an orphaned context means the *next* one silently fails to
+      // create and the substrate never comes back.
+      disposeFBO(fieldFBO);
+      disposeFBO(koiFBO);
+      disposeFBO(bloomA);
+      disposeFBO(bloomB);
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

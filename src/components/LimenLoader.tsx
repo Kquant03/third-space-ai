@@ -97,8 +97,12 @@ export default function LimenLoader() {
   const isVisible = phase !== "initial";
   const isExiting = phase === "exiting";
 
+  // Plateau, not peak — see the note on TaperedRule in page.tsx. The
+  // loader's rules bracket the same word the hero's do; they have to be
+  // the same object.
   const ruleGradient =
-    "linear-gradient(90deg, transparent 0%, rgba(127,175,179,0.05) 12%, rgba(127,175,179,0.38) 50%, rgba(127,175,179,0.05) 88%, transparent 100%)";
+    "linear-gradient(90deg, transparent 0, rgba(127,175,179,0.34) clamp(20px, 8%, 112px), " +
+    "rgba(127,175,179,0.34) calc(100% - clamp(20px, 8%, 112px)), transparent 100%)";
 
   const limenTransform = isExiting
     ? "translateZ(80px) scale(1.06)"
@@ -198,6 +202,51 @@ export default function LimenLoader() {
           0%, 100% { opacity: 0.55; }
           50%      { opacity: 1.00; }
         }
+
+        /* ── loader, small viewports ─────────────────────────────
+           The wordmark's clamp() floor was 100px, so on anything
+           under ~500px wide the min won and "Third Space" ran off
+           both edges — body { overflow-x: hidden } just cropped it
+           rather than fixing it. Below 720px the type scales by
+           viewport with a floor small enough to actually fit, and
+           the 200px top padding (sized for the desktop masthead)
+           comes down to something a 667px-tall phone can hold. */
+        @media (max-width: 720px) {
+          .limen-loader-section { padding-top: 96px !important; }
+          .limen-loader-gutter {
+            padding-left: 20px !important;
+            padding-right: 20px !important;
+          }
+          /* Deliberately duplicated from globals.css's .hero-title
+             rule rather than shared: the loader is unmounted by the
+             time the hero is read, so the two are never on screen at
+             once — but they ARE on screen consecutively, mid-animation,
+             and any divergence shows as a jump. Keep in sync by hand. */
+          .limen-loader-title {
+            font-size: clamp(58px, 22vw, 92px) !important;
+            line-height: 0.82 !important;
+            letter-spacing: -0.03em !important;
+          }
+          .limen-loader-title .hero-word { display: block; }
+          /* Stack the rail rather than dropping its flanks — same
+             call as the hero's .hero-meta, and it has to be the same
+             call, because this rail hands off to that one. */
+          .limen-loader-meta {
+            grid-template-columns: minmax(0, 1fr) !important;
+            justify-items: center !important;
+            text-align: center !important;
+            gap: 4px !important;
+            font-size: 10px !important;
+            letter-spacing: 0.24em !important;
+            line-height: 2 !important;
+          }
+          .limen-loader-meta > *:last-child { text-align: center !important; }
+          .limen-loader-meta > * { letter-spacing: 0.3em !important; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .limen-loader-title { transition-duration: 0.001ms !important; }
+        }
       `}</style>
 
       {/* ═══════════════════════════════════════════════════════════════════
@@ -231,9 +280,10 @@ export default function LimenLoader() {
           />
 
           <section
+            className="limen-loader-section"
             style={{
               position: "relative",
-              minHeight: "100vh",
+              minHeight: "100svh",
               display: "flex",
               flexDirection: "column",
               paddingTop: 200,
@@ -241,6 +291,7 @@ export default function LimenLoader() {
             }}
           >
             <div
+              className="limen-loader-gutter"
               style={{
                 padding: "0 40px",
                 opacity: isExiting ? 0 : isVisible ? 1 : 0,
@@ -248,6 +299,7 @@ export default function LimenLoader() {
               }}
             >
               <div
+                className="limen-loader-meta"
                 style={{
                   maxWidth: 1440,
                   margin: "0 auto",
@@ -274,6 +326,7 @@ export default function LimenLoader() {
             </div>
 
             <div
+              className="limen-loader-gutter"
               style={{
                 flex: 1,
                 display: "flex",
@@ -310,6 +363,7 @@ export default function LimenLoader() {
                   }}
                 >
                   <h1
+                    className="limen-loader-title"
                     style={{
                       margin: 0,
                       fontFamily: FONT.display,
@@ -333,7 +387,13 @@ export default function LimenLoader() {
                         "text-shadow 1.2s ease",
                     }}
                   >
-                    Third Space
+                    {/* Locked to page.tsx's hero h1 — identical spans,
+                        identical class, identical clamp. The exit
+                        animation flies this word forward while the hero's
+                        word rises to meet it; if they stack differently
+                        the handoff jumps. Change one, change both. */}
+                    <span className="hero-word">Third</span>{" "}
+                    <span className="hero-word">Space</span>
                   </h1>
                 </div>
 
@@ -390,7 +450,7 @@ export default function LimenLoader() {
               </div>
             </div>
 
-            <div style={{ padding: "0 40px 72px" }}>
+            <div className="limen-loader-gutter" style={{ padding: "0 40px 72px" }}>
               <div
                 style={{
                   maxWidth: 1440,

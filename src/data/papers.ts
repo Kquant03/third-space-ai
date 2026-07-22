@@ -92,7 +92,7 @@ export const ENTRIES: ResearchEntry[] = [
     type: "Paper",
     date: "April mmxxvi",
     year: "mmxxvi",
-    version: "Revision xiii",
+    version: "Revision xv",
     title: "Against Grabby Expansion",
     titleLines: ["Against", "Grabby Expansion"],
     subtitle:

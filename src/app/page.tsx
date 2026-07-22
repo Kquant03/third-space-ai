@@ -259,14 +259,40 @@ const OPEN_CALLS: OpenCall[] = [
 // PRIMITIVES
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** A scotch rule.
+ *
+ *  This used to taper to a single bright point at 50% and ramp away in
+ *  both directions — transparent 0%, 0.05 at 12%, 0.38 at 50%, and back.
+ *  Which is a lens, not a rule. It only reads as a rule at all because
+ *  1400px is wide enough that the ramp looks like an intentional taper;
+ *  at 335px the same shape is 40px of fade, a faint bulge, 40px of fade.
+ *  It doesn't break at a breakpoint — it degrades continuously, and the
+ *  desktop is simply wide enough to hide it.
+ *
+ *  A scotch rule (the site's own word for it — see SiteHeader) is a
+ *  plateau with defined ends, not a gradient with a peak. So: hold the
+ *  full value across the middle, and taper by an amount that's a share
+ *  of the width but clamped at both ends. clamp() is legal anywhere a
+ *  <length-percentage> is, including a gradient stop.
+ *
+ *    1400px → 112px of taper each end, ~1176px of rule
+ *     335px →  27px of taper each end,  ~281px of rule
+ *
+ *  Same character at both, and every width in between. No media query,
+ *  because there's no longer anything to branch on.
+ */
 function TaperedRule({ accent = false }: { accent?: boolean }) {
+  const taper = "clamp(20px, 8%, 112px)";
+  const ink = accent ? "rgba(127,175,179,0.34)" : "rgba(255,255,255,0.09)";
   return (
     <div
+      aria-hidden
+      className={`tapered-rule${accent ? " tapered-rule--accent" : ""}`}
       style={{
         height: 1,
-        background: accent
-          ? "linear-gradient(90deg, transparent 0%, rgba(127,175,179,0.05) 12%, rgba(127,175,179,0.38) 50%, rgba(127,175,179,0.05) 88%, transparent 100%)"
-          : "linear-gradient(90deg, transparent, rgba(255,255,255,0.09), transparent)",
+        background:
+          `linear-gradient(90deg, transparent 0, ${ink} ${taper}, ` +
+          `${ink} calc(100% - ${taper}), transparent 100%)`,
       }}
     />
   );
@@ -391,6 +417,7 @@ function SectionMark({
 }) {
   return (
     <div
+      className="section-mark"
       style={{
         display: "grid",
         gridTemplateColumns: "auto 1fr auto",
@@ -560,7 +587,7 @@ function OpenCallSection() {
 
       {/* The plated dispatch card */}
       <article
-        className="reading-plate"
+        className="reading-plate dispatch-plate"
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(180px, 1fr) 4fr",
@@ -812,6 +839,7 @@ export default function Home() {
            HERO
          ══════════════════════════════════════════════════════════════════ */}
       <section
+        className="hero"
         style={{
           position: "relative",
           minHeight: "100vh",
@@ -820,8 +848,9 @@ export default function Home() {
           paddingTop: 200,
         }}
       >
-        <div style={{ padding: "0 40px 0" }}>
+        <div className="hero-gutter" style={{ padding: "0 40px 0" }}>
           <div
+            className="hero-meta"
             style={{
               maxWidth: 1440,
               margin: "0 auto",
@@ -849,6 +878,7 @@ export default function Home() {
 
         {/* THE DOORWAY — the signature moment. Accent earns its place here. */}
         <div
+          className="hero-gutter"
           style={{
             flex: 1,
             display: "flex",
@@ -870,6 +900,7 @@ export default function Home() {
               {/* corner marks — demoted to ink-muted; they're structural */}
               <div
                 aria-hidden
+                className="hero-corner"
                 style={{
                   position: "absolute",
                   left: "4%",
@@ -883,6 +914,7 @@ export default function Home() {
               />
               <div
                 aria-hidden
+                className="hero-corner"
                 style={{
                   position: "absolute",
                   right: "4%",
@@ -896,6 +928,7 @@ export default function Home() {
               />
 
               <h1
+                className="hero-title"
                 style={{
                   margin: 0,
                   fontFamily: FONT.display,
@@ -909,7 +942,17 @@ export default function Home() {
                     "0 0 140px rgba(127,175,179,0.09), 0 0 40px rgba(244,246,251,0.04)",
                 }}
               >
-                Third Space
+                {/* Two spans, not a text node. Desktop renders them
+                    inline (the space between is a real space); the
+                    octavo layout blocks them so the title stacks —
+                    Third / Space — at ~2× the size a single line
+                    could reach at 390px. A title page in portrait
+                    breaks the line; it doesn't shrink the type.
+                    LimenLoader carries an identical pair and the two
+                    MUST stay locked, or the loader's exit choreography
+                    hands off to a hero whose title is somewhere else. */}
+                <span className="hero-word">Third</span>{" "}
+                <span className="hero-word">Space</span>
               </h1>
             </div>
 
@@ -960,6 +1003,7 @@ export default function Home() {
         {/* STANDFIRST — plated. The plate's frosted backdrop replaces the
             old borderLeft; same signature role, now coupled to the substrate. */}
         <div
+          className="hero-gutter"
           style={{
             padding: "0 40px 72px",
             display: "flex",
@@ -1003,6 +1047,7 @@ export default function Home() {
             platform CTAs so they feel continuous with the rest of the
             page rather than announcing themselves as "buttons." */}
         <div
+          className="hero-gutter"
           style={{
             padding: "0 40px 72px",
             display: "flex",
@@ -1010,6 +1055,7 @@ export default function Home() {
           }}
         >
           <div
+            className="hero-doorways"
             style={{
               display: "flex",
               flexWrap: "wrap",
@@ -1031,10 +1077,11 @@ export default function Home() {
           </div>
         </div>
 
-        <div style={{ padding: "0 40px 32px" }}>
+        <div className="hero-gutter" style={{ padding: "0 40px 32px" }}>
           <div style={{ maxWidth: 1440, margin: "0 auto" }}>
             <TaperedRule />
             <div
+              className="hero-toc"
               style={{
                 display: "grid",
                 gridTemplateColumns: "1fr 2fr 1fr",
@@ -1101,6 +1148,7 @@ export default function Home() {
       <section style={{ maxWidth: 1280, margin: "0 auto", padding: "72px 40px 96px" }}>
         <SectionMark roman="III" label="Open Data" index="03 / 03" />
         <div
+          className="data-head"
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 3fr 2fr 2fr auto",
@@ -1148,6 +1196,7 @@ export default function Home() {
          ══════════════════════════════════════════════════════════════════ */}
       <section style={{ maxWidth: 1280, margin: "0 auto", padding: "72px 40px 120px" }}>
         <div
+          className="section-mark"
           style={{
             display: "grid",
             gridTemplateColumns: "auto 1fr auto",
@@ -1217,6 +1266,7 @@ export default function Home() {
         </div>
 
         <div
+          className="colophon-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "2fr 1fr",
@@ -1342,32 +1392,34 @@ export default function Home() {
           transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
           pointer-events: none;
         }
-        .hero-cta:hover::before {
-          transform: translateX(350%);
-        }
+        @media (hover: hover) and (pointer: fine) {
+          .hero-cta:hover::before {
+            transform: translateX(350%);
+          }
 
-        .hero-cta:hover {
-          color: ${COLOR.inkStrong};
-          border-color: ${COLOR.ghost}88;
-          background: linear-gradient(
-            180deg,
-            rgba(127, 175, 179, 0.095),
-            rgba(127, 175, 179, 0.035)
-          );
-          box-shadow:
-            0 0 0 1px rgba(127, 175, 179, 0.14) inset,
-            0 12px 50px -16px rgba(127, 175, 179, 0.55),
-            0 0 36px -10px rgba(127, 175, 179, 0.4);
-          text-shadow: 0 0 22px rgba(234, 238, 247, 0.5);
-        }
+          .hero-cta:hover {
+            color: ${COLOR.inkStrong};
+            border-color: ${COLOR.ghost}88;
+            background: linear-gradient(
+              180deg,
+              rgba(127, 175, 179, 0.095),
+              rgba(127, 175, 179, 0.035)
+            );
+            box-shadow:
+              0 0 0 1px rgba(127, 175, 179, 0.14) inset,
+              0 12px 50px -16px rgba(127, 175, 179, 0.55),
+              0 0 36px -10px rgba(127, 175, 179, 0.4);
+            text-shadow: 0 0 22px rgba(234, 238, 247, 0.5);
+          }
 
-        .hero-cta:hover .hero-cta-rule {
-          width: 36px;
-          background: linear-gradient(90deg, transparent, ${COLOR.inkStrong});
-        }
+          .hero-cta:hover .hero-cta-rule {
+            width: 36px;
+            background: linear-gradient(90deg, transparent, ${COLOR.inkStrong});
+          }
 
-        .hero-cta:hover .hero-cta-arrow {
-          transform: translate(3px, -3px);
+          .hero-cta:hover .hero-cta-arrow {
+            transform: translate(3px, -3px);
+          }
         }
 
         .hero-cta:active {
@@ -1388,16 +1440,33 @@ export default function Home() {
             0 12px 50px -16px rgba(127, 175, 179, 0.55);
         }
 
-        .pub-entry:hover .pub-read { color: ${COLOR.ghost}; border-color: ${COLOR.ghost}; }
-        .platform-entry:hover .platform-title { color: ${COLOR.ghost}; }
-        .platform-entry:hover .platform-cta { color: ${COLOR.ghost}; border-color: ${COLOR.ghost}; }
-        .data-row:hover .data-title { color: ${COLOR.ghost}; }
-        .data-row:hover .data-arrow { color: ${COLOR.ghost}; }
-        .data-row:hover { background: rgba(255,255,255,0.015); }
-        .colophon-link:hover { color: ${COLOR.ghost}; }
-        .companion-link:hover { color: ${COLOR.ink} !important; border-color: ${COLOR.ghost} !important; }
-        .dispatch-secondary:hover { color: ${COLOR.inkStrong}; border-color: ${COLOR.ghost}; }
-        .hero-toc-link:hover { color: ${COLOR.ink} !important; }
+        /* Everything below is hover-conditional. On a touch screen these
+           fire on tap and then stay stuck until you tap somewhere else —
+           so a card you've already navigated away from is still lit when
+           you come back. Gate them on a device that actually has a
+           pointer; touch users get :active instead, further down. */
+        @media (hover: hover) and (pointer: fine) {
+          .pub-entry:hover .pub-read { color: ${COLOR.ghost}; border-color: ${COLOR.ghost}; }
+          .platform-entry:hover .platform-title { color: ${COLOR.ghost}; }
+          .platform-entry:hover .platform-cta { color: ${COLOR.ghost}; border-color: ${COLOR.ghost}; }
+          .data-row:hover .data-title { color: ${COLOR.ghost}; }
+          .data-row:hover .data-arrow { color: ${COLOR.ghost}; }
+          .data-row:hover { background: rgba(255,255,255,0.015); }
+          .colophon-link:hover { color: ${COLOR.ghost}; }
+          .companion-link:hover { color: ${COLOR.ink} !important; border-color: ${COLOR.ghost} !important; }
+          .dispatch-secondary:hover { color: ${COLOR.inkStrong}; border-color: ${COLOR.ghost}; }
+          .hero-toc-link:hover { color: ${COLOR.ink} !important; }
+        }
+
+        /* Touch equivalent: a brief acknowledgement on press. The
+           accent still does its work, it just doesn't linger. */
+        @media (hover: none) {
+          .data-row:active { background: rgba(255,255,255,0.03); }
+          .data-row:active .data-title,
+          .platform-entry:active .platform-title,
+          .pub-entry:active .pub-read { color: ${COLOR.ghost}; }
+          .hero-cta:active { border-color: ${COLOR.ghost}; }
+        }
         @keyframes dispatch-pulse {
           0%, 100% { opacity: 0.55; transform: scale(1); }
           50% { opacity: 1; transform: scale(1.15); }
@@ -1414,6 +1483,13 @@ export default function Home() {
           line-height: 0.82;
           margin: 0.08em 0.14em 0 -0.04em;
           color: ${COLOR.inkStrong};
+        }
+        @media (max-width: 720px) {
+          .abstract::first-letter {
+            font-size: 3.4em;
+            line-height: 0.86;
+            margin: 0.06em 0.1em 0 -0.02em;
+          }
         }
       `}</style>
     </>
@@ -1499,6 +1575,7 @@ function PublicationEntry({ pub }: { pub: Publication }) {
 
       <div>
         <h3
+          className="pub-title"
           style={{
             margin: 0,
             fontFamily: FONT.display,
@@ -2016,6 +2093,7 @@ function DataRow({ d }: { d: (typeof OPEN_DATA)[number] }) {
         {d.title}
       </div>
       <div
+        className="data-scope"
         style={{
           fontFamily: FONT.mono,
           fontSize: 11,
@@ -2027,6 +2105,7 @@ function DataRow({ d }: { d: (typeof OPEN_DATA)[number] }) {
         {d.scope}
       </div>
       <div
+        className="data-note"
         style={{
           fontFamily: FONT.display,
           fontStyle: "italic",

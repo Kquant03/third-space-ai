@@ -69,10 +69,12 @@ const TRANSITION = {
   // holdAtStart is hardcoded to 32% in the static keyframe string
   // below (inside the component). Change both if you tune this.
 
-  // Vertical position of the header-rule, measured in pixels from the
-  // top of the viewport. Should land just beneath the masthead +
-  // secondary nav band. Tune by eye — the right value depends on
-  // SiteHeader's exact layout. 140 is a best guess from screenshots.
+  // Fallback only. The rule now sits at var(--header-height), which
+  // SiteHeader publishes from a ResizeObserver on its own box — so it
+  // lands exactly under the masthead at every breakpoint and rides the
+  // evaporate instead of snapping. This value is what's used for the
+  // first paint before the observer has reported, and on the chromeless
+  // routes where there's no header to measure.
   headerRuleTopPx: 140,
 } as const;
 
@@ -154,7 +156,7 @@ export default function SiteChrome({
       aria-hidden
       style={{
         position: "fixed",
-        top: TRANSITION.headerRuleTopPx,
+        top: `var(--header-height, ${TRANSITION.headerRuleTopPx}px)`,
         left: 0,
         right: 0,
         height: 1,
@@ -206,6 +208,7 @@ export default function SiteChrome({
         <main style={{ position: "relative", zIndex: 2 }}>{children}</main>
 
         <footer
+          className="site-footer"
           style={{
             position: "relative",
             zIndex: 2,
@@ -214,6 +217,7 @@ export default function SiteChrome({
         }}
       >
         <div
+          className="footer-grid"
           style={{
             maxWidth: 1400,
             margin: "0 auto",
@@ -223,7 +227,7 @@ export default function SiteChrome({
             gap: 40,
           }}
         >
-          <div style={{ gridColumn: "span 5" }}>
+          <div className="footer-brand" style={{ gridColumn: "span 5" }}>
             <div
               style={{
                 display: "flex",
@@ -308,7 +312,7 @@ export default function SiteChrome({
           </FooterCol>
         </div>
 
-        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 32px" }}>
+        <div className="footer-rule" style={{ maxWidth: 1400, margin: "0 auto", padding: "0 32px" }}>
           <div
             style={{
               height: 1,
@@ -319,6 +323,7 @@ export default function SiteChrome({
         </div>
 
         <div
+          className="footer-bottom"
           style={{
             maxWidth: 1400,
             margin: "0 auto",
@@ -345,7 +350,12 @@ export default function SiteChrome({
       </div>
 
       <style>{`
-        .footer-link:hover { color: #7fafb3 !important; }
+        @media (hover: hover) and (pointer: fine) {
+          .footer-link:hover { color: #7fafb3 !important; }
+        }
+        @media (hover: none) {
+          .footer-link:active { color: #7fafb3 !important; }
+        }
       `}</style>
     </>
   );
@@ -359,8 +369,9 @@ function FooterCol({
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ gridColumn: "span 3" }}>
+    <div className="footer-col" style={{ gridColumn: "span 3" }}>
       <div
+        className="footer-col-title"
         style={{
           fontFamily: "var(--font-mono), monospace",
           fontSize: 9,

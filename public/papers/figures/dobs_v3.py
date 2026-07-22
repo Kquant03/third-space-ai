@@ -28,6 +28,15 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+# ─── output paths (resolved relative to this script) ────────────
+# Was a hardcoded absolute path into one machine's home directory, which
+# made the script unrunnable anywhere else. Matches the pattern the other
+# figure scripts use.
+from pathlib import Path
+_HERE = Path(__file__).resolve().parent
+FIGURES_DIR = (_HERE.parent / "figures")
+FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 from scipy import signal, stats
 from sklearn.neighbors import NearestNeighbors
 from scipy.special import digamma
@@ -413,7 +422,7 @@ fig.suptitle('D$_{\\mathrm{obs}}$ v3 — Coherence Depth & Coordination Index\n'
              fontsize=13, color='#d4dae8', fontweight='bold', y=0.995)
 
 plt.tight_layout()
-plt.savefig('/home/kquant/Documents/code/social-phase-transition/docs/fermi/code/dobs_v3.png',
+plt.savefig(str(FIGURES_DIR / "dobs_v3.png"),
             dpi=180, bbox_inches='tight', facecolor=fig.get_facecolor())
 
 print(f"  Saved: dobs_v3.png")

@@ -15,9 +15,10 @@ export type SubstrateId =
   | "ising"
   | "lenia"
   | "lenia-expanded"
+  | "true-lenia-expanded"
   | "gray-scott"
   | "particle-life"
-  |  "coupling";
+  | "coupling";
 
 export type SubstrateMeta = {
   id: SubstrateId;
@@ -73,6 +74,16 @@ export const SUBSTRATES: SubstrateMeta[] = [
     path: "/genesis/lenia-expanded",
   },
   {
+    id: "true-lenia-expanded",
+    catalog: "Λ — 008",
+    title: "Lenia · True Fourth Dimension",
+    subtitle: "A continuous automaton integrated on a four-torus",
+    description:
+      "Where the Expanded Universe painted a 4D organism's shadow onto a 2D sheet, this integrates the real thing: a scalar field A(x,y,z,w) on a four-torus — L⁴ genuine degrees of freedom stepped by a real four-dimensional Lenia rule, its 1,064-tap kernel a sparse convolution over the unit 4-ball. The fourth dimension is never faked and never pre-projected. You rotate the field through SO(4) and raymarch its three-dimensional cross-section; turn the XW/YW/ZW planes and a shape appears from — and vanishes into — a direction that isn't there.",
+    citation: "Chan (2020) · Sebastian & Claude (mmxxvi)",
+    path: "/true-lenia-expanded",
+  },
+  {
     id: "gray-scott",
     catalog: "Λ — 005",
     title: "Gray-Scott",
@@ -92,7 +103,7 @@ export const SUBSTRATES: SubstrateMeta[] = [
     citation: "Schmickl et al. (2016) · Mogas-Recalde (2020)",
     path: "/genesis/particle-life",
   },
-    {
+  {
     id: "coupling",
     catalog: "Λ — 007",
     title: "The Coupling",

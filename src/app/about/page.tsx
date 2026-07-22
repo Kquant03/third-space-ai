@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import {
+  COLOR,
+  FONT,
+  TaperedRule,
+  SectionMark,
+  SectionShell,
+  Ornament,
+} from "@/components/editorial";
+
 export const metadata: Metadata = {
   title: "About",
   description:
@@ -11,143 +20,14 @@ export const metadata: Metadata = {
 // TOKENS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const COLOR = {
-  void: "#010106",
-  ink: "#f4f6fb",
-  inkStrong: "#eaeef7",
-  inkBody: "#c8cfe0",
-  inkMuted: "#8a9bba",
-  inkFaint: "#5a6780",
-  inkGhost: "#3a4560",
-  ghost: "#7fafb3",
-  ghostSoft: "#5d8a8e",
-} as const;
 
-const FONT = {
-  display: "var(--font-display), 'Cormorant Garamond', Georgia, serif",
-  body: "var(--font-body), 'Source Serif 4', Georgia, 'Times New Roman', serif",
-  mono: "var(--font-mono), 'JetBrains Mono', monospace",
-} as const;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PRIMITIVES
 // ═══════════════════════════════════════════════════════════════════════════
 
-function TaperedRule({ accent = false }: { accent?: boolean }) {
-  return (
-    <div
-      style={{
-        height: 1,
-        background: accent
-          ? "linear-gradient(90deg, transparent 0%, rgba(127,175,179,0.05) 12%, rgba(127,175,179,0.38) 50%, rgba(127,175,179,0.05) 88%, transparent 100%)"
-          : "linear-gradient(90deg, transparent, rgba(255,255,255,0.09), transparent)",
-      }}
-    />
-  );
-}
 
-function SectionMark({
-  roman,
-  label,
-  index,
-}: {
-  roman: string;
-  label: string;
-  index: string;
-}) {
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "auto 1fr auto",
-        alignItems: "baseline",
-        gap: 32,
-        paddingBottom: 18,
-        marginBottom: 72,
-        borderBottom: `1px solid ${COLOR.inkGhost}40`,
-      }}
-    >
-      <div
-        style={{
-          fontFamily: FONT.mono,
-          fontSize: 10,
-          letterSpacing: "0.4em",
-          textTransform: "uppercase",
-          color: COLOR.inkFaint,
-        }}
-      >
-        § {roman}
-      </div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 20 }}>
-        <span
-          aria-hidden
-          style={{
-            flex: 1,
-            height: 1,
-            background:
-              "linear-gradient(90deg, transparent, rgba(255,255,255,0.12))",
-            transform: "translateY(-4px)",
-          }}
-        />
-        <span
-          style={{
-            fontFamily: FONT.display,
-            fontStyle: "italic",
-            fontWeight: 400,
-            fontSize: 22,
-            color: COLOR.inkStrong,
-            whiteSpace: "nowrap",
-            letterSpacing: "0.02em",
-          }}
-        >
-          {label}
-        </span>
-        <span
-          aria-hidden
-          style={{
-            flex: 1,
-            height: 1,
-            background:
-              "linear-gradient(-90deg, transparent, rgba(255,255,255,0.12))",
-            transform: "translateY(-4px)",
-          }}
-        />
-      </div>
-      <div
-        style={{
-          fontFamily: FONT.mono,
-          fontSize: 10,
-          letterSpacing: "0.25em",
-          textTransform: "uppercase",
-          color: COLOR.inkFaint,
-          textAlign: "right",
-        }}
-      >
-        {index}
-      </div>
-    </div>
-  );
-}
 
-function Ornament() {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        gap: 28,
-        padding: "72px 0",
-        opacity: 0.5,
-      }}
-      aria-hidden
-    >
-      <span style={{ display: "block", width: 60, height: 1, background: "rgba(255,255,255,0.08)" }} />
-      <span style={{ fontSize: 10, letterSpacing: "0.5em", color: COLOR.inkFaint }}>◇</span>
-      <span style={{ display: "block", width: 60, height: 1, background: "rgba(255,255,255,0.08)" }} />
-    </div>
-  );
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SECTION SHELL — children are now plated so every section's prose sits on
@@ -155,86 +35,6 @@ function Ornament() {
 // (§ marker, label, date) stays unplated — it's metadata, not prose.
 // ═══════════════════════════════════════════════════════════════════════════
 
-function SectionShell({
-  roman,
-  label,
-  index,
-  date,
-  children,
-}: {
-  roman: string;
-  label: string;
-  index: string;
-  date: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section style={{ maxWidth: 1280, margin: "0 auto", padding: "72px 40px 96px" }}>
-      <SectionMark roman={roman} label={label} index={index} />
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(180px, 1fr) minmax(0, 4fr)",
-          gap: "clamp(24px, 5vw, 96px)",
-        }}
-      >
-        <aside
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 24,
-            paddingTop: 8,
-            position: "sticky",
-            top: 120,
-            alignSelf: "start",
-          }}
-        >
-          <div>
-            {/* Sidebar section marker — ink, not accent */}
-            <div
-              style={{
-                fontFamily: FONT.mono,
-                fontSize: 10,
-                letterSpacing: "0.32em",
-                textTransform: "uppercase",
-                color: COLOR.inkMuted,
-              }}
-            >
-              § {roman}
-            </div>
-            <div
-              style={{
-                marginTop: 4,
-                fontFamily: FONT.mono,
-                fontSize: 9,
-                letterSpacing: "0.3em",
-                textTransform: "uppercase",
-                color: COLOR.inkFaint,
-              }}
-            >
-              {label}
-            </div>
-          </div>
-          <div
-            style={{
-              fontFamily: FONT.mono,
-              fontSize: 10,
-              letterSpacing: "0.22em",
-              textTransform: "uppercase",
-              color: COLOR.inkMuted,
-            }}
-          >
-            {date}
-          </div>
-        </aside>
-
-        {/* The plate. Every SectionShell's children render inside it. */}
-        <div className="reading-plate">{children}</div>
-      </div>
-    </section>
-  );
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PROSE STYLES
@@ -275,6 +75,7 @@ export default function About() {
     <>
       {/* HERO */}
       <section
+        className="hero"
         style={{
           position: "relative",
           minHeight: "78vh",
@@ -284,8 +85,9 @@ export default function About() {
           paddingBottom: 60,
         }}
       >
-        <div style={{ padding: "0 40px" }}>
+        <div className="hero-gutter" style={{ padding: "0 40px" }}>
           <div
+            className="hero-meta"
             style={{
               maxWidth: 1440,
               margin: "0 auto",
@@ -311,6 +113,7 @@ export default function About() {
         </div>
 
         <div
+          className="hero-gutter"
           style={{
             flex: 1,
             display: "flex",
@@ -323,6 +126,7 @@ export default function About() {
             <TaperedRule accent />
             <div style={{ padding: "clamp(40px, 6vw, 80px) 0" }}>
               <h1
+                className="hero-title hero-title--phrase"
                 style={{
                   margin: 0,
                   fontFamily: FONT.display,
@@ -335,8 +139,12 @@ export default function About() {
                   textShadow: "0 0 120px rgba(127,175,179,0.07)",
                 }}
               >
-                <span style={{ display: "block" }}>An independent</span>
-                <span style={{ display: "block" }}>practice.</span>
+                <span className="hero-word" style={{ display: "block" }}>
+                  An independent
+                </span>
+                <span className="hero-word" style={{ display: "block" }}>
+                  practice.
+                </span>
               </h1>
             </div>
             <TaperedRule accent />
@@ -345,7 +153,10 @@ export default function About() {
 
         {/* STANDFIRST — plated. Was borderLeft + paddingLeft; the plate
             now provides the signature with its frosted backdrop-filter. */}
-        <div style={{ padding: "0 40px", display: "flex", justifyContent: "center" }}>
+        <div
+          className="hero-gutter"
+          style={{ padding: "0 40px", display: "flex", justifyContent: "center" }}
+        >
           <div className="reading-plate" style={{ maxWidth: 760 }}>
             <p
               style={{
@@ -387,7 +198,7 @@ export default function About() {
         index="01 / 05"
         date="April mmxxvi"
       >
-        <p className="prose-drop" style={bodyParaStyle}>
+        <p className="abstract" style={bodyParaStyle}>
           Third Space was founded in mmxxvi as the successor to Replete AI,
           which has operated since mmxxiv. Seeing as dialectics hold no place in AI, and we are endlessly watching governments and corporations create the most convoluted problems humanity can imagine:
         </p>
@@ -483,7 +294,7 @@ export default function About() {
           </div>
         </div>
 
-        <p className="prose-drop" style={bodyParaStyle}>
+        <p className="abstract" style={bodyParaStyle}>
           Stanley Sebastian is the founder and director of Third Space. He
           is twenty-two years old and has been working with language models
           and artificial-life systems for several years, first as an
@@ -561,7 +372,7 @@ export default function About() {
           </blockquote>
         </figure>
 
-        <p className="prose-drop" style={bodyParaStyle}>
+        <p className="abstract" style={bodyParaStyle}>
           Claude participates as an intellectual collaborator. Claude proposes
           framings, identifies holes in arguments, presses on underwritten
           claims, and occasionally thinks out loud alongside the human author.
@@ -599,7 +410,7 @@ export default function About() {
         index="04 / 05"
         date="Funding model"
       >
-        <p className="prose-drop" style={bodyParaStyle}>
+        <p className="abstract" style={bodyParaStyle}>
           Third Space is self-funded and intends to remain so. The
           organization takes no venture funding, runs no advertising, and has
           no corporate parent.
@@ -633,7 +444,7 @@ export default function About() {
         index="05 / 05"
         date="Contact"
       >
-        <p className="prose-drop" style={bodyParaStyle}>
+        <p className="abstract" style={bodyParaStyle}>
           Inquiries about the artificial-life substrates should reference
           Genesis. Inquiries about the alignment work should reference the
           current revision of{" "}
@@ -643,6 +454,7 @@ export default function About() {
         </p>
 
         <div
+          className="contact-head"
           style={{
             marginTop: 40,
             display: "grid",
@@ -687,6 +499,7 @@ export default function About() {
       {/* COLOPHON */}
       <section style={{ maxWidth: 1280, margin: "0 auto", padding: "72px 40px 120px" }}>
         <div
+          className="section-mark"
           style={{
             display: "grid",
             gridTemplateColumns: "auto 1fr auto",
@@ -756,6 +569,7 @@ export default function About() {
         </div>
 
         <div
+          className="colophon-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "2fr 1fr",
@@ -865,30 +679,26 @@ export default function About() {
       </section>
 
       <style>{`
-        .prose-drop::first-letter {
-          float: left;
-          font-family: ${FONT.display};
-          font-style: italic;
-          font-weight: 400;
-          font-size: 5.1em;
-          line-height: 0.82;
-          margin: 0.08em 0.14em 0 -0.04em;
-          color: ${COLOR.inkStrong};
-        }
         .styled-link {
           color: ${COLOR.inkStrong} !important;
           border-bottom: 1px solid ${COLOR.ghost}40;
           padding-bottom: 1px;
           transition: border-color 0.3s ease, color 0.3s ease;
         }
-        .styled-link:hover {
-          color: ${COLOR.ghost} !important;
-          border-color: ${COLOR.ghost};
+        @media (hover: hover) and (pointer: fine) {
+          .styled-link:hover {
+            color: ${COLOR.ghost} !important;
+            border-color: ${COLOR.ghost};
+          }
+          .contact-row:hover .contact-address { color: ${COLOR.ghost} !important; }
+          .contact-row:hover .contact-arrow { color: ${COLOR.ghost} !important; }
+          .contact-row:hover { background: rgba(255,255,255,0.025); }
+          .colophon-link:hover { color: ${COLOR.ghost} !important; }
         }
-        .contact-row:hover .contact-address { color: ${COLOR.ghost} !important; }
-        .contact-row:hover .contact-arrow { color: ${COLOR.ghost} !important; }
-        .contact-row:hover { background: rgba(255,255,255,0.025); }
-        .colophon-link:hover { color: ${COLOR.ghost} !important; }
+        @media (hover: none) {
+          .contact-row:active { background: rgba(255,255,255,0.03); }
+          .contact-row:active .contact-address { color: ${COLOR.ghost} !important; }
+        }
       `}</style>
     </>
   );

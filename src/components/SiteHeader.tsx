@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import AudioControl from "@/components/AudioControl";
@@ -69,6 +69,7 @@ const LATERAL_OUT = "opacity 0.3s ease, filter 0.35s ease";
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default function SiteHeader() {
+  const headerRef = useRef<HTMLElement>(null);
   const [scrolled, setScrolled] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -95,12 +96,45 @@ export default function SiteHeader() {
     };
   }, []);
 
+  // Publish the header's real height as --header-height on <html>.
+  //
+  // Three separate files were each independently guessing at this number
+  // and each was wrong somewhere: the hero padded 200px (fine on desktop,
+  // 72px short on mobile), SiteChrome drew its route-rule at a hardcoded
+  // 140px "best guess from screenshots", and PondDiagnostic hardcoded
+  // 256/76. The header is the only thing that knows how tall the header
+  // is, so it's the only thing that should be saying.
+  //
+  // ResizeObserver rather than a scroll handler: it fires continuously
+  // through the masthead's 0.5s evaporate, so anything keyed to this var
+  // rides the transition instead of snapping ahead of it.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const apply = () => {
+      const h = Math.round(el.getBoundingClientRect().height);
+      document.documentElement.style.setProperty("--header-height", `${h}px`);
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty("--header-height");
+    };
+  }, []);
+
   const compact = mounted && scrolled;
   const transOn = mounted;
 
   return (
     <>
       <header
+        ref={headerRef}
+        // Single stable handle for anything that needs to measure the
+        // header rather than hardcode a guess at its height (currently
+        // PondDiagnostic; the SiteChrome route-rule wants it too).
+        data-site-header
         style={{
           position: "fixed",
           top: 0,
@@ -119,7 +153,10 @@ export default function SiteHeader() {
         {/* ═══════════════════════════════════════════════════════════════
              TOP HAIRLINE — bounded to container, frames the page
              ═══════════════════════════════════════════════════════════════ */}
-        <div style={{ maxWidth: 1440, margin: "0 auto", padding: "0 40px" }}>
+        <div
+          className="header-gutter"
+          style={{ maxWidth: 1440, margin: "0 auto", padding: "0 40px" }}
+        >
           <div
             aria-hidden
             style={{
@@ -136,6 +173,7 @@ export default function SiteHeader() {
              UPPER MASTHEAD — evaporates on scroll (no slide)
              ═══════════════════════════════════════════════════════════════ */}
         <div
+          className="masthead-block"
           aria-hidden={compact || undefined}
           style={{
             maxHeight: compact ? 0 : 240,
@@ -322,6 +360,7 @@ export default function SiteHeader() {
 
           {/* SCOTCH RULE — classic editorial double rule */}
           <div
+            className="header-gutter"
             style={{
               maxWidth: 1440,
               margin: "0 auto",
@@ -352,6 +391,7 @@ export default function SiteHeader() {
              NAV BAR
              ═══════════════════════════════════════════════════════════════ */}
         <div
+          className="nav-row"
           style={{
             position: "relative",
             maxWidth: 1440,
@@ -436,6 +476,7 @@ export default function SiteHeader() {
 
           {/* CENTER — nav */}
           <nav
+            className="nav-links"
             style={{
               display: "flex",
               alignItems: "center",
@@ -515,6 +556,7 @@ export default function SiteHeader() {
               gently breathes when the player has been dismissed, so
               users always have a way back to the listening programme. */}
           <div
+            className="header-fermata"
             style={{
               position: "absolute",
               right: 40,
@@ -673,22 +715,102 @@ export default function SiteHeader() {
           }
         }
 
+        /* ── hover isolation ─────────────────────────────────────── */
+        /* Touch browsers emulate :hover on tap and then *leave it stuck*
+           until you tap elsewhere. Gating every hover rule behind a real
+           pointer means a tapped nav item doesn't stay lit after the
+           route changes. */
+        @media (hover: none) {
+          .nav-item:hover .nav-underline { transform: scaleX(0); }
+          .nav-item.is-active:hover .nav-underline { transform: scaleX(1); }
+          .nav-item:hover .nav-roman { transform: none; }
+        }
+
         /* ── responsive ──────────────────────────────────────────── */
+
+        /* 820–641: the flanking editorial stamps (Est. mmxxiv / № 001)
+           are the first thing to go. They're ornament, and they're what
+           forces the masthead grid to fight for width. Dropping them
+           lets the wordmark keep its centered single-row composition
+           instead of stacking into a three-deck tower. */
         @media (max-width: 820px) {
           .masthead-row {
-            grid-template-columns: 1fr !important;
-            gap: 12px !important;
-            text-align: center !important;
+            grid-template-columns: minmax(0, 1fr) !important;
+            justify-items: center !important;
+            gap: 0 !important;
+            padding: 24px 24px 18px !important;
           }
           .masthead-row > *:first-child,
-          .masthead-row > *:last-child {
-            justify-content: center !important;
-            font-size: 8px !important;
-          }
+          .masthead-row > *:last-child { display: none !important; }
+          .header-gutter { padding-left: 24px !important; padding-right: 24px !important; }
+          .nav-row { padding-left: 24px !important; padding-right: 24px !important; }
+          .header-fermata { right: 24px !important; }
+          .compact-wordmark { left: 24px !important; }
         }
+
         @media (max-width: 640px) {
           .nav-item .nav-roman { display: none !important; }
           .compact-edition     { display: none !important; }
+        }
+
+        /* ≤ 560: the nav can no longer be centred — four uppercase
+           mono labels at 0.32em tracking is ~300px, and the fermata
+           owns the right edge. So the row becomes a left-aligned rail
+           that scrolls horizontally if a label is added later, with the
+           right padding reserved for the fermata. The compact wordmark
+           is dropped: the masthead above already carries the wordmark,
+           and nav item I *is* the home link. */
+        @media (max-width: 560px) {
+          /* The row itself must NOT scroll — .header-fermata is
+             position:absolute against it, and an abspos child of a
+             scroll container scrolls with the content. The row stays
+             put and reserves 52px on the right for the fermata; the
+             *links* are the scroller. */
+          .nav-row {
+            justify-content: flex-start !important;
+            padding: 10px 52px 10px 20px !important;
+          }
+          .nav-links {
+            flex: 1 1 auto;
+            min-width: 0;
+            justify-content: flex-start !important;
+            gap: 22px !important;
+            overflow-x: auto;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-x: contain;
+          }
+          .nav-links::-webkit-scrollbar { display: none; }
+          .nav-item { flex: 0 0 auto; }
+          /* 44px tap target. The label stays 10px; the padding does the
+             work, so the composition is unchanged but the thumb has
+             somewhere to land. */
+          .nav-item {
+            padding: 15px 2px !important;
+            white-space: nowrap;
+          }
+          .nav-label-wrap .nav-underline { bottom: -5px; }
+          .nav-label-wrap .nav-folio     { bottom: -11px; }
+
+          .compact-wordmark { display: none !important; }
+          .header-gutter { padding-left: 20px !important; padding-right: 20px !important; }
+          .header-fermata { right: 18px !important; }
+
+          .masthead-row { padding: 18px 20px 14px !important; }
+          .masthead-limen    { font-size: 30px !important; }
+          .masthead-favicon  { height: 24px !important; }
+          .masthead-research { font-size: 9px !important; letter-spacing: 0.4em !important; }
+        }
+
+        /* Safe-area: viewportFit "cover" pushes the header under the
+           notch on landscape iPhones. */
+        @supports (padding: env(safe-area-inset-left)) {
+          @media (max-width: 820px) and (orientation: landscape) {
+            .nav-row, .masthead-row, .header-gutter {
+              padding-left: max(20px, env(safe-area-inset-left)) !important;
+              padding-right: max(20px, env(safe-area-inset-right)) !important;
+            }
+          }
         }
       `}</style>
     </>
