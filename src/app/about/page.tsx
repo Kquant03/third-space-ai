@@ -234,7 +234,10 @@ export default function About() {
           The alignment theory suggests architectural primitives; the
           artificial-life platforms test those primitives at the substrate
           level; the open infrastructure is how the work stays independent and
-          how it circulates.
+          how it circulates. The one thing connection demands is time. My dream
+          is that people and businesses are able to work together to ensure mutual
+          gain over a longer period of time. I want my kids to enjoy the fruits of
+          my labor, not steal their fruits from them before they are here, yet.
         </p>
       </SectionShell>
 
@@ -417,14 +420,12 @@ export default function About() {
         </p>
 
         <p style={bodyParaStyle}>
-          The director supports the work through personal labor: arcade
-          technical work in Toledo, and pre-nursing coursework at Owens
+          The director supports the work through personal labor: union
+          work in Toledo and pre-nursing coursework at Owens
           Community College with LPN training beginning in 2027. Nursing was
-          chosen deliberately. It is a profession that is largely
-          automation-resistant, that pairs well with independent research —
-          steady income, meaningful work, schedules that permit deep thinking
-          — and that embodies the organizational thesis at the level of work
-          itself: care as architecture, human attention as load-bearing.
+          chosen deliberately. It is one of the most automation resistant
+          fields and allows for steady continued scholarship in areas that
+          are worth understanding to the deepest degree, like medical ethics.
         </p>
 
         <p style={bodyParaStyle}>
